@@ -26,6 +26,9 @@ const Notice = (() => {
     _applyReplace(ctx);
     _renderList();
     _selectFirst();
+    // 캡션 업데이트
+    const captionEl = document.querySelector('#tab-notice .muted');
+    if (captionEl) captionEl.textContent = '학교명·학년도·개학일·홈페이지 주소가 자동으로 반영된 안내문입니다.';
   }
 
   // ──────────────────────────────────────────────
@@ -42,8 +45,17 @@ const Notice = (() => {
     const month  = date.slice(5, 7)?.replace(/^0/, '') || '';
     const day    = date.slice(8, 10)?.replace(/^0/, '') || '';
 
-    // 정렬: 신규등록 > 반이동 > 교직원 > 2-6
-    const ORDER = ['신규등록', '반이동', '교직원', '2-6'];
+    // 정렬: 신규등록메일 > 신규등록문자 > 반이동메일(신입생교직원포함) > 반이동메일 > 반이동문자 > 교직원 > 2-6메일 > 2-6문자
+    const ORDER = [
+      '신규등록 - 메일',
+      '신규등록 - 문자',
+      '반이동 - 메일 (신입생',   // "반이동 - 메일 (신입생, 교직원 등록 & 반이동)" 포함
+      '반이동 - 메일',
+      '반이동 - 문자',
+      '교직원',
+      '2-6학년 명단 보내 온 경우 - 메일',
+      '2-6학년',
+    ];
     const sortKey = k => {
       const idx = ORDER.findIndex(kw => k.includes(kw));
       return idx >= 0 ? idx : ORDER.length;
@@ -161,7 +173,7 @@ const Notice = (() => {
     const textEl = _el('notice-text');
     if (textEl) textEl.value =
       '학교를 선택하고 실행을 완료하면\n안내문이 자동으로 채워집니다.\n\n' +
-      '학교명 · 학년도 · 개학일 · 도메인이 자동 반영됩니다.';
+      '학교명 · 학년도 · 개학일 · 홈페이지 주소가 자동 반영됩니다.';
   }
 
   function _esc(str) {

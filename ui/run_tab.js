@@ -88,7 +88,6 @@ const Run = (() => {
       _el('run-info').textContent = `실행 완료 — 경고 ${warnLogs.length}건: ${warnLogs[0].message}`;
     } else {
       _setBadge('ok', '실행 완료');
-      _el('run-info').textContent = '실행 완료';
     }
 
     // 보류 경고
@@ -116,8 +115,8 @@ const Run = (() => {
     state.pending_roster_log = !!state.roster_log_path;
     Panel.setRosterBtns(!!state.roster_log_path, !!state.roster_log_path);
 
-    // 안내문 탭으로 이동 버튼 표시
-    _el('btn-goto-notice').style.display = '';
+    // 안내문 탭으로 플로팅 버튼
+    App.setFloatingNext(true, 'notice');
   }
 
   function onFailed(error) {
@@ -248,17 +247,18 @@ const Run = (() => {
     // 다음 시트 순차 로드
     if (_pendingSheets.length) {
       const next = _pendingSheets.shift();
-      state.isPreviewLoading = true;
-      bridge.startPreview(JSON.stringify({
-        kind:           'run_output',
-        file_path:      _currentFile,
-        sheet_name:     next,
-        header_row:     1,
-        data_start_row: 2,
-      })).then(res => {
-        const r = JSON.parse(res);
-        if (!r.ok) state.isPreviewLoading = false;
-      });
+      // state.isPreviewLoading은 bridge._is_previewing과 별개로 관리
+      setTimeout(() => {
+        bridge.startPreview(JSON.stringify({
+          kind:           'run_output',
+          file_path:      _currentFile,
+          sheet_name:     next,
+          header_row:     1,
+          data_start_row: 2,
+        }));
+      }, 50);
+    } else {
+      state.isPreviewLoading = false;
     }
   }
 
@@ -268,6 +268,11 @@ const Run = (() => {
       b.classList.toggle('active', b.dataset.sheet === name)
     );
     _renderRunTable();
+    const runTable = _el('run-table');
+    if (runTable) {
+      const wrap = runTable.closest('.preview-table-wrap');
+      if (wrap) wrap.scrollTop = 0;
+    }
   }
 
   function _renderRunTable() {
@@ -365,7 +370,8 @@ const Run = (() => {
     _lastRunData   = null;
 
     _setBadge('idle', '실행 전');
-    _el('run-info').textContent        = '먼저 스캔을 통과해야 실행할 수 있습니다.';
+    _el('run-desc').textContent =
+    '작업을 실행하고 결과 파일을 확인합니다.\n먼저 스캔을 통과해야 합니다.';
     _el('run-hold-warn').style.display = 'none';
     _el('btn-goto-notice').style.display = 'none';
     _el('btn-run').disabled             = true;

@@ -63,7 +63,7 @@ const ColMap = (() => {
 
     _selectRole(0);
     _refreshRoleBtns();
-    _el('col-map-dialog').showModal();
+    _el('col-map-dialog').style.display = 'flex';
   }
 
   // ──────────────────────────────────────────────
@@ -111,7 +111,7 @@ const ColMap = (() => {
     ROLES.forEach((role, i) => {
       const btn = document.createElement('button');
       btn.id = `cm-rbtn-${i}`;
-      btn.style.cssText = 'min-width:76px;height:52px;padding:4px 6px;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer;text-align:center;line-height:1.4;transition:background .1s,border .1s;';
+      btn.style.cssText = 'min-width:0;flex:1;height:48px;padding:3px 4px;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:8px;font-size:10px;font-family:inherit;cursor:pointer;text-align:center;line-height:1.3;transition:background .1s,border .1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
       btn.textContent = role.label;
       const sub = document.createElement('span');
       sub.style.color = '#94A3B8';
@@ -225,7 +225,7 @@ const ColMap = (() => {
     const result = { sheet: _el('cm-sheet').value, header_row: headerRow, data_start: headerRow + 1 };
     ROLES.forEach(({ key }) => { result[key] = (_colMap[key] != null) ? _colMap[key] + 1 : 0; });
 
-    _el('col-map-dialog').close();
+    _el('col-map-dialog').style.display = 'none';
     if (_onResult) _onResult(result);
   }
 
@@ -236,7 +236,7 @@ const ColMap = (() => {
     _loadMeta(_el('cm-sheet').value, v);
   }
 
-  function cancel() { _el('col-map-dialog').close(); }
+  function cancel() { _el('col-map-dialog').style.display = 'none'; }
 
   function _esc(str) {
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

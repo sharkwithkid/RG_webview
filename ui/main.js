@@ -84,7 +84,7 @@ function _getOrCreateToastContainer() {
   if (!c) {
     c = document.createElement('div');
     c.id = 'toast-container';
-    c.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:flex-end';
+    c.style.cssText = 'position:fixed;bottom:88px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:flex-end';
     // toast-in 애니메이션
     const style = document.createElement('style');
     style.textContent = '@keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}';
@@ -123,6 +123,7 @@ async function initApp() {
       state.roster_log_path   = cfg.roster_log_path   || '';
       state.roster_col_map    = cfg.roster_col_map    || {};
       state.arrived_date      = cfg.arrived_date      || '';
+      state.school_folders    = inspRes.data.school_folders || [];
 
       if (cfg.roster_log_path && cfg.roster_col_map?.col_school) {
         const namesRes = JSON.parse(
@@ -222,6 +223,7 @@ function _handleAction(action, el) {
     'mode-diff':      () => App.setMode('diff'),
     'goto-run':       () => Scan.goToRun(),
     'goto-notice':    () => App.goStep(4),
+    'floating-next':  () => App.floatingNext(),
 
     // Panel
     'apply-school':   () => Panel.apply(),
@@ -413,9 +415,10 @@ const App = {
       if (countStr) history_text += `\n${countStr}`;
     }
 
-    // 학교 폴더명에서 표시 이름 추출 (예: "270. 용인정평초")
+    // 학교 폴더명에서 표시 이름 추출 — 맥 NFD 정규화 대응
+    const normalize = s => s.normalize ? s.normalize('NFC') : s;
     const folderName = state.school_folders.find(f =>
-      f.includes(schoolName)
+      normalize(f).includes(normalize(schoolName))
     ) || schoolName;
 
     Panel.updateSchoolInfo({ school_name: folderName, history_text });
@@ -455,6 +458,21 @@ const App = {
     _el('btn-mode-main').classList.toggle('active', isMain);
     _el('btn-mode-diff').classList.toggle('active', !isMain);
     App.goTab(isMain ? (state.currentTab === 'diff' ? 'scan' : state.currentTab) : 'diff');
+  },
+
+  // 플로팅 다음 버튼 상태 제어
+  setFloatingNext(active, action) {
+    const btn = _el('btn-floating-next');
+    if (!btn) return;
+    btn.classList.toggle('active', !!active);
+    btn._nextAction = action || null;
+  },
+
+  floatingNext() {
+    const btn = _el('btn-floating-next');
+    const action = btn?._nextAction;
+    if (action === 'run')    Scan.goToRun();
+    else if (action === 'notice') App.goStep(4);
   },
 
   setStepState(idx, s) {
@@ -497,6 +515,7 @@ function _resetForNewSchool() {
   Scan.reset();
   Run.reset();
   Notice.clear();
+  App.setFloatingNext(false, null);
 
   App.setStepState(0, 'done');
   for (let i = 1; i <= 4; i++) App.setStepState(i, 'idle');
@@ -517,6 +536,7 @@ function _showPage(page) {
   state.currentPage = page;
   _el('page-setup').style.display = page === 'setup' ? 'flex' : 'none';
   _el('page-main').style.display  = page === 'main'  ? 'flex' : 'none';
+  _el('btn-floating-next')?.classList.toggle('shown', page === 'main');
 }
 
 // ──────────────────────────────────────────────
@@ -529,27 +549,34 @@ function showLogDialog(title, logs) {
   }
   const text = logs
     .filter(l => l.level !== 'debug')
-    .map(l => `[${l.level.toUpperCase()}] ${l.message}`)
+    .map(l => {
+      // message 안에 이미 [레벨] 태그가 중복으로 들어있는 경우 제거
+      const msg = l.message.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '').replace(/^\[(?:INFO|WARN|ERROR|DEBUG|DONE)\]\s*/i, '');
+      return `[${l.level.toUpperCase()}] ${msg}`;
+    })
     .join('\n');
 
-  // <dialog> 기반 로그 뷰어
+  // div 기반 로그 뷰어 (dialog.close() 맥 QWebEngine 호환 이슈 우회)
   let dlg = _el('log-dialog');
   if (!dlg) {
-    dlg = document.createElement('dialog');
+    dlg = document.createElement('div');
     dlg.id = 'log-dialog';
-    dlg.style.cssText = 'width:640px;max-width:96vw;max-height:80vh;border:none;border-radius:12px;padding:0;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2)';
+    dlg.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);align-items:center;justify-content:center;';
     dlg.innerHTML = `
-      <div style="padding:16px 20px;border-bottom:1px solid #E5E7EB;font-weight:800;font-size:15px;color:#0F172A" id="log-dlg-title"></div>
-      <pre id="log-dlg-body" style="flex:1;overflow-y:auto;padding:16px 20px;font-family:Consolas,'D2Coding',monospace;font-size:12px;line-height:1.6;background:#F8FAFC;white-space:pre-wrap;word-break:break-all;margin:0"></pre>
-      <div style="padding:12px 20px;border-top:1px solid #E5E7EB;display:flex;justify-content:flex-end">
-        <button style="padding:0 16px;height:34px;background:#2563EB;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer" id="log-dlg-close">닫기</button>
+      <div style="width:640px;max-width:96vw;max-height:80vh;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);background:#fff;display:flex;flex-direction:column;">
+        <div style="padding:16px 20px;border-bottom:1px solid #E5E7EB;font-weight:800;font-size:15px;color:#0F172A;flex-shrink:0" id="log-dlg-title"></div>
+        <pre id="log-dlg-body" style="flex:1;overflow-y:auto;padding:16px 20px;font-family:Consolas,'D2Coding',monospace;font-size:12px;line-height:1.6;background:#F8FAFC;white-space:pre-wrap;word-break:break-all;margin:0;max-height:60vh"></pre>
+        <div style="padding:12px 20px;border-top:1px solid #E5E7EB;display:flex;justify-content:flex-end;flex-shrink:0">
+          <button id="log-dlg-close" style="padding:0 16px;height:34px;background:#2563EB;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">닫기</button>
+        </div>
       </div>`;
     document.body.appendChild(dlg);
-    _el('log-dlg-close').addEventListener('click', () => dlg.close());
+    dlg.querySelector('#log-dlg-close').addEventListener('click', () => { dlg.style.display = 'none'; });
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.style.display = 'none'; });
   }
   _el('log-dlg-title').textContent = title;
   _el('log-dlg-body').textContent  = text;
-  dlg.showModal();
+  dlg.style.display = 'flex';
 }
 
 // ──────────────────────────────────────────────

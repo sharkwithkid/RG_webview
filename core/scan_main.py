@@ -220,8 +220,9 @@ def find_templates(format_dir: Path) -> Tuple[Optional[Path], Optional[Path], Li
     if not xlsx_files:
         return None, None, [f"[ERROR] templates 폴더에 xlsx 파일이 없습니다."]
 
-    reg = [p for p in xlsx_files if "등록" in p.stem]
-    notice = [p for p in xlsx_files if "안내" in p.stem]
+    import unicodedata as _ud
+    reg = [p for p in xlsx_files if "등록" in _ud.normalize('NFC', p.stem)]
+    notice = [p for p in xlsx_files if "안내" in _ud.normalize('NFC', p.stem)]
 
     errors: List[str] = []
     if len(reg) == 0:
@@ -1266,8 +1267,9 @@ def scan_work_root(work_root: Path) -> Dict[str, Any]:
     if not tpl_dir.exists():
         errors_format.append("[ERROR] resources/templates 폴더가 없습니다.")
     else:
-        reg_f = [p for p in tpl_dir.glob("*.xlsx") if "등록" in p.stem and not p.name.startswith("~$")]
-        ntc_f = [p for p in tpl_dir.glob("*.xlsx") if "안내" in p.stem and not p.name.startswith("~$")]
+        import unicodedata as _ud
+        reg_f = [p for p in tpl_dir.glob("*.xlsx") if "등록" in _ud.normalize('NFC', p.stem) and not p.name.startswith("~$")]
+        ntc_f = [p for p in tpl_dir.glob("*.xlsx") if "안내" in _ud.normalize('NFC', p.stem) and not p.name.startswith("~$")]
         if len(reg_f) != 1:
             errors_format.append("[ERROR] templates 폴더에 '등록' 템플릿 파일이 정확히 1개 있어야 합니다.")
         else: register_template = reg_f[0]

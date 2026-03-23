@@ -114,10 +114,10 @@ const Scan = (() => {
     _openViewer();
     _loadFirstPreview(data.items || []);
 
-    // 실행 버튼 활성
+    // 실행 버튼 활성 + 플로팅 버튼
     if (data.can_execute) {
       _el('btn-run').disabled = false;
-      _el('btn-goto-run').style.display = '';
+      App.setFloatingNext(true, 'run');
     }
 
     // 명부 기준일 불일치 처리
@@ -147,13 +147,12 @@ const Scan = (() => {
       if (!tr) return;
 
       const cells = tr.querySelectorAll('td');
-      // cells: [0]구분 [1]파일명 [2]시트 [3]자동감지 [4]수정시작행 [5]확인
+      // cells: [0]구분 [1]파일명 [2]시트 [3]시작행(spin) [4]확인
       if (cells[1]) {
         cells[1].className = 'file-link';
         cells[1].textContent = item.file_name || '';
         cells[1].title = '클릭: 뷰어로 보기 · 더블클릭: 파일 열기';
         cells[1].onclick = () => {
-          // 기존 active 행 해제 후 현재 행 활성화
           document.querySelectorAll('#scan-tbody tr.viewer-active')
             .forEach(r => r.classList.remove('viewer-active'));
           tr.classList.add('viewer-active');
@@ -161,8 +160,7 @@ const Scan = (() => {
         };
         cells[1].ondblclick = () => { if (item.file_path) bridge.openFile(item.file_path); };
       }
-      if (cells[2]) cells[2].textContent = item.sheet_name  || '';
-      if (cells[3]) cells[3].textContent = item.header_row != null ? String(item.header_row) : '';
+      if (cells[2]) cells[2].textContent = item.sheet_name || '';
 
       // 수정 시작행 스핀 초기값 세팅
       const spinVal = _el(`spin-${item.kind}`);
@@ -180,7 +178,6 @@ const Scan = (() => {
         const cells = tr.querySelectorAll('td');
         if (cells[1]) { cells[1].className = ''; cells[1].textContent = ''; cells[1].onclick = null; }
         if (cells[2]) cells[2].textContent = '';
-        if (cells[3]) cells[3].textContent = '';
         const spinVal = _el(`spin-${kind}`);
         if (spinVal) { spinVal.textContent = '-'; spinVal.style.color = '#94A3B8'; }
         const chk = _el(`chk-${kind}`);
@@ -321,11 +318,9 @@ const Scan = (() => {
     _el('preview-file-info').textContent =
       `파일: ${data.source_file || '-'} | 시트: ${data.sheet_name || '-'}` +
       headerInfo + startInfo +
-      ` | 총 ${data.total_count ?? '?'}행` +
-      (data.truncated ? ` (${data.rows.length}행까지 표시)` : '');
+      (data.truncated ? ` | ${data.rows.length}행까지 표시` : '');
 
-    _el('preview-warn').textContent =
-      data.truncated ? `※ 전체 ${data.total_count}행 중 ${data.rows.length}행만 표시됩니다.` : '';
+    _el('preview-warn').textContent = '';
 
     _renderTable(data);
   }
@@ -339,6 +334,9 @@ const Scan = (() => {
     const columns   = data.columns || [];
     const rows      = data.rows    || [];
     const issueSet  = new Set(data.issue_rows || []);
+
+    // "No" 컬럼 인덱스 찾기 (정규화 후 "no"인 컬럼)
+    const noColIdx = columns.findIndex(h => h.replace(/\s/g,'').toLowerCase() === 'no');
 
     // 동명이인 계산
     const nameCol  = columns.findIndex(h => ['성명','이름','학생이름'].some(k => h.includes(k)));
@@ -357,9 +355,14 @@ const Scan = (() => {
 
     // 필터
     const filtered = rows.reduce((acc, row, i) => {
+      // No 컬럼만 채워지고 나머지 다 빈 행 제외
+      if (noColIdx >= 0) {
+        const otherCols = row.filter((_, ci) => ci !== noColIdx);
+        if (otherCols.every(v => !String(v).trim())) return acc;
+      }
       const rowText = row.join(' ').toLowerCase();
       if (keyword && !rowText.includes(keyword)) return acc;
-      const isBlank = row.every(v => !v.trim());
+      const isBlank = row.every(v => !String(v).trim());
       const isIssue = issueSet.has(i);
       const isDup   = dupSet.has(i);
       if (blankOnly && !isBlank) return acc;
@@ -373,11 +376,14 @@ const Scan = (() => {
     const table = _el('preview-table');
     const thead = table.querySelector('thead');
     const tbody = table.querySelector('tbody');
+    const startRow = data.data_start_row ?? 1;
 
-    thead.innerHTML = '<tr>' + columns.map(h => `<th>${_esc(h)}</th>`).join('') + '</tr>';
+    thead.innerHTML = '<tr><th style="width:40px;color:#94A3B8;font-weight:600;text-align:center">#</th>' +
+      columns.map(h => `<th>${_esc(h)}</th>`).join('') + '</tr>';
     tbody.innerHTML = filtered.map(({ row, i, isIssue, isDup }) => {
       const cls = isIssue ? 'row-hold' : isDup ? 'row-dup' : '';
-      return `<tr class="${cls}">${row.map(v => `<td>${_esc(v)}</td>`).join('')}</tr>`;
+      const excelRow = startRow + i;
+      return `<tr class="${cls}"><td style="color:#94A3B8;font-size:11px;text-align:center;user-select:none">${excelRow}</td>${row.map(v => `<td>${_esc(v)}</td>`).join('')}</tr>`;
     }).join('');
   }
 
@@ -541,7 +547,6 @@ const Scan = (() => {
     _filterState   = { blank: false, issue: false, dup: false };
 
     _setBadge('idle', '스캔 전');
-    _setMessage('파일 내용 스캔을 실행해 주세요.');
     _hideSchoolKindWarn();
 
     // 스캔 표 초기화
@@ -549,7 +554,7 @@ const Scan = (() => {
       const tr = document.querySelector(`#scan-tbody tr[data-kind="${kind}"]`);
       if (!tr) return;
       const cells = tr.querySelectorAll('td');
-      [1, 2, 3].forEach(c => { if (cells[c]) cells[c].textContent = ''; });
+      [1, 2].forEach(c => { if (cells[c]) cells[c].textContent = ''; });
       const spinVal = _el(`spin-${kind}`);
       if (spinVal) { spinVal.textContent = '-'; spinVal.style.color = '#94A3B8'; }
       const chk = _el(`chk-${kind}`);
@@ -563,8 +568,8 @@ const Scan = (() => {
     const table = _el('preview-table');
     if (table) { table.querySelector('thead').innerHTML = ''; table.querySelector('tbody').innerHTML = ''; }
 
-    _el('btn-goto-run').style.display = 'none';
-    _el('btn-run').disabled            = true;
+    _el('btn-run').disabled = true;
+    App.setFloatingNext(false, null);
 
     // 필터 버튼 초기화
     ['btn-blank-only','btn-issue-only','btn-dup-only'].forEach(id => _el(id)?.classList.remove('active'));
@@ -575,7 +580,6 @@ const Scan = (() => {
     const lastData = _lastScanData;
     if (!lastData) return;
 
-    // 스캔된 종류 중 체크 안 된 것 찾기
     const presentKinds = (lastData.items || []).map(i => i.kind);
     const unchecked = presentKinds.filter(kind => {
       const chk = _el(`chk-${kind}`);
@@ -583,7 +587,7 @@ const Scan = (() => {
     });
 
     if (unchecked.length) {
-      toast(`검수 확인이 필요합니다: ${unchecked.join(', ')}`, 'warn', 4000);
+      toast(`${unchecked.join(', ')} 파일의 시작행을 확인해 주세요`, 'warn', 4000);
       return;
     }
 

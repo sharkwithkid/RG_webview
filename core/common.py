@@ -526,11 +526,12 @@ def load_roster_sheet(dirs: Dict[str, Path], school_name: str):
 
     school_root = matches[0]
 
+    import unicodedata as _ud
     candidates: List[Path] = [
         p for p in school_root.iterdir()
         if p.is_file()
         and p.suffix.lower() == ".xlsx"
-        and "학생명부" in p.stem
+        and "학생명부" in _ud.normalize('NFC', p.stem)
         and not p.name.startswith("~$")
     ]
     if not candidates:

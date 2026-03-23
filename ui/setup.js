@@ -82,7 +82,8 @@ const Setup = (() => {
       const msgs = (res.data.errors || [])
         .map(e => e.replace(/^\[ERROR\]\s*/, ''))
         .join('\n');
-      _showBanner('warn', 'resources 구성 확인 필요:\n' + msgs);
+      _showBanner('err', 'resources 구성 오류:\n' + msgs);
+      _el('btn-start').disabled = true;
     } else {
       _showBanner('ok', 'resources 폴더 정상 확인됨');
       _autoClear();

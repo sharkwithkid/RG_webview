@@ -131,8 +131,11 @@ def async_error(task: str, message: str, traceback: str = "") -> str:
 # ──────────────────────────────────────────────
 
 def _parse_log_entry(raw: str) -> dict:
-    """'[INFO] ...' 형식 로그 문자열 -> {level, message} dict"""
+    """'[INFO] ...' 또는 '[HH:MM:SS] [INFO] ...' 형식 로그 -> {level, message} dict"""
+    import re as _re
     s = str(raw)
+    # 타임스탬프 prefix 제거: [22:11:05] 형태
+    s = _re.sub(r'^\[\d{2}:\d{2}:\d{2}\]\s*', '', s)
     if s.startswith("[ERROR]"):
         return {"level": "error", "message": s[7:].strip()}
     if s.startswith("[WARN]"):
@@ -143,6 +146,8 @@ def _parse_log_entry(raw: str) -> dict:
         return {"level": "info",  "message": s[6:].strip()}
     if s.startswith("[DONE]"):
         return {"level": "info",  "message": s[6:].strip()}
+    if s.startswith("[TIMER]"):
+        return {"level": "info",  "message": s.strip()}
     return {"level": "info", "message": s.strip()}
 
 def _logs_from_result(result) -> list:
@@ -396,7 +401,7 @@ class PreviewWorker(QObject):
             header_row   = int(self._params.get("header_row", 1))
             data_start   = int(self._params.get("data_start_row", 2))
 
-            wb = _load_wb(file_path, data_only=True, read_only=True)
+            wb = _load_wb(file_path, data_only=True, read_only=False)
             try:
                 ws = (wb[sheet_name]
                       if sheet_name and sheet_name in wb.sheetnames

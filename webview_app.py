@@ -23,7 +23,7 @@ from bridge import Bridge
 
 HTML_PATH = Path(__file__).parent / "ui" / "index.html"
 WINDOW_TITLE = "리딩게이트 반이동 자동화"
-WINDOW_W, WINDOW_H = 1280, 860
+WINDOW_W, WINDOW_H = 1000, 850
 
 
 def main():
@@ -51,12 +51,12 @@ def main():
 
     view.load(QUrl.fromLocalFile(str(HTML_PATH.resolve())))
 
-    dev_view = QWebEngineView()
+    # dev_view = QWebEngineView()
 
-    view.page().setDevToolsPage(dev_view.page())
-    dev_view.setWindowTitle("DevTools")
-    dev_view.resize(1000, 700)
-    dev_view.show()
+    # view.page().setDevToolsPage(dev_view.page())
+    # dev_view.setWindowTitle("DevTools")
+    # dev_view.resize(1000, 700)
+    # dev_view.show()
     
     view.show()
 
