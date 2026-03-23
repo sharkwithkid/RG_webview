@@ -1,0 +1,1299 @@
+# core/scan_main.py
+"""
+메인 반이동 파이프라인의 스캔 전용 모듈.
+
+책임 범위:
+  - 입력 파일 탐색
+  - 학교 정보 확인
+  - 학생명부 / 신입생 / 전입생 / 전출생 / 교직원 파일 존재 확인
+  - 헤더 행 / 데이터 시작 행 / 주요 컬럼 자동 감지
+  - 명부 기반 학년/반 구조 분석
+  - scan_pipeline() 실행 결과 반환
+
+이 모듈은 "실행(run)"이 아니라 "사전 분석(scan)"만 담당.
+
+공개 API:
+  ScanResult
+  scan_pipeline(work_root, school_name, school_start_date, work_date, roster_basis_date) -> ScanResult
+  get_project_dirs(work_root) -> Dict[str, Path]
+  get_school_domain(db_dir, school_name) -> Optional[str]
+  detect_input_layout(xlsx_path, kind) -> Dict[str, Any]
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Any, Sequence
+from collections import Counter, defaultdict
+
+from core.utils import normalize_text, text_contains
+
+from core.xlsx_db import (
+    search_schools_in_xlsx as _xlsx_search_schools,
+    load_school_names_from_xlsx as _xlsx_load_names,
+    get_school_domain_from_xlsx as _xlsx_get_domain,
+    school_exists_in_xlsx as _xlsx_school_exists,
+)
+
+from core.common import (
+    get_project_dirs,
+    ensure_xlsx_only,
+    safe_load_workbook,
+    get_first_sheet_with_warning,
+    warn_if_multi_sheet,
+    header_map,
+    _build_header_slot_map,
+    _detect_header_row_generic,
+    normalize_name,
+    load_roster_sheet,
+    parse_class_str,
+    extract_id_prefix4,
+    school_kind_from_name,
+    FRESHMEN_HEADER_SLOTS,
+    TRANSFER_HEADER_SLOTS,
+    WITHDRAW_HEADER_SLOTS,
+    TEACHER_HEADER_SLOTS,
+    RosterInfo,
+)
+
+# =========================
+# Result types
+# =========================
+@dataclass
+class ScanResult:
+    # 기본 상태
+    ok: bool = False
+    logs: List[str] = field(default_factory=list)
+
+    # 학교/연도 정보
+    school_name: str = ""
+    year_str: str = ""
+    year_int: int = 0
+
+    # 경로들
+    project_root: Path = Path(".")
+    input_dir: Path = Path(".")
+    output_dir: Path = Path(".")
+    template_register: Optional[Path] = None
+    template_notice: Optional[Path] = None
+    roster_xlsx_path: Optional[Path] = None
+
+    # 인풋 파일
+    freshmen_file: Optional[Path] = None
+    teacher_file: Optional[Path] = None
+    transfer_file: Optional[Path] = None
+    withdraw_file: Optional[Path] = None
+
+    # 학생명부 관련
+    need_roster: bool = False              # # 전입/전출이 있거나, 신입생 파일에 1학년 외 학년이 있으면 True
+    roster_path: Optional[Path] = None
+    roster_year: Optional[int] = None
+    roster_info: Optional[RosterInfo] = None
+    roster_basis_date: Optional[date] = None  # 학생명부 기준일(파일 수정일 or 사용자가 수정한 값)
+
+    # UI 플래그
+    needs_open_date: bool = False          # 전출 있으면 True → 개학일 필요
+    roster_date_mismatch: bool = False     # 작업일 ≠ 명부 기준일이면 True → UI에서 수정 옵션 제공
+    missing_fields: List[str] = field(default_factory=list)
+    can_execute: bool = False
+    can_execute_after_input: bool = False
+
+    # UI용 스캔 메타 (파일별 미리보기 dict)
+    freshmen: Optional[Dict[str, Any]] = None
+    transfer_in: Optional[Dict[str, Any]] = None
+    transfer_out: Optional[Dict[str, Any]] = None
+    teachers: Optional[Dict[str, Any]] = None
+    roster: Optional[Dict[str, Any]] = None
+
+
+# =========================
+# Constants / keywords
+# =========================
+FRESHMEN_KEYWORDS = ["신입생", "신입"]
+TEACHER_KEYWORDS  = ["교사", "교원", "교직원"]
+TRANSFER_KEYWORDS = ["전입생", "전입"]
+WITHDRAW_KEYWORDS = ["전출생", "전출"]
+
+
+# =========================
+# L0. Path / file utils (main_scan 전용)
+# =========================
+
+
+def find_single_input_file(input_dir: Path, keywords: Sequence[str]) -> Optional[Path]:
+    if not input_dir.exists():
+        return None
+
+    kw_list: List[str] = []
+    for k in keywords:
+        k = "" if k is None else str(k).strip()
+        if k:
+            kw_list.append(k)
+
+    if not kw_list:
+        return None
+
+    candidates: List[Path] = []
+    xls_candidates: List[Path] = []  # .xls(구형) 파일 감지용
+
+    for p in input_dir.iterdir():
+        if not p.is_file():
+            continue
+        if p.name.startswith("~$"):
+            continue
+        if not any(text_contains(p.name, kw) for kw in kw_list):
+            continue
+        if p.suffix.lower() == ".xlsx":
+            candidates.append(p)
+        elif p.suffix.lower() == ".xls":
+            xls_candidates.append(p)
+
+    # .xlsx 없고 .xls만 있으면 명시적 에러
+    if len(candidates) == 0 and xls_candidates:
+        names = ", ".join(p.name for p in xls_candidates)
+        raise ValueError(
+            f"[ERROR] .xls 파일이 감지되었습니다: {names}\n"
+            ".xls 형식은 지원하지 않습니다. Excel에서 .xlsx로 저장 후 다시 시도해 주세요."
+        )
+
+    if len(candidates) == 0:
+        return None
+    if len(candidates) > 1:
+        raise ValueError(f"[ERROR] 입력 파일이 2개 이상 감지되었습니다: {[c.name for c in candidates]}")
+    return candidates[0]
+
+
+# =========================
+# L0.5 DB helpers
+# =========================
+
+
+def load_all_school_names(
+    roster_xlsx: Optional[Path],
+    col_map: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    """명단 xlsx에서 전체 학교명 목록 로드."""
+    if not roster_xlsx:
+        return []
+    names = _xlsx_load_names(Path(roster_xlsx), col_map=col_map)
+    cleaned = []
+    seen: set = set()
+    for name in names or []:
+        s = str(name).strip()
+        if not s or s in seen:
+            continue
+        seen.add(s)
+        cleaned.append(s)
+    return cleaned
+
+
+def get_school_domain(
+    roster_xlsx: Optional[Path],
+    school_name: str,
+    col_map: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """명단 xlsx에서 학교 도메인 조회."""
+    if not roster_xlsx:
+        return None
+    return _xlsx_get_domain(Path(roster_xlsx), school_name, col_map=col_map)
+
+
+# =========================
+# L1. Input scan / layout detection helpers
+# =========================
+def find_templates(format_dir: Path) -> Tuple[Optional[Path], Optional[Path], List[str]]:
+    """
+    [templates] 폴더 템플릿 2개 식별:
+    - 등록 템플릿: 파일명에 '등록' 포함
+    - 안내 템플릿: 파일명에 '안내' 포함
+    """
+    format_dir = Path(format_dir).resolve()
+    if not format_dir.exists():
+        return None, None, [f"[ERROR] templates 폴더를 찾을 수 없습니다."]
+
+    xlsx_files = [
+        p for p in format_dir.iterdir()
+        if p.is_file() and p.suffix.lower() == ".xlsx" and not p.name.startswith("~$")
+    ]
+    if not xlsx_files:
+        return None, None, [f"[ERROR] templates 폴더에 xlsx 파일이 없습니다."]
+
+    reg = [p for p in xlsx_files if "등록" in p.stem]
+    notice = [p for p in xlsx_files if "안내" in p.stem]
+
+    errors: List[str] = []
+    if len(reg) == 0:
+        errors.append("[ERROR] templates 폴더에서 '등록' 템플릿을 찾을 수 없습니다. (파일명에 '등록' 포함)")
+    elif len(reg) > 1:
+        errors.append("[ERROR] templates 폴더에 '등록' 템플릿이 여러 개 있습니다.")
+
+    if len(notice) == 0:
+        errors.append("[ERROR] templates 폴더에서 '안내' 템플릿을 찾을 수 없습니다. (파일명에 '안내' 포함)")
+    elif len(notice) > 1:
+        errors.append("[ERROR] templates 폴더에 '안내' 템플릿이 여러 개 있습니다.")
+
+    if errors:
+        return None, None, errors
+
+    return reg[0], notice[0], []
+
+
+def choose_template_register(format_dir: Path, year_str: str = "") -> Path:
+    reg, notice, errors = find_templates(format_dir)
+    if errors:
+        raise ValueError(errors[0])
+    assert reg is not None
+    return reg
+
+
+def choose_template_notice(format_dir: Path, year_str: str = "") -> Path:
+    reg, notice, errors = find_templates(format_dir)
+    if errors:
+        raise ValueError(errors[-1])
+    assert notice is not None
+    return notice
+
+
+# --- header cell normalize / detection ---
+
+
+# =========================
+# 헤더 행 자동 감지
+# =========================
+# HEADER_SLOTS 상수는 common.py에 정의되어 있음.
+# scan(헤더 감지)과 run(데이터 읽기) 양쪽에서 공유하는 상수이므로
+# 어느 한쪽에 두지 않고 common에 정의한다.
+
+def detect_header_row_freshmen(ws) -> int:
+    """신입생 파일에서 헤더 행 번호를 자동 감지한다."""
+    return _detect_header_row_generic(ws, FRESHMEN_HEADER_SLOTS,
+                                      max_search_row=15, max_col=10, min_match_slots=3)
+
+
+def detect_header_row_transfer(ws) -> int:
+    """전입생 파일에서 헤더 행 번호를 자동 감지한다."""
+    return _detect_header_row_generic(ws, TRANSFER_HEADER_SLOTS,
+                                      max_search_row=15, max_col=10, min_match_slots=3)
+
+
+def detect_header_row_withdraw(ws) -> int:
+    """전출생 파일에서 헤더 행 번호를 자동 감지한다."""
+    return _detect_header_row_generic(ws, WITHDRAW_HEADER_SLOTS,
+                                      max_search_row=15, max_col=10, min_match_slots=3)
+
+
+def detect_header_row_teacher(ws) -> int:
+    """교사 파일에서 헤더 행 번호를 자동 감지한다."""
+    return _detect_header_row_generic(ws, TEACHER_HEADER_SLOTS,
+                                      max_search_row=15, max_col=10, min_match_slots=3)
+
+
+
+# =========================
+# example row detection (예시 + 데이터 시작 행)
+# =========================
+EXAMPLE_NAMES_RAW = ["홍길동", "이순신", "유관순", "임꺽정"]
+EXAMPLE_NAMES_NORM = {normalize_text(n) for n in EXAMPLE_NAMES_RAW}
+EXAMPLE_KEYWORDS = ["예시"]
+
+
+def _row_is_empty(ws, row: int, max_col: Optional[int] = None) -> bool:
+    if max_col is None:
+        max_col = ws.max_column or 1
+    for c in range(1, max_col + 1):
+        v = ws.cell(row=row, column=c).value
+        if v is not None and str(v).strip() != "":
+            return False
+    return True
+
+
+def _row_has_example_keyword(ws, row: int, max_col: Optional[int] = None) -> bool:
+    if max_col is None:
+        max_col = ws.max_column or 1
+    for c in range(1, max_col + 1):
+        v = ws.cell(row=row, column=c).value
+        if v is None:
+            continue
+        s = normalize_text(str(v))
+        if not s:
+            continue
+        for kw in EXAMPLE_KEYWORDS:
+            if kw in s:
+                return True
+    return False
+
+
+def _cell_is_example_name(value: Any) -> bool:
+    if value is None:
+        return False
+    s = normalize_text(str(value))
+    return bool(s) and s in EXAMPLE_NAMES_NORM
+
+
+def detect_example_and_data_start(
+    ws,
+    header_row: int,
+    name_col: int,
+    max_search_row: Optional[int] = None,
+    max_col: Optional[int] = None,
+) -> Tuple[List[int], int]:
+    """
+    헤더 아래에서 예시 행(0개 이상)과 실제 데이터 시작 행을 자동 감지한다.
+    """
+    if max_search_row is None:
+        max_search_row = ws.max_row
+
+    example_rows: List[int] = []
+    r = header_row + 1
+
+    while r <= max_search_row:
+        if _row_is_empty(ws, r, max_col=max_col):
+            r += 1
+            continue
+
+        if _row_has_example_keyword(ws, r, max_col=max_col):
+            example_rows.append(r)
+            r += 1
+            continue
+
+        v_name = ws.cell(row=r, column=name_col).value
+        if _cell_is_example_name(v_name):
+            example_rows.append(r)
+            r += 1
+            continue
+
+        return example_rows, r
+
+    raise ValueError(
+        f"[ERROR] 데이터 시작 행을 찾을 수 없습니다. 헤더 행 아래에 실제 데이터가 있는지 확인해 주세요."
+    )
+
+
+def detect_input_layout(xlsx_path: Path, kind: str) -> Dict[str, Any]:
+    """
+    UI에서 인풋 파일 구조를 미리 보여줄 때 사용.
+    kind: 'freshmen' | 'transfer' | 'withdraw' | 'teacher'
+    반환:
+      {
+        "header_row": int,
+        "example_rows": [int, ...],
+        "data_start_row": int,
+        "_wb": Workbook,   # 내부 재사용용 — 호출자가 꺼내 쓰고 닫는다
+        "_ws": Worksheet,
+      }
+    read_only=True로 열어 속도를 최적화한다.
+    (병합셀 정보는 read_only 모드에서 불가 — validate에서 스킵됨)
+    """
+    ensure_xlsx_only(xlsx_path)
+    wb = safe_load_workbook(xlsx_path, data_only=True)
+    ws = get_first_sheet_with_warning(wb, xlsx_path.name)
+
+    kind_norm = (kind or "").strip().lower()
+
+    if kind_norm == "freshmen":
+        header_row = detect_header_row_freshmen(ws)
+        slot_cols = _build_header_slot_map(ws, header_row, FRESHMEN_HEADER_SLOTS)
+        name_col = slot_cols.get("name", 5)
+
+    elif kind_norm == "transfer":
+        header_row = detect_header_row_transfer(ws)
+        slot_cols = _build_header_slot_map(ws, header_row, TRANSFER_HEADER_SLOTS)
+        name_col = slot_cols.get("name", 5)
+
+    elif kind_norm == "withdraw":
+        header_row = detect_header_row_withdraw(ws)
+        slot_cols = _build_header_slot_map(ws, header_row, WITHDRAW_HEADER_SLOTS)
+        name_col = slot_cols.get("name", 4)
+
+    elif kind_norm == "teacher":
+        header_row = detect_header_row_teacher(ws)
+        slot_cols = _build_header_slot_map(ws, header_row, TEACHER_HEADER_SLOTS)
+        name_col = slot_cols.get("name", 3)
+
+    else:
+        raise ValueError(f"[ERROR] 지원하지 않는 파일 종류입니다: {kind}")
+
+    example_rows, data_start_row = detect_example_and_data_start(
+        ws,
+        header_row=header_row,
+        name_col=name_col,
+    )
+
+    return {
+        "header_row": header_row,
+        "example_rows": example_rows,
+        "data_start_row": data_start_row,
+        "_wb": wb,
+        "_ws": ws,
+    }
+
+def _sheet_headers(ws, header_row: int, max_col: int = 12) -> List[str]:
+    headers = []
+    limit = min(ws.max_column or 1, max_col)
+    for c in range(1, limit + 1):
+        v = ws.cell(header_row, c).value
+        headers.append("" if v is None else str(v).strip())
+    return headers
+
+
+def _sheet_preview_rows(ws, data_start_row: int, max_col: int = 12, limit: int = 300) -> List[List[str]]:
+    rows: List[List[str]] = []
+    col_limit = min(ws.max_column or 1, max_col)
+
+    for r in range(data_start_row, min(ws.max_row, data_start_row + limit - 1) + 1):
+        row_vals = []
+        has_any = False
+        for c in range(1, col_limit + 1):
+            v = ws.cell(r, c).value
+            s = "" if v is None else str(v).strip()
+            if s:
+                has_any = True
+            row_vals.append(s)
+        if has_any:
+            rows.append(row_vals)
+
+    return rows
+    
+
+def _collect_merged_ranges_in_data_area(ws, data_start_row: int) -> List[str]:
+    """
+    자동감지된 data_start_row 이후 데이터 영역과 겹치는 병합셀만 수집.
+    제목/상단 안내 영역 병합셀은 무시.
+    ReadOnlyWorksheet면 빈 리스트 반환.
+    """
+    if not hasattr(ws, "merged_cells"):
+        return []
+
+    merged = getattr(ws, "merged_cells", None)
+    if not merged:
+        return []
+
+    hit_ranges: List[str] = []
+    for rng in merged.ranges:
+        # 병합범위가 데이터 시작행 아래와 겹치면 경고 대상
+        if rng.max_row >= data_start_row:
+            hit_ranges.append(str(rng))
+    return hit_ranges
+
+
+def validate_input_sheet_structure(
+    ws,
+    kind: str,
+    header_row: int,
+    data_start_row: int,
+    required_cols: Dict[str, int],
+    allow_blank_class_for_kindergarten: bool = False,
+) -> List[str]:
+    """
+    입력 시트 구조 검증:
+    - 데이터 영역 병합 셀 있으면 경고
+    - 데이터 중간 완전 빈 행 있으면 경고
+    - 필수 컬럼 중간 빈칸 있으면 경고
+    """
+    issues: List[str] = []
+
+    merged_ranges = _collect_merged_ranges_in_data_area(ws, data_start_row)
+    if merged_ranges:
+        issues.append(
+            f"[WARN] {kind} 파일 데이터 영역에 병합된 셀이 있습니다: "
+            f"{', '.join(merged_ranges[:10])}"
+            + (" ..." if len(merged_ranges) > 10 else "")
+        )
+
+    last_data_row = data_start_row - 1
+    for r in range(data_start_row, ws.max_row + 1):
+        row_has_any = False
+        for c in required_cols.values():
+            v = ws.cell(r, c).value
+            if v is not None and str(v).strip() != "":
+                row_has_any = True
+                break
+        if row_has_any:
+            last_data_row = r
+
+    if last_data_row < data_start_row:
+        issues.append(f"[ERROR] {kind} 파일에서 데이터 행을 찾을 수 없습니다.")
+        return issues
+
+    for r in range(data_start_row, last_data_row + 1):
+        vals = [ws.cell(r, c).value for c in required_cols.values()]
+        if all(v is None or str(v).strip() == "" for v in vals):
+            issues.append(
+                f"[WARN] {kind} 파일 {r}행이 비어 있습니다. "
+                "중간 빈 행이 있으면 데이터가 잘릴 수 있습니다."
+            )
+
+    for r in range(data_start_row, last_data_row + 1):
+        row_values = {name: ws.cell(r, c).value for name, c in required_cols.items()}
+
+        # 완전 빈 행은 중간 빈 행 WARN에서 이미 처리 — 개별 컬럼 체크 스킵
+        if all(v is None or str(v).strip() == "" for v in row_values.values()):
+            continue
+
+        if allow_blank_class_for_kindergarten:
+            grade_v = row_values.get("grade")
+            grade_s = "" if grade_v is None else str(grade_v).strip()
+            cls_v = row_values.get("class")
+            cls_s = "" if cls_v is None else str(cls_v).strip()
+            cls_norm = re.sub(r"\s+", "", cls_s)
+            grade_norm = re.sub(r"\s+", "", grade_s)
+            is_kindergarten = (
+                grade_norm in {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+                or (not grade_s and cls_norm in {"유치원", "유치원반"})
+                or cls_norm in {"유치원", "유치원반"}
+            )
+
+            for key, v in row_values.items():
+                if is_kindergarten and key in ("grade", "class"):
+                    continue
+                if v is None or str(v).strip() == "":
+                    issues.append(f"[WARN] {kind} 파일 {r}행 '{key}' 값이 비어 있습니다.")
+        else:
+            for key, v in row_values.items():
+                if v is None or str(v).strip() == "":
+                    issues.append(f"[WARN] {kind} 파일 {r}행 '{key}' 값이 비어 있습니다.")
+
+        # 학년/반 열 형식 검증
+        KINDERGARTEN = {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+
+        grade_v = row_values.get("grade")
+        if grade_v is not None and str(grade_v).strip():
+            gs = str(grade_v).strip()
+            gs_norm = re.sub(r"\s+", "", gs)
+            if gs_norm not in KINDERGARTEN:
+                warn_grade = None
+                if "-" in gs:
+                    warn_grade = f"학년 열에 하이픈(-) 포함 — 학년+반이 합쳐진 것 같습니다: '{gs}'"
+                elif gs_norm.endswith("학년"):
+                    warn_grade = f"학년 열에 '학년' 글자 포함 — 숫자만 입력해야 합니다: '{gs}'"
+                else:
+                    try:
+                        float(gs)
+                    except ValueError:
+                        warn_grade = f"학년 열에 숫자가 아닌 값이 있습니다: '{gs}'"
+                if warn_grade:
+                    issues.append(f"[WARN] {kind} 파일 {r}행 '학년' 열 — {warn_grade}")
+
+        class_v = row_values.get("class")
+        if class_v is not None and str(class_v).strip():
+            cs = str(class_v).strip()
+            cs_norm = re.sub(r"\s+", "", cs)
+            warn_class = None
+            if "-" in cs:
+                warn_class = f"반 열에 하이픈(-) 포함 — 학년+반이 합쳐진 것 같습니다: '{cs}'"
+            elif cs_norm.endswith("반"):
+                warn_class = f"반 열 끝에 '반' 포함 — 등록 파일에 중복됩니다: '{cs}'"
+            if warn_class:
+                issues.append(f"[WARN] {kind} 파일 {r}행 '반' 열 — {warn_class}")
+
+    return issues
+
+
+
+
+
+# =========================
+# Roster helpers
+# =========================
+
+
+def analyze_roster_once(roster_ws, input_year: int) -> Dict:
+    """
+    학생명부 시트를 한 번 순회하여 RosterInfo 구성에 필요한 정보를 추출한다.
+    결과는 dict로 반환하며, scan_pipeline 내부에서 RosterInfo 필드로 설정된다.
+
+    [ID prefix 최빈값 분석]
+    각 학년별로 학생 아이디 앞 4자리(입학년도)의 최빈값을 구한다.
+    이것이 prefix_mode_by_roster_grade가 된다.
+
+    예: 3학년 학생 30명의 아이디 앞 4자리가 대부분 2022이면
+        prefix_mode[3] = 2022
+        → 3학년 전입생 아이디: "2022{이름}"
+
+    최빈값을 쓰는 이유: 담당자가 특정 전입생에게 잘못된 연도를
+    입력했더라도 다수결로 올바른 연도를 추정할 수 있기 때문.
+
+    [roster_time 추정]
+    roster_time/ref_grade_shift는 scan_pipeline에서
+    명부 기준일과 개학일을 비교하여 확정한다.
+    여기서는 "unknown"으로 초기화만 한다.
+    """
+    hm = header_map(roster_ws, 1)
+
+    need = ["현재반", "이전반", "학생이름", "아이디"]
+    for k in need:
+        if k not in hm:
+            raise ValueError(f"[ERROR] 학생명부에 '{k}' 열이 없습니다.")
+
+    c_class = hm["현재반"]
+    c_name  = hm["학생이름"]
+    c_id    = hm["아이디"]
+
+    prefixes_by_grade = defaultdict(list)
+    name_counter_by_grade = defaultdict(Counter)
+
+    for r in range(2, roster_ws.max_row + 1):
+        clv = roster_ws.cell(r, c_class).value
+        nmv = roster_ws.cell(r, c_name).value
+        idv = roster_ws.cell(r, c_id).value
+        if clv is None or nmv is None:
+            continue
+
+        parsed = parse_class_str(clv)
+        if parsed is None:
+            continue
+        g, _cls = parsed
+
+        nm = normalize_name(nmv)
+        if not nm:
+            continue
+        name_counter_by_grade[g][nm] += 1
+
+        p4 = extract_id_prefix4(idv)
+        if p4 is not None:
+            prefixes_by_grade[g].append(p4)
+
+    prefix_mode_by_grade = {}
+    for g, arr in prefixes_by_grade.items():
+        if arr:
+            prefix_mode_by_grade[g] = Counter(arr).most_common(1)[0][0]
+
+    # 1학년은 올해 신입생이라 명부에 없음 → input_year로 자동 보정
+    if 1 not in prefix_mode_by_grade and input_year:
+        prefix_mode_by_grade[1] = input_year
+
+    # roster_names_by_grade: {학년(int): [이름(str), ...]}
+    roster_names_by_grade = {
+        g: list(counter.keys())
+        for g, counter in name_counter_by_grade.items()
+    }
+
+    return RosterInfo(
+        roster_time="unknown",   # scan_pipeline에서 날짜 기준으로 확정
+        ref_grade_shift=0,
+        prefix_mode_by_roster_grade=prefix_mode_by_grade,
+        name_count_by_roster_grade=name_counter_by_grade,
+        roster_names_by_grade=roster_names_by_grade,
+    )
+
+def freshmen_need_roster(
+    xlsx_path: Optional[Path],
+    input_year: int,
+    school_name: str = "",
+) -> bool:
+    """
+    신입생 파일 안에 일반 학년 2~6학년이 하나라도 있으면
+    학생명부가 필요하다고 판단한다.
+    run_main import 없이 직접 학년 컬럼만 읽어서 판단.
+    """
+    return bool(freshmen_extra_grades(xlsx_path, input_year, school_name))
+
+
+def freshmen_extra_grades(
+    xlsx_path: Optional[Path],
+    input_year: int,
+    school_name: str = "",
+) -> list:
+    """신입생 파일에서 1학년 외 학년 목록을 반환. 없으면 []."""
+    if not xlsx_path:
+        return []
+
+    wb = None
+    try:
+        wb = safe_load_workbook(xlsx_path, data_only=True)
+        ws = get_first_sheet_with_warning(wb, xlsx_path.name)
+
+        header_row = detect_header_row_freshmen(ws)
+        slot_cols = _build_header_slot_map(ws, header_row, FRESHMEN_HEADER_SLOTS)
+        grade_col = slot_cols.get("grade")
+
+        if grade_col is None:
+            return []
+
+        KINDERGARTEN = {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+        extra = set()
+
+        for r in range(header_row + 1, ws.max_row + 1):
+            grade_v = ws.cell(r, grade_col).value
+            if grade_v is None:
+                continue
+
+            grade_s = re.sub(r"\s+", "", str(grade_v).strip())
+            if not grade_s or grade_s in KINDERGARTEN:
+                continue
+
+            m = re.search(r"\d+", grade_s)
+            if not m:
+                continue
+
+            g = int(m.group(0))
+            if g != 1:
+                extra.add(g)
+
+        return sorted(extra)
+
+    except Exception:
+        return []
+
+    finally:
+        if wb is not None:
+            wb.close()
+
+# =========================
+# L4. scan_pipeline
+# =========================
+def load_preview_rows(
+    xlsx_path: Path,
+    kind: str,
+    header_row: int,
+    data_start_row: int,
+    limit: int = 100,
+) -> List[List[str]]:
+    """
+    UI에서 미리보기 요청 시 호출. 스캔 단계에서는 실행하지 않음.
+    """
+    try:
+        wb = safe_load_workbook(Path(xlsx_path), data_only=True)
+        try:
+            ws = get_first_sheet_with_warning(wb, Path(xlsx_path).name)
+            return _sheet_preview_rows(ws, data_start_row, limit=limit)
+        finally:
+            wb.close()
+    except Exception:
+        return []
+
+
+
+def scan_pipeline(
+    work_root: Path,
+    school_name: str,
+    school_start_date: date,
+    work_date: date,
+    roster_basis_date: Optional[date] = None,
+    roster_xlsx: Optional[Path] = None,
+    col_map: Optional[Dict[str, Any]] = None,
+) -> ScanResult:
+    logs: List[str] = []
+
+    def log(msg: str):
+        from datetime import datetime as _dt
+        logs.append(f"[{_dt.now().strftime('%H:%M:%S')}] {msg}")
+
+    work_root = Path(work_root).resolve()
+    dirs = get_project_dirs(work_root)
+
+    school_name = (school_name or "").strip()
+    year_str = str(school_start_date.year).strip()
+    year_int = school_start_date.year
+
+    sr = ScanResult(
+        ok=False,
+        logs=logs,
+        school_name=school_name,
+        year_str=year_str,
+        year_int=year_int,
+        project_root=work_root,
+        input_dir=Path("."),
+        output_dir=Path("."),
+        template_register=None,
+        template_notice=None,
+        roster_xlsx_path=None,
+        freshmen_file=None,
+        teacher_file=None,
+        transfer_file=None,
+        withdraw_file=None,
+        need_roster=False,
+        roster_path=None,
+        roster_year=None,
+        roster_info=None,
+        needs_open_date=False,
+        missing_fields=[],
+        can_execute=False,
+        can_execute_after_input=False,
+    )
+
+    try:
+        if not school_name:
+            raise ValueError("[ERROR] 학교명을 입력해 주세요.")
+        year_int = int(year_str)
+
+        import time as _time
+        _t0 = _time.perf_counter()
+        def _tick(label: str):
+            elapsed = _time.perf_counter() - _t0
+            log(f"[TIMER] {label}: {elapsed:.2f}s")
+
+        # 명단 xlsx 기반 학교 존재 확인 (DB 폴더 불필요)
+        if roster_xlsx:
+            _roster_path = Path(roster_xlsx)
+            if _roster_path.suffix.lower() == ".xls":
+                raise ValueError(
+                    f"[ERROR] 명단 파일이 .xls 형식입니다: {_roster_path.name}\n"
+                    ".xlsx 형식으로 변환한 뒤 다시 설정해 주세요."
+                )
+            ensure_xlsx_only(_roster_path)
+            if not _xlsx_school_exists(_roster_path, school_name, col_map):
+                raise ValueError(
+                    f"[ERROR] 명단 파일에서 '{school_name}' 학교를 찾을 수 없습니다. "
+                    f"(파일: {_roster_path.name})"
+                )
+            sr.roster_xlsx_path = _roster_path
+            log(f"[INFO] 명단 파일 검증 통과: {_roster_path.name}")
+        else:
+            log("[WARN] 명단 파일이 지정되지 않았습니다. 학교 존재 확인을 건너뜁니다.")
+            sr.roster_xlsx_path = None
+        _tick("명단 파일 검증")
+
+        # 학교 구분 자동 판별 — 실패 시 경고 (app에서 선택 UI 노출 트리거)
+        _kind_full, _ = school_kind_from_name(school_name)
+        if not _kind_full:
+            log("[WARN] 학교 구분을 자동으로 판별하지 못했습니다.")
+            log("[WARN] 학교 구분을 직접 선택한 뒤 다시 실행해 주세요.")
+
+        root_dir = dirs["SCHOOL_ROOT"]
+
+        kw = (school_name or "").strip()
+        if not kw:
+            raise ValueError("[ERROR] 학교명을 입력해 주세요.")
+
+        matches = [
+            p
+            for p in root_dir.iterdir()
+            if p.is_dir() and text_contains(p.name, kw)
+        ]
+
+        if not matches:
+            raise ValueError(
+                f"[ERROR] '{school_name}' 학교 폴더를 찾을 수 없습니다."
+            )
+
+        if len(matches) > 1:
+            raise ValueError(
+                f"[ERROR] '{school_name}' 학교 폴더 후보가 여러 개입니다: "
+                + ", ".join(p.name for p in matches)
+            )
+
+        school_dir = matches[0]
+        log(f"[INFO] 학교 폴더 매칭: {school_dir.name}")
+        _tick("학교 폴더 매칭")
+
+        input_dir = school_dir
+        output_dir = school_dir / "작업"
+
+        sr.input_dir = input_dir
+        sr.output_dir = output_dir
+
+        try:
+            file_list = [p.name for p in input_dir.iterdir() if p.is_file()]
+            log(f"[DEBUG] input files: {file_list}")
+        except Exception as e:
+            log(f"[WARN] 학교 폴더 파일 목록 조회 중 오류: {e}")
+
+        freshmen_file = find_single_input_file(input_dir, FRESHMEN_KEYWORDS)
+        teacher_file  = find_single_input_file(input_dir, TEACHER_KEYWORDS)
+        transfer_file = find_single_input_file(input_dir, TRANSFER_KEYWORDS)
+        withdraw_file = find_single_input_file(input_dir, WITHDRAW_KEYWORDS)
+
+        warn_if_multi_sheet(freshmen_file, logs, "신입생")
+        warn_if_multi_sheet(teacher_file, logs, "교사")
+        warn_if_multi_sheet(transfer_file, logs, "전입생")
+        warn_if_multi_sheet(withdraw_file, logs, "전출생")
+
+        if not any([freshmen_file, teacher_file, transfer_file, withdraw_file]):
+            raise ValueError(
+                "[ERROR] 신입생/전입생/전출생/교사 파일을 하나도 찾을 수 없습니다. "
+                "학교 폴더 안에 해당 키워드가 포함된 xlsx 파일이 있는지 확인해 주세요."
+            )
+
+        sr.freshmen_file = freshmen_file
+        sr.teacher_file = teacher_file
+        sr.transfer_file = transfer_file
+        sr.withdraw_file = withdraw_file
+
+        log(f"[INFO] 신입생: {freshmen_file.name}" if freshmen_file else "[INFO] 신입생 파일 없음")
+        log(f"[INFO] 교사: {teacher_file.name}" if teacher_file else "[INFO] 교사 파일 없음")
+        log(f"[INFO] 전입생: {transfer_file.name}" if transfer_file else "[INFO] 전입생 파일 없음")
+        log(f"[INFO] 전출생: {withdraw_file.name}" if withdraw_file else "[INFO] 전출생 파일 없음")
+
+        template_register = choose_template_register(dirs["TEMPLATES"], year_str)
+        sr.template_register = template_register
+        log(f"[INFO] 양식(등록): {template_register.name}")
+
+        template_notice = choose_template_notice(dirs["TEMPLATES"], year_str)
+        sr.template_notice = template_notice
+        log(f"[INFO] 양식(안내): {template_notice.name}")
+
+        # 입력 파일 구조 자동 감지 + 경고 수집
+        def run_structure_check(
+            file_path: Optional[Path],
+            kind_key: str,
+            kind_label: str,
+            header_slots: Dict[str, List[str]],
+            required_keys: List[str],
+            allow_blank_class_for_kindergarten: bool = False,
+        ) -> Optional[Dict[str, Any]]:
+            if not file_path:
+                return None
+
+            _t_file = _time.perf_counter()
+            layout = detect_input_layout(file_path, kind_key)
+            wb = layout["_wb"]
+            ws = layout["_ws"]
+
+            try:
+                log(
+                    f"[INFO] {kind_label} 자동감지 | "
+                    f"헤더={layout['header_row']} | "
+                    f"예시={layout['example_rows']} | "
+                    f"시작={layout['data_start_row']}"
+                )
+
+                slot_cols = _build_header_slot_map(ws, layout["header_row"], header_slots)
+                required_cols = {
+                    key: slot_cols.get(key)
+                    for key in required_keys
+                    if slot_cols.get(key) is not None
+                }
+
+                issues = validate_input_sheet_structure(
+                    ws=ws,
+                    kind=kind_label,
+                    header_row=layout["header_row"],
+                    data_start_row=layout["data_start_row"],
+                    required_cols=required_cols,
+                    allow_blank_class_for_kindergarten=allow_blank_class_for_kindergarten,
+                )
+
+                for msg in issues:
+                    log(msg)
+
+                headers = _sheet_headers(ws, layout["header_row"])
+                log(f"[TIMER] {kind_label} 구조 분석: {_time.perf_counter() - _t_file:.2f}s")
+
+                return {
+                    "file_name": file_path.name,
+                    "file_path": str(file_path),
+                    "sheet_name": ws.title,
+                    "header_row": layout["header_row"],
+                    "data_start_row": layout["data_start_row"],
+                    "warning": "\n".join(issues) if issues else "",
+                    "headers": headers,
+                    "rows": [],
+                    "issue_rows": [],
+                }
+            finally:
+                wb.close()
+
+        try:
+            sr.freshmen = run_structure_check(
+                file_path=freshmen_file,
+                kind_key="freshmen",
+                kind_label="신입생",
+                header_slots=FRESHMEN_HEADER_SLOTS,
+                required_keys=["grade", "class", "name"],
+                allow_blank_class_for_kindergarten=True,
+            )
+        except Exception as e:
+            import traceback
+            log(f"[WARN] 신입생 파일 헤더 분석 중 오류: {e}")
+            log(f"[DEBUG] {traceback.format_exc()}")
+
+        try:
+            sr.transfer_in = run_structure_check(
+                file_path=transfer_file,
+                kind_key="transfer",
+                kind_label="전입생",
+                header_slots=TRANSFER_HEADER_SLOTS,
+                required_keys=["grade", "class", "name"],
+                allow_blank_class_for_kindergarten=True,
+            )
+        except Exception as e:
+            import traceback
+            log(f"[WARN] 전입생 파일 헤더 분석 중 오류: {e}")
+            log(f"[DEBUG] {traceback.format_exc()}")
+
+        try:
+            sr.transfer_out = run_structure_check(
+                file_path=withdraw_file,
+                kind_key="withdraw",
+                kind_label="전출생",
+                header_slots=WITHDRAW_HEADER_SLOTS,
+                required_keys=["grade", "class", "name"],
+                allow_blank_class_for_kindergarten=True,
+            )
+        except Exception as e:
+            import traceback
+            log(f"[WARN] 전출생 파일 헤더 분석 중 오류: {e}")
+            log(f"[DEBUG] {traceback.format_exc()}")
+
+        try:
+            sr.teachers = run_structure_check(
+                file_path=teacher_file,
+                kind_key="teacher",
+                kind_label="교사",
+                header_slots=TEACHER_HEADER_SLOTS,
+                required_keys=["position", "name"],
+            )
+        except Exception as e:
+            import traceback
+            log(f"[WARN] 교사 파일 헤더 분석 중 오류: {e}")
+            log(f"[DEBUG] {traceback.format_exc()}")
+
+        need_roster_by_transfer = bool(transfer_file)
+        need_roster_by_withdraw = bool(withdraw_file)
+        need_roster_by_freshmen = False
+
+        if freshmen_file:
+            try:
+                need_roster_by_freshmen = freshmen_need_roster(
+                    xlsx_path=freshmen_file,
+                    input_year=year_int,
+                    school_name=school_name, 
+                )
+            except Exception as e:
+                import traceback
+                log(f"[DEBUG] {traceback.format_exc()}")
+                raise
+
+        need_roster = (
+            need_roster_by_transfer
+            or need_roster_by_withdraw
+            or need_roster_by_freshmen
+        )
+        sr.need_roster = need_roster
+
+        if need_roster_by_freshmen:
+            extra = freshmen_extra_grades(freshmen_file, year_int, school_name)
+            grade_str = ", ".join(f"{g}학년" for g in extra) if extra else "1학년 외"
+            log(f"[INFO] 신입생 파일에 {grade_str}이(가) 포함되어 있습니다.")
+        elif need_roster_by_transfer or need_roster_by_withdraw:
+            log("[INFO] 전입/전출 파일이 있어 학생명부가 필요합니다.")
+        else:
+            log("[INFO] 학생명부가 필요하지 않아 로드를 스킵합니다.")
+
+
+        if need_roster:
+            roster_wb = None
+            roster_ws = None
+            roster_path = None
+            _tick("명부 로드 시작")
+
+            try:
+                try:
+                    roster_wb, roster_ws, roster_path, roster_year = load_roster_sheet(dirs, school_name)
+                    sr.roster_path = roster_path
+                    sr.roster_year = roster_year
+                    log(f"[INFO] 학생명부: {roster_path.name}")
+                    _tick("명부 파일 로드")
+                except ValueError as roster_err:
+                    if need_roster_by_withdraw:
+                        # 전출 처리는 명부 파일 없이 진행 불가 → ERROR로 중단
+                        raise ValueError(
+                            "[ERROR] 학생명부 파일이 없습니다. "
+                            "전출 처리는 명부 파일 없이는 진행할 수 없습니다."
+                        ) from roster_err
+                    else:
+                        # 전입/신입생 타학년만 있는 경우 → 수동 입력으로 대체 가능
+                        log("[WARN] 학생명부를 찾지 못했습니다. 학년도 아이디 규칙을 직접 입력하거나 명부를 추가한 뒤 재스캔해 주세요.")
+                        sr.roster_path = None
+                        sr.roster_info = None
+                        roster_ws = None
+                        roster_path = None
+
+                if roster_ws is not None and roster_path is not None:
+                    try:
+                        sr.roster = {
+                            "file_name": roster_path.name,
+                            "file_path": str(roster_path),
+                            "sheet_name": roster_ws.title,
+                            "header_row": 1,
+                            "data_start_row": 2,
+                            "warning": "",
+                            "headers": _sheet_headers(roster_ws, 1),
+                            "rows": [],   # 미리보기는 UI에서 요청 시 별도 로드
+                            "issue_rows": [],
+                        }
+                    except Exception as e:
+                        import traceback
+                        log(f"[WARN] 학생명부 미리보기 생성 중 오류: {e}")
+                        log(f"[DEBUG] {traceback.format_exc()}")
+
+                    try:
+                        modified_date = datetime.fromtimestamp(roster_path.stat().st_mtime).date()
+                        auto_basis = modified_date
+
+                        if roster_basis_date is not None and roster_basis_date != auto_basis:
+                            sr.roster_basis_date = roster_basis_date
+                            log(
+                                f"[INFO] 학생명부 마지막 수정일은 {auto_basis.isoformat()} 이지만, "
+                                f"사용자가 명부 기준일을 {roster_basis_date.isoformat()} 로 수정했습니다."
+                            )
+                        else:
+                            sr.roster_basis_date = auto_basis
+                            log(
+                                f"[INFO] 학생명부 마지막 수정일({auto_basis.isoformat()})을 "
+                                "명부 기준일로 자동 감지했습니다."
+                            )
+
+                        if sr.roster_basis_date != work_date:
+                            sr.roster_date_mismatch = True
+                            log(
+                                "[DEBUG] 작업일과 명부 기준일이 다릅니다. "
+                                f"(작업일={work_date.isoformat()}, 명부 기준일={sr.roster_basis_date.isoformat()})"
+                            )
+
+                    except Exception as e:
+                        import traceback
+                        log(f"[WARN] 학생명부 파일 수정일 조회 중 오류: {e}")
+                        log(f"[DEBUG] {traceback.format_exc()}")
+
+                    try:
+                        roster_info = analyze_roster_once(roster_ws, input_year=year_int)
+                        sr.roster_info = roster_info
+                        _tick("명부 분석(analyze_roster_once)")
+                    except Exception as e:
+                        import traceback
+                        log(f"[WARN] 학생명부 분석 중 오류가 발생했습니다: {e}")
+                        log(f"[DEBUG] {traceback.format_exc()}")
+                        sr.roster_info = None
+
+                    try:
+                        roster_info = sr.roster_info
+                        basis_date = roster_basis_date or sr.roster_basis_date or work_date
+                        sr.roster_basis_date = basis_date
+
+                        # 명부 기준일 ↔ 개학일 비교로 roster_time/ref_grade_shift 확정
+                        if basis_date < school_start_date:
+                            roster_time = "last_year"
+                            ref_shift = -1
+                        else:
+                            roster_time = "this_year"
+                            ref_shift = 0
+
+                        if roster_info is not None:
+                            roster_info.roster_time     = roster_time
+                            roster_info.ref_grade_shift = ref_shift
+                            sr.roster_info = roster_info
+
+                        log(f"[DEBUG] 명부 기준일 기반 학년도: {'작년' if roster_time == 'last_year' else '올해'}")
+                        log(
+                            "[INFO] 명부 기준일/개학일 기준으로 "
+                            f"'{'작년' if roster_time == 'last_year' else '올해'} 학년도 명부'로 간주합니다."
+                        )
+                    except Exception as e:
+                        import traceback
+                        log(f"[WARN] 학생명부 학년도 추정 중 오류가 발생했습니다: {e}")
+                        log(f"[DEBUG] {traceback.format_exc()}")
+
+            finally:
+                if roster_wb is not None:
+                    roster_wb.close()
+        else:
+            log("[INFO] 전입/전출/1학년 외 신입생 케이스가 없어 학생명부 로드를 건너뜁니다.")
+
+        needs_open_date = bool(withdraw_file)
+        sr.needs_open_date = needs_open_date
+        if needs_open_date:
+            log("[INFO] 전출생 파일 감지 → 개학일(퇴원일자 계산용) 입력 필요")
+        else:
+            log("[INFO] 전출생 파일 없음 → 개학일 입력 불필요")
+
+        missing_fields: List[str] = []
+
+        if sr.template_register is None:
+            missing_fields.append("등록 템플릿")
+        if sr.template_notice is None:
+            missing_fields.append("안내 템플릿")
+
+        # 명부 없음은 missing_fields에 넣지 않음 — 수동 입력으로 대체 가능
+        # 단, 경고 메시지는 로그에 남김 (위에서 이미 처리)
+
+        sr.missing_fields = missing_fields
+        sr.needs_open_date = bool(sr.withdraw_file)
+
+        sr.can_execute_after_input = True
+        sr.can_execute = len(sr.missing_fields) == 0
+
+        sr.ok = True
+        _tick("스캔 완료 (전체)")
+        log("[DONE] 스캔 완료")
+        return sr
+
+    except Exception as e:
+        import traceback
+        # ValueError는 사용자에게 설명 가능한 오류 — 메시지 그대로
+        # 그 외는 예상치 못한 예외 — DEBUG로 traceback 보존
+        if not isinstance(e, ValueError):
+            log(f"[DEBUG] {traceback.format_exc()}")
+        log(f"[ERROR] {e}")
+        sr.ok = False
+        return sr
+
+# =========================
+# L5. 작업 루트 점검
+# =========================
+def scan_work_root(work_root: Path) -> Dict[str, Any]:
+    """
+    앱 시작 시 1회 호출하여 resources 폴더 구조를 점검한다.
+    engine.py의 inspect_work_root()가 이 함수를 호출한다.
+
+    반환 dict 키:
+      ok                — 전체 이상 없음 여부
+      errors            — 오류 메시지 목록
+      message           — ok일 때 성공 메시지
+      school_folders    — 작업 루트 내 학교 폴더 이름 목록
+      notice_titles     — notices/*.txt 파일명(stem) 목록
+      format_ok         — templates 폴더 정상 여부
+      errors_format     — templates 관련 오류 목록
+      register_template — 등록 템플릿 경로 (없으면 None)
+      notice_template   — 안내 템플릿 경로 (없으면 None)
+    """
+    work_root = work_root.resolve()
+    dirs = get_project_dirs(work_root)
+    errors: List[str] = []
+
+    res_root = dirs["RESOURCES_ROOT"].resolve()
+    school_folders = sorted(
+        p.name for p in work_root.iterdir()
+        if p.is_dir() and p.resolve() != res_root and not p.name.startswith(".")
+    )
+
+    format_ok = False; errors_format: List[str] = []
+    register_template: Optional[Path] = None; notice_template: Optional[Path] = None
+    tpl_dir = dirs["TEMPLATES"]
+    if not tpl_dir.exists():
+        errors_format.append("[ERROR] resources/templates 폴더가 없습니다.")
+    else:
+        reg_f = [p for p in tpl_dir.glob("*.xlsx") if "등록" in p.stem and not p.name.startswith("~$")]
+        ntc_f = [p for p in tpl_dir.glob("*.xlsx") if "안내" in p.stem and not p.name.startswith("~$")]
+        if len(reg_f) != 1:
+            errors_format.append("[ERROR] templates 폴더에 '등록' 템플릿 파일이 정확히 1개 있어야 합니다.")
+        else: register_template = reg_f[0]
+        if len(ntc_f) != 1:
+            errors_format.append("[ERROR] templates 폴더에 '안내' 템플릿 파일이 정확히 1개 있어야 합니다.")
+        else: notice_template = ntc_f[0]
+        if not errors_format: format_ok = True
+
+    notice_titles: List[str] = []
+    notice_dir = dirs["NOTICES"]
+    if not notice_dir.exists():
+        errors.append("[ERROR] resources/notices 폴더가 없습니다.")
+    else:
+        txt_files = [p for p in notice_dir.glob("*.txt") if p.is_file()]
+        if not txt_files: errors.append("[ERROR] notices 폴더에 .txt 파일이 없습니다.")
+        else: notice_titles = sorted({p.stem.strip() for p in txt_files})
+
+    errors.extend(errors_format)
+    ok = not errors
+
+    return {
+        "ok": ok,
+        "errors": errors,
+        "message": "[INFO] resources(templates/notices)가 정상적으로 준비되었습니다." if ok else "",
+        "school_folders": school_folders,
+        "notice_titles": notice_titles,
+        "format_ok": format_ok, "errors_format": errors_format,
+        "register_template": register_template, "notice_template": notice_template,
+    }

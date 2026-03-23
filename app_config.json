@@ -1,0 +1,24 @@
+{
+  "work_root": "C:/Users/Readinggate/Desktop/2026반편성",
+  "roster_log_path": "//192.168.0.230/자료실/영업/★학교반이동/###### 2026반이동_학교전체명단(2026.03) ###### - 복사본.xlsx",
+  "worker_name": "임지윤",
+  "school_start_date": "2026-03-03",
+  "work_date": "2026-03-23",
+  "arrived_date": "2026-03-23",
+  "last_school": "",
+  "roster_col_map": {
+    "sheet": "학교명단",
+    "header_row": 7,
+    "data_start": 8,
+    "col_seq": 2,
+    "col_school": 5,
+    "col_domain": 6,
+    "col_email_arr": 11,
+    "col_email_snt": 12,
+    "col_worker": 13,
+    "col_freshmen": 14,
+    "col_transfer": 15,
+    "col_withdraw": 16,
+    "col_teacher": 16
+  }
+}
