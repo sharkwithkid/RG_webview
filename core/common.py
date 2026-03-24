@@ -785,6 +785,69 @@ def school_kind_from_name(school_name: str) -> Tuple[str, str]:
     return "", ""
 
 
+# =========================
+# 학년별 학년도(ID prefix) 파생
+# =========================
+def derive_grade_year_map(
+    target_grades,
+    input_year: int,
+    roster_info=None,
+) -> Dict[int, int]:
+    """
+    target_grades(현재학년 기준) 각각에 대해 ID prefix(입학년도 4자리)를 반환.
+
+    우선순위:
+      1) roster_info.prefix_mode_by_roster_grade + ref_grade_shift 로 명부 직접값
+      2) 없으면 input_year - (g - 1) 로 역산
+
+    반환: {현재학년(int): prefix4(int)}
+    """
+    result: Dict[int, int] = {}
+
+    shift: int = 0
+    if roster_info is not None:
+        raw_prefix = (
+            getattr(roster_info, "prefix_mode_by_roster_grade", None)
+            if not isinstance(roster_info, dict)
+            else roster_info.get("prefix_mode_by_roster_grade", {})
+        ) or {}
+        shift = int((
+            getattr(roster_info, "ref_grade_shift", 0)
+            if not isinstance(roster_info, dict)
+            else roster_info.get("ref_grade_shift", 0)
+        ) or 0)
+        for g_roster, pref in raw_prefix.items():
+            try:
+                g_cur = int(g_roster) - shift
+                result[g_cur] = int(pref)
+            except Exception:
+                continue
+
+    # 명부 직접값이 있는 학년 목록 (앵커로 사용)
+    known_grades = sorted(result.keys())
+
+    for g in target_grades:
+        try:
+            g_i = int(g)
+        except Exception:
+            continue
+        if g_i <= 0:
+            continue
+        if g_i in result:
+            continue
+
+        if known_grades:
+            # 가장 가까운 명부 학년을 앵커로 삼아 상대 계산
+            # 예: 앵커 4학년=2025 → 3학년=2025+1=2026, 5학년=2025-1=2024
+            anchor_g = min(known_grades, key=lambda x: abs(x - g_i))
+            anchor_pref = result[anchor_g]
+            result[g_i] = anchor_pref + (anchor_g - g_i)
+        else:
+            # 명부가 전혀 없을 때만 절대 역산 (1학년=input_year 기준)
+            result[g_i] = (input_year - (g_i - 1)) if input_year else 0
+
+    return result
+
 
 def load_notice_templates(work_root: Path) -> Dict[str, str]:
     dirs = get_project_dirs(work_root)

@@ -28,6 +28,8 @@ const Run = (() => {
   let _pendingSheets = [];  // 순차 로드 대기 시트 큐
   let _dupOnly      = false;
   let _lastRunData  = null;
+  let _noticeDupRows = new Set();         // 학생 안내문 시트 동명이인 행 번호
+  let _noticeTeacherDupRows = new Set(); // 교사 안내문 시트 동명이인 행 번호
 
   // ──────────────────────────────────────────────
   // 실행 시작
@@ -67,6 +69,8 @@ const Run = (() => {
   function onFinished(data) {
     _el('btn-run').disabled = false;
     _lastRunData = data;
+    _noticeDupRows        = new Set(data.notice_dup_rows || []);
+    _noticeTeacherDupRows = new Set(data.notice_teacher_dup_rows || []);
 
     if (!data.ok) {
       const err = (data.logs || []).find(l => l.level === 'error');
@@ -88,6 +92,7 @@ const Run = (() => {
       _el('run-info').textContent = `실행 완료 — 경고 ${warnLogs.length}건: ${warnLogs[0].message}`;
     } else {
       _setBadge('ok', '실행 완료');
+      _el('run-info').textContent = '실행 완료';
     }
 
     // 보류 경고
@@ -111,9 +116,72 @@ const Run = (() => {
     _outputFiles = data.output_files || [];
     _renderOutputFiles();
 
+    // 내부 작업 이력 자동 저장 (실행 완료 기준)
+    (async () => {
+      try {
+        const scanData = Scan.getLastScanData ? Scan.getLastScanData() : null;
+        const items = scanData?.items || [];
+
+        const freshmenItem    = items.find(i => i.kind === '신입생');
+        const transferInItem  = items.find(i => i.kind === '전입생');
+        const transferOutItem = items.find(i => i.kind === '전출생');
+        const teacherItem     = items.find(i => i.kind === '교직원');
+
+        // 전입/전출은 run payload의 done 값 우선 사용
+        // scan row_count는 보류 포함 원본 건수라 실제 처리 수와 다를 수 있음
+        const counts = {
+          '신입생': data.freshmen_count    ?? freshmenItem?.row_count    ?? 0,
+          '전입생': data.transfer_in_done  ?? transferInItem?.row_count  ?? 0,
+          '전출생': data.transfer_out_done ?? transferOutItem?.row_count ?? 0,
+          '교직원': data.teacher_count     ?? teacherItem?.row_count     ?? 0,
+        };
+
+        const entry = {
+          last_date: state.work_date || _todayStr(),
+          worker: state.worker_name || '',
+          counts,
+          run_completed: true,
+          master_recorded: false,
+        };
+
+        const schoolYear = (state.work_date || _todayStr()).slice(0, 4);
+        const histRes = JSON.parse(
+          await bridge.saveWorkHistory(
+            schoolYear,
+            state.selected_school,
+            JSON.stringify(entry)
+          )
+        );
+
+        if (!histRes.ok) {
+          console.error('[HISTORY][AUTO] 저장 실패:', histRes.error);
+          return;
+        }
+
+        const SHORT = { '신입생': '신입', '전입생': '전입', '전출생': '전출', '교직원': '교직' };
+        const countStr = Object.entries(counts)
+          .filter(([, v]) => v)
+          .map(([k, v]) => `${SHORT[k] ?? k} ${v}`)
+          .join(' · ');
+
+        let histText = `마지막 작업 · ${entry.last_date}`;
+        if (entry.worker) histText += ` (${entry.worker})`;
+        if (countStr) histText += `\n${countStr}`;
+        histText += `\n전체 명단 반영 전`;
+
+        Panel.updateSchoolInfo({
+          school_name: _el('current-school')?.textContent || state.selected_school,
+          history_text: histText,
+        });
+      } catch (e) {
+        console.error('[HISTORY][AUTO] 예외:', e);
+      }
+    })();
+
     // 명단 기록 버튼 활성
+    // record: roster_log_path 있을 때만 / open: 학교 선택됐으면 항상
     state.pending_roster_log = !!state.roster_log_path;
-    Panel.setRosterBtns(!!state.roster_log_path, !!state.roster_log_path);
+    Panel.setRosterBtns(!!state.roster_log_path, !!state.selected_school);
 
     // 안내문 탭으로 플로팅 버튼
     App.setFloatingNext(true, 'notice');
@@ -228,8 +296,8 @@ const Run = (() => {
   }
 
   function onPreviewLoaded(payload) {
-    const { sheet_name, columns, rows } = payload;
-    _sheetData[sheet_name] = { headers: columns, rows };
+    const { sheet_name, columns, rows, row_colors } = payload;
+    _sheetData[sheet_name] = { headers: columns, rows, rowColors: row_colors || [] };
 
     // 시트탭 추가
     const tabs = _el('sheet-tabs');
@@ -267,11 +335,21 @@ const Run = (() => {
     document.querySelectorAll('.sheet-tab').forEach(b =>
       b.classList.toggle('active', b.dataset.sheet === name)
     );
-    _renderRunTable();
+
+    // 시트 전환 시 페이지 스크롤 튐 방지:
+    // 전환 전 tbody 높이를 min-height로 고정 → 렌더 후 해제
     const runTable = _el('run-table');
-    if (runTable) {
-      const wrap = runTable.closest('.preview-table-wrap');
-      if (wrap) wrap.scrollTop = 0;
+    const wrap = runTable?.closest('.preview-table-wrap');
+    if (wrap) {
+      wrap.style.minHeight = wrap.offsetHeight + 'px';
+    }
+
+    _renderRunTable();
+
+    if (wrap) {
+      // 렌더 완료 후 min-height 해제 (다음 프레임에서)
+      requestAnimationFrame(() => { wrap.style.minHeight = ''; });
+      wrap.scrollTop = 0;
     }
   }
 
@@ -280,24 +358,11 @@ const Run = (() => {
     if (!data) return;
 
     const keyword = (_el('run-search')?.value || '').trim().toLowerCase();
-    const { headers, rows } = data;
+    const { headers, rows, rowColors } = data;
 
-    // 동명이인 계산
-    const nameCol  = headers.findIndex(h => ['성명','이름','학생이름'].some(k => h.includes(k)));
-    const gradeCol = headers.findIndex(h => h.includes('학년'));
-    const dupSet   = new Set();
-    if (_dupOnly && nameCol >= 0) {
-      const cnt = {};
-      rows.forEach((r, i) => {
-        const nm    = (r[nameCol] || '').replace(/[A-Z]+$/, '').trim();
-        const grade = gradeCol >= 0 ? (r[gradeCol] || '') : '';
-        const key   = `${grade}||${nm}`;
-        if (nm) cnt[key] = (cnt[key] || []).concat(i);
-      });
-      Object.values(cnt).forEach(idxs => {
-        if (idxs.length >= 2) idxs.forEach(i => dupSet.add(i));
-      });
-    }
+    // 동명이인: Python 코어가 판별한 running_no(1-based) 기준
+    // _noticeDupRows는 안내문 시트 기준 행 번호 → No. 컬럼(첫 번째 열) 값과 매칭
+    const noCol = headers.findIndex(h => h === 'No.' || h === 'No' || h === 'NO' || h === 'no');
 
     // 비고 컬럼 탐색 (보류 색상용)
     const noteCol = (() => {
@@ -308,8 +373,18 @@ const Run = (() => {
     const filtered = rows.reduce((acc, row, i) => {
       if (row.every(v => !String(v).trim())) return acc;  // 빈 행 제외
       if (keyword && !row.join(' ').toLowerCase().includes(keyword)) return acc;
-      if (_dupOnly && !dupSet.has(i)) return acc;
-      acc.push({ row, i, noteVal: row[noteCol] || '' });
+      // 동명이인 필터: No. 컬럼 값이 _noticeDupRows에 있는 행만
+      const rowNo = noCol >= 0 ? parseInt(row[noCol], 10) : NaN;
+      // 동명이인: 시트 종류에 따라 해당 Set 적용
+      const sheetName = _currentSheet || '';
+      const isStudentSheet = sheetName.includes('학생');
+      const isTeacherSheet = sheetName.includes('선생') || sheetName.includes('교사') || sheetName.includes('teacher');
+      const isDupRow = (!isNaN(rowNo)) && (
+        (isStudentSheet && _noticeDupRows.size > 0 && _noticeDupRows.has(rowNo)) ||
+        (isTeacherSheet && _noticeTeacherDupRows.size > 0 && _noticeTeacherDupRows.has(rowNo))
+      );
+      if (_dupOnly && !isDupRow) return acc;
+      acc.push({ row, i, noteVal: row[noteCol] || '', rowColor: (rowColors && rowColors[i]) || null, isDupRow });
       return acc;
     }, []);
 
@@ -318,11 +393,10 @@ const Run = (() => {
     const tbody = table.querySelector('tbody');
 
     thead.innerHTML = '<tr>' + headers.map(h => `<th>${_esc(h)}</th>`).join('') + '</tr>';
-    tbody.innerHTML = filtered.map(({ row, i, noteVal }) => {
+    tbody.innerHTML = filtered.map(({ row, i, noteVal, rowColor, isDupRow }) => {
       const isHold     = noteVal.includes('보류:') && !noteVal.includes('자동 제외');
       const isAutoSkip = noteVal.includes('자동 제외');
-      const isDup      = dupSet.has(i);
-      const cls = isHold ? 'row-hold' : isAutoSkip ? 'row-skip' : isDup ? 'row-dup' : '';
+      const cls = isHold ? 'row-hold' : isAutoSkip ? 'row-skip' : isDupRow ? 'row-dup' : '';
       return `<tr class="${cls}">${row.map(v => `<td>${_esc(v)}</td>`).join('')}</tr>`;
     }).join('');
 
@@ -368,10 +442,11 @@ const Run = (() => {
     _pendingSheets = [];
     _dupOnly       = false;
     _lastRunData   = null;
+    _noticeDupRows        = new Set();
+    _noticeTeacherDupRows = new Set();
 
     _setBadge('idle', '실행 전');
-    _el('run-desc').textContent =
-    '작업을 실행하고 결과 파일을 확인합니다.\n먼저 스캔을 통과해야 합니다.';
+    _el('run-info').textContent = '스캔을 통과한 후 작업을 실행하고 결과 파일을 확인합니다.';
     _el('run-hold-warn').style.display = 'none';
     _el('btn-goto-notice').style.display = 'none';
     _el('btn-run').disabled             = true;

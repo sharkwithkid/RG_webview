@@ -123,6 +123,7 @@ async function initApp() {
       state.roster_log_path   = cfg.roster_log_path   || '';
       state.roster_col_map    = cfg.roster_col_map    || {};
       state.arrived_date      = cfg.arrived_date      || '';
+      state.last_school       = cfg.last_school       || '';
       state.school_folders    = inspRes.data.school_folders || [];
 
       if (cfg.roster_log_path && cfg.roster_col_map?.col_school) {
@@ -231,6 +232,7 @@ function _handleAction(action, el) {
     'apply-grade':    () => Panel.applyGrade(),
     'record-roster':  () => Panel.recordRoster(),
     'open-roster':    () => Panel.openRoster(),
+    'open-roster-map': () => Panel.openRosterMap(),
     'new-school':     () => Panel.newSchool(),
 
     // Scan
@@ -239,7 +241,15 @@ function _handleAction(action, el) {
     'toggle-viewer':  () => Scan.toggleViewer(),
 
     // Run
-    'run-start':      () => Run.start(),
+    'run-start':      () => {
+      // 스캔 완료 + 체크박스 모두 확인 여부 검증
+      const scanCheck = _checkScanReady();
+      if (!scanCheck.ok) {
+        toast(scanCheck.msg, 'warn', 4000);
+        return;
+      }
+      Run.start();
+    },
     'run-log':        () => Run.showLog(),
     'run-dup':        () => Run.toggleDup(),
     'open-folder':    () => Run.openFolder(),
@@ -376,11 +386,22 @@ const App = {
     Panel.setWorkContext({ work_date: state.work_date, arrived_date: state.arrived_date });
 
     App.setStepState(0, 'done');
-    for (let i = 1; i <= 4; i++) App.setStepState(i, 'idle');
+    App.setStepState(1, 'active');
+    for (let i = 2; i <= 4; i++) App.setStepState(i, 'idle');
 
     _showPage('main');
-    App.goTab('scan');
-    App.setMode('main');
+
+    // 학교 선택 단계로 진입: goTab('scan')은 스텝2(스캔)를 highlight하므로 직접 처리
+    state.currentTab = 'scan';
+    document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+    _el('tab-scan')?.classList.add('active');
+    _highlightStep(1);  // 스텝1(학교 선택) active
+
+    // 모드 버튼만 갱신 (goTab 미호출이므로 수동 처리)
+    _el('btn-mode-main').classList.add('active');
+    _el('btn-mode-diff').classList.remove('active');
+
+    _setSchoolInputHighlight(true);
   },
 
   async onSchoolSelected(schoolName) {
@@ -406,9 +427,10 @@ const App = {
 
     let history_text = null;
     if (histEntry) {
+      const SHORT = { '신입생': '신입', '전입생': '전입', '전출생': '전출', '교직원': '교직' };
       const countStr = Object.entries(histEntry.counts || {})
         .filter(([, v]) => v)
-        .map(([k, v]) => `${k} ${v}명`)
+        .map(([k, v]) => `${SHORT[k] ?? k} ${v}`)
         .join(' · ');
       history_text = `마지막 작업 · ${histEntry.last_date || '-'}`;
       if (histEntry.worker) history_text += ` (${histEntry.worker})`;
@@ -432,6 +454,12 @@ const App = {
     _el('btn-run').disabled      = true;
     _el('btn-run-diff').disabled = false;
 
+    // 학교 선택 시점: 명단 파일이 있으면 파일 열기 버튼 바로 활성화
+    // (전체 명단 반영은 실행 완료 후에만 활성화)
+    Panel.setRosterBtns(false, !!state.roster_log_path);
+
+     _setSchoolInputHighlight(false);
+
     App.goTab('scan');
     Scan.reset();
   },
@@ -448,9 +476,33 @@ const App = {
 
   goStep(idx) {
     const tabMap = { 2: 'scan', 3: 'run', 4: 'notice' };
-    if (idx === 0)        App.goBackToSetup();
-    else if (idx === 1)   App.resetToSchoolSelect();
-    else if (tabMap[idx]) App.goTab(tabMap[idx]);
+    if (idx === 0) {
+      App.goBackToSetup();
+    } else if (idx === 1) {
+      App.resetToSchoolSelect();
+    } else if (idx === 2) {
+      // 스캔 탭: 학교가 선택돼 있어야 이동 가능
+      if (!state.selected_school) {
+        toast('먼저 학교를 선택하고 적용하세요.', 'warn');
+        return;
+      }
+      App.goTab('scan');
+    } else if (idx === 3) {
+      // 실행 탭: 스캔 완료 + 체크박스 모두 확인 필요
+      const scanCheck = _checkScanReady();
+      if (!scanCheck.ok) {
+        toast(scanCheck.msg, 'warn', 4000);
+        return;
+      }
+      App.goTab('run');
+    } else if (idx === 4) {
+      // 안내문 탭: 실행 완료 후에만 이동
+      if (_el('btn-run').disabled) {
+        toast('먼저 실헹을 완료해 주세요.', 'warn');
+        return;
+      }
+      App.goTab('notice');
+    }
   },
 
   setMode(mode) {
@@ -484,25 +536,76 @@ const App = {
   },
 
   goBackToSetup() {
-    if (state.pending_roster_log &&
-        !confirm('명단이 아직 기록되지 않았습니다. 설정으로 돌아가시겠습니까?')) return;
-    if (!confirm('초기 설정으로 돌아가시겠습니까? 현재 작업 내용이 모두 초기화됩니다.')) return;
-    _resetForNewSchool();
+    const msg = state.pending_roster_log
+      ? '전체 명단에 아직 반영하지 않았습니다. 초기 설정으로 돌아가시겠습니까?\n현재 작업 내용이 모두 초기화됩니다.'
+      : '초기 설정으로 돌아가시겠습니까? 현재 작업 내용이 모두 초기화됩니다.';
+    if (!confirm(msg)) return;
+
+    _resetSharedState();
+
+    // setup으로 돌아갈 때: 스텝 전체 초기 상태로
+    App.setStepState(0, 'active');
+    for (let i = 1; i <= 4; i++) App.setStepState(i, 'idle');
+
     _showPage('setup');
   },
 
   resetToSchoolSelect() {
-    if (state.pending_roster_log &&
-        !confirm('명단이 아직 기록되지 않았습니다. 계속하시겠습니까?')) return;
-    if (!confirm('새 작업을 시작하시겠습니까? 현재 스캔/실행 결과가 초기화됩니다.')) return;
-    _resetForNewSchool();
+    // 학교를 아직 선택하지 않은 상태면 이미 학교 선택 단계 → confirm 없이 통과
+    if (!state.selected_school) {
+      _resetSharedState();
+    } else {
+      const msg = state.pending_roster_log
+        ? '전체 명단에 아직 반영하지 않았습니다. 새 학교 작업을 시작하시겠습니까?\n현재 스캔/실행 결과가 초기화됩니다.'
+        : '새 학교 작업을 시작하시겠습니까? 현재 스캔/실행 결과가 초기화됩니다.';
+      if (!confirm(msg)) return;
+      _resetSharedState();
+    }
+
+    // 학교 선택 단계로: 스텝 0 done, 스텝 1 active
+    App.setStepState(0, 'done');
+    App.setStepState(1, 'active');
+    for (let i = 2; i <= 4; i++) App.setStepState(i, 'idle');
+
+    // tab-scan 패널만 active (goTab 미사용 — 스텝 강조 간섭 방지)
+    state.currentTab = 'scan';
+    document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+    _el('tab-scan')?.classList.add('active');
+    _highlightStep(1);
+
+    _setSchoolInputHighlight(true);
   },
 };
 
 // ──────────────────────────────────────────────
 // 초기화 헬퍼
 // ──────────────────────────────────────────────
-function _resetForNewSchool() {
+// ──────────────────────────────────────────────
+// 스캔 검수 체크박스 검증
+// 파일이 있는 행(파일명 셀이 비어있지 않은 행)만 체크 확인
+// 반환: { ok: true } 또는 { ok: false, msg: string }
+// ──────────────────────────────────────────────
+function _checkScanReady() {
+  const badge = _el('scan-status-badge');
+  if (!badge || badge.classList.contains('badge-idle')) {
+    return { ok: false, msg: '먼저 파일 내용 스캔을 완료해 주세요.' };
+  }
+  // spin-val이 '-'이면 해당 종류 파일 없음 → 체크 불필요
+  // file-link 클래스가 붙어있거나 spin-val이 숫자면 파일 있음 → 체크 필수
+  const kinds = ['신입생', '전입생', '전출생', '교직원'];
+  const unchecked = kinds.filter(k => {
+    const spinVal = _el(`spin-${k}`);
+    if (!spinVal || spinVal.textContent.trim() === '-') return false; // 파일 없음 → 스킵
+    const chk = _el(`chk-${k}`);
+    return chk && !chk.checked;
+  });
+  if (unchecked.length) {
+    return { ok: false, msg: `${unchecked.join(', ')} 파일의 시작행을 확인해 주세요.` };
+  }
+  return { ok: true };
+}
+
+function _resetSharedState() {
   state.selected_school    = '';
   state.selected_domain    = '';
   state.current_seq_no     = null;
@@ -517,13 +620,20 @@ function _resetForNewSchool() {
   Notice.clear();
   App.setFloatingNext(false, null);
 
-  App.setStepState(0, 'done');
-  for (let i = 1; i <= 4; i++) App.setStepState(i, 'idle');
-  App.goTab('scan');
+  // 뱃지 강제 리셋 (reset() 호출이 중간에 실패해도 UI가 남지 않도록)
+  const scanBadge = _el('scan-status-badge');
+  if (scanBadge) { scanBadge.className = 'status-badge badge-idle'; scanBadge.textContent = '스캔 전'; }
+  const runBadge = _el('run-status-badge');
+  if (runBadge)  { runBadge.className  = 'status-badge badge-idle'; runBadge.textContent  = '실행 전'; }
+  const btnGotoRun = _el('btn-goto-run');
+  if (btnGotoRun) btnGotoRun.style.display = 'none';
+  const btnGotoNotice = _el('btn-goto-notice');
+  if (btnGotoNotice) btnGotoNotice.style.display = 'none';
 
   _el('btn-scan').disabled     = true;
   _el('btn-run').disabled      = true;
   _el('btn-run-diff').disabled = true;
+
 }
 
 function _highlightStep(activeIdx) {
@@ -593,6 +703,10 @@ function _noticeCtx() {
 // ──────────────────────────────────────────────
 // 설정 읽기
 // ──────────────────────────────────────────────
+// ──────────────────────────────────────────────
+// SetupPage 통계 카드 갱신
+// ──────────────────────────────────────────────
+
 function _readFullConfig() {
   return {
     work_root:          state.work_root,
@@ -615,6 +729,14 @@ function _todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+
+// 학교 검색창 강조 효과
+function _setSchoolInputHighlight(on) {
+  const el = _el('school-input');
+  if (!el) return;
+  el.classList.toggle('focus-highlight', !!on);
+}
+
 
 // ──────────────────────────────────────────────
 // 개발용 Bridge mock

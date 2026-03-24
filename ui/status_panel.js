@@ -14,10 +14,11 @@
 
 const Panel = (() => {
 
-  let _searchTimer  = null;
-  let _hlIndex      = -1;    // 드롭다운 키보드 탐색 인덱스
-  let _gradeOpen    = false;
-  let _maxGrade     = 6;
+  let _searchTimer   = null;
+  let _hlIndex       = -1;
+  let _gradeOpen     = false;
+  let _maxGrade      = 6;
+  let _isKeyboardNav = false;
 
   // ──────────────────────────────────────────────
   // 초기화 (main.js에서 학교명 로드 후 호출)
@@ -50,6 +51,7 @@ const Panel = (() => {
   // 학교 검색 입력
   // ──────────────────────────────────────────────
   function onInput(text) {
+    if (_isKeyboardNav) return;
     clearTimeout(_searchTimer);
     _hlIndex = -1;
     _openDropdown();
@@ -93,13 +95,21 @@ const Panel = (() => {
       const el = document.createElement('div');
       el.className   = 'school-item';
       el.textContent = name;
-      el.onclick     = () => _selectName(name);
+      el.addEventListener('mousedown', e => {
+        e.preventDefault();
+        _selectName(name);
+      });
       dd.appendChild(el);
     });
   }
 
   function _selectName(name) {
+    // 이전 검색 타이머 취소 — 타이머가 남아있으면 선택 후에 _applySearch가
+    // 실행돼 버튼을 다시 disabled로 덮어쓰는 버그 방지
+    clearTimeout(_searchTimer);
+    _isKeyboardNav = true;
     _el('school-input').value = name;
+    _isKeyboardNav = false;
     _closeDropdown();
     const exact = _isExact(name);
     _setApplyBtn(exact);
@@ -115,15 +125,26 @@ const Panel = (() => {
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      clearTimeout(_searchTimer);
+      _openDropdown();
       _hlIndex = Math.min(_hlIndex + 1, items.length - 1);
       _highlight(items);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      clearTimeout(_searchTimer);
       _hlIndex = Math.max(_hlIndex - 1, 0);
       _highlight(items);
     } else if (e.key === 'Enter') {
       if (_hlIndex >= 0 && items[_hlIndex]) {
-        _selectName(items[_hlIndex].textContent);
+        // 드롭다운에서 항목 선택 후 엔터 → apply()와 동일하게 처리
+        const name = items[_hlIndex].textContent;
+        _isKeyboardNav = true;
+        _el('school-input').value = name;
+        _isKeyboardNav = false;
+        _closeDropdown();
+        _hlIndex = -1;
+        // apply()를 직접 호출 → 검증·UI 갱신·스텝 전환 포함
+        apply();
       } else {
         apply();
       }
@@ -139,10 +160,12 @@ const Panel = (() => {
       // 키보드 탐색 중에만 input 값 교체 (타이핑 중 커서 점프 방지)
       const inp = _el('school-input');
       const name = items[_hlIndex].textContent;
+      _isKeyboardNav = true;
       inp.value = name;
-      // 커서를 끝으로 이동
+      _isKeyboardNav = false;
       inp.setSelectionRange(name.length, name.length);
       _setApplyBtn(_isExact(name));
+      _setStatus('적용 가능한 학교입니다.');
     }
   }
 
@@ -169,7 +192,7 @@ const Panel = (() => {
 
     const hist = _el('school-history');
     if (history_text) { hist.textContent = history_text; hist.style.display = ''; }
-    else               hist.style.display = 'none';
+    else               { hist.textContent = '작업 이력 없음'; hist.style.display = ''; }
 
     const last = _el('last-work');
     if (last_work_text) { last.textContent = last_work_text; last.style.display = ''; }
@@ -198,11 +221,6 @@ const Panel = (() => {
   // 새 학교 시작 버튼
   // ──────────────────────────────────────────────
   function newSchool() {
-    if (state.pending_roster_log) {
-      if (!confirm('명단이 아직 기록되지 않았습니다.\n그래도 새 학교 작업을 시작하시겠습니까?')) return;
-    } else {
-      if (!confirm('새 학교 작업을 시작하시겠습니까?\n현재 작업 내용이 초기화됩니다.')) return;
-    }
     App.resetToSchoolSelect();
   }
 
@@ -256,7 +274,7 @@ const Panel = (() => {
 
     const res = JSON.parse(await bridge.writeWorkResult(JSON.stringify(params)));
     if (!res.ok) {
-      toast('명단 기록 실패: ' + res.error, 'err');
+      toast('전체 명단 반영 실패: ' + res.error, 'err');
       return;
     }
 
@@ -274,38 +292,63 @@ const Panel = (() => {
       }
     }
 
-    // 작업 이력 저장
-    const counts = {};
-    if (kindFlags.신입생) counts['신입생'] = (scanData?.items || []).find(i => i.kind === '신입생')?.row_count || 0;
-    if (kindFlags.전입생) counts['전입생'] = (scanData?.items || []).find(i => i.kind === '전입생')?.row_count || 0;
-    if (kindFlags.전출생) counts['전출생'] = (scanData?.items || []).find(i => i.kind === '전출생')?.row_count || 0;
-    if (kindFlags.교직원) counts['교직원'] = (scanData?.items || []).find(i => i.kind === '교직원')?.row_count || 0;
+    // 작업 이력 업데이트 (전체 명단 반영 완료 상태만 갱신)
+    const schoolYear = (state.work_date || _todayStr()).slice(0, 4);
 
+    // 기존 이력 조회
+    const histLoadRes = JSON.parse(await bridge.loadWorkHistory(schoolYear));
+    const prevEntry = histLoadRes.ok
+      ? (histLoadRes.data.history?.[state.selected_school] || {})
+      : {};
+
+    // 기존 실행 이력은 유지하고, 전체 명단 반영 상태만 추가
     const entry = {
-      last_date: state.work_date || _todayStr(),
-      worker:    state.worker_name || '',
-      counts,
+      ...prevEntry,
+      master_recorded: true,
+      master_recorded_at: state.work_date || _todayStr(),
     };
-    await saveWorkHistoryEntry(entry);
+
+    const _histRes = JSON.parse(
+      await bridge.saveWorkHistory(
+        schoolYear,
+        state.selected_school,
+        JSON.stringify(entry)
+      )
+    );
+
+    if (!_histRes.ok) {
+      console.error('[HISTORY] 업데이트 실패:', _histRes.error);
+      toast('작업 이력 업데이트 오류: ' + (_histRes.error || ''), 'warn');
+    } else {
+      console.log('[HISTORY] 반영 완료:', schoolYear, state.selected_school);
+    }
 
     // UI 갱신
     state.pending_roster_log = false;
     setRosterBtns(false, true);
 
     // 이력 라벨 즉시 갱신
+    const SHORT = { '신입생': '신입', '전입생': '전입', '전출생': '전출', '교직원': '교직' };
     const countStr = Object.entries(counts)
       .filter(([, v]) => v)
-      .map(([k, v]) => `${k} ${v}명`)
+      .map(([k, v]) => `${SHORT[k] ?? k} ${v}`)
       .join(' · ');
-    const histText = `마지막 작업 · ${entry.last_date}` + (countStr ? `\n${countStr}` : '');
-    const histEl = _el('school-history');
-    if (histEl) { histEl.textContent = histText; histEl.style.display = ''; }
+
+    let histText = `마지막 작업 · ${entry.last_date || (state.work_date || _todayStr())}`;
+    if (entry.worker) histText += ` (${entry.worker})`;
+    if (countStr) histText += `\n${countStr}`;
+    histText += `\n전체 명단 반영 완료`;
+
+    Panel.updateSchoolInfo({
+      school_name: _el('current-school')?.textContent || state.selected_school,
+      history_text: histText,
+    });
 
     // 버튼 텍스트 변경
     const btn = _el('btn-record-roster');
-    if (btn) btn.textContent = '기록됨 ✓';
+    if (btn) btn.textContent = '반영 완료';
 
-    toast(res.data.message || '명단 기록 완료', 'ok');
+    toast(res.data.message || '전체 명단 반영 완료', 'ok');
   }
 
   async function openRoster() {
@@ -352,7 +395,7 @@ const Panel = (() => {
         inp.value    = '';
         inp.disabled = false;
       } else if (s === 'ok') {
-        const val    = mapping && mapping[g];
+        const val = mapping && (mapping[g] ?? mapping[String(g)]);
         inp.value    = val ? String(val) : '';
         inp.disabled = false;
       }
@@ -393,7 +436,8 @@ const Panel = (() => {
     const lines = Object.entries(overrides)
       .sort((a, b) => a[0] - b[0])
       .map(([g, y]) => `${g}학년 → ${y}`);
-    toast('학년도 아이디 규칙이 적용됩니다: ' + lines.join(', '), 'ok');
+
+    toast('학년도 아이디 규칙이 적용됩니다:\n' + lines.join('\n'), 'ok', 4000);
   }
 
   // ──────────────────────────────────────────────
@@ -435,6 +479,27 @@ const Panel = (() => {
   // ──────────────────────────────────────────────
   // Public
   // ──────────────────────────────────────────────
+  function updateRosterMapBtn(rosterPath) {
+    const btn  = _el('btn-open-roster-map');
+    const hint = _el('roster-map-hint');
+    if (!btn) return;
+    if (rosterPath) {
+      btn.disabled = false;
+      btn._rosterPath = rosterPath;
+      if (hint) hint.style.display = 'none';
+    } else {
+      btn.disabled = true;
+      btn._rosterPath = null;
+      if (hint) hint.style.display = '';
+    }
+  }
+
+  async function openRosterMap() {
+    const btn = _el('btn-open-roster-map');
+    if (!btn || !btn._rosterPath) return;
+    await bridge.openFile(btn._rosterPath);
+  }
+
   return {
     init, setWorkContext,
     onInput, onKeyDown, apply,
@@ -443,6 +508,7 @@ const Panel = (() => {
     setRosterBtns, recordRoster, openRoster,
     toggleGrade, updateGradeMap, setGradeCount,
     getGradeOverrides, applyGrade,
+    updateRosterMapBtn, openRosterMap,
   };
 
 })();

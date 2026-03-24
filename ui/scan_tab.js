@@ -45,6 +45,17 @@ const Scan = (() => {
     _setBadge('running', '스캔 중');
     _setMessage('스캔 중...');
 
+    _previewData = {};
+    _currentKind = null;
+    _lastScanData = null;
+    _el('btn-run').disabled = true;
+    App.setFloatingNext(false, null);
+    if (typeof Panel !== 'undefined' && Panel.updateRosterMapBtn) Panel.updateRosterMapBtn(null);
+    _hideSchoolKindWarn();
+    _el('preview-warn').textContent = '';
+    _el('preview-file-info').textContent = '';
+    _updateGradeMap({ need_roster: false });
+
     const params = {
       work_root:          state.work_root,
       school_name:        state.selected_school,
@@ -73,11 +84,13 @@ const Scan = (() => {
     _lastScanData = data;
 
     if (!data.ok) {
-      const err = (data.logs || []).find(l => l.level === 'error');
+      const errLog = (data.logs || []).find(l => l.level === 'error');
+      const errMsg = errLog ? errLog.message : '스캔 중 오류가 발생했습니다.';
       _setBadge('err', '스캔 실패');
-      _setMessage(err ? err.message : '스캔 중 오류가 발생했습니다.');
+      _setMessage(errMsg);
       _hideSchoolKindWarn();
       App.setStepState(2, 'warn');
+      toast(errMsg, 'err', 6000);
       return;
     }
 
@@ -91,24 +104,33 @@ const Scan = (() => {
     _setSchoolKindWarn(kindWarn);
 
     // 경고 / 완료 뱃지
+    const errLogs  = (data.logs || []).filter(l => l.level === 'error');
     const warnLogs = (data.logs || []).filter(l => l.level === 'warn');
-    if (warnLogs.length) {
+    if (errLogs.length) {
+      // ERROR 로그 있으면 에러 뱃지 (명부 없음 등 실행 불가 케이스)
+      _setBadge('err', '오류');
+      _setMessage(errLogs[0].message);
+    } else if (warnLogs.length) {
       _setBadge('warn', '경고');
-      if (data.need_roster && !data.roster_path) {
-        _setMessage('학생명부를 찾지 못했습니다. 학년도 아이디 규칙을 직접 입력하거나 명부를 추가한 뒤 재스캔해 주세요.');
-      } else {
-        _setMessage(`경고 ${warnLogs.length}건 — ${warnLogs[0].message}`);
-      }
+      _setMessage(`경고 ${warnLogs.length}건 — ${warnLogs[0].message}`);
     } else {
       _setBadge('ok', '스캔 완료');
       _setMessage('스캔 완료 — 이상 없음');
     }
 
-    // 학년도 아이디 규칙 갱신
+    // 학년도 아이디 규칙 갱신 + 명부 버튼 상태
     _updateGradeMap(data);
+    if (typeof Panel !== 'undefined' && Panel.updateRosterMapBtn) Panel.updateRosterMapBtn(data.roster_path || null);
 
     // 스캔 표 갱신
     _applyScanTable(data.items || []);
+
+    // 파일별 issue_rows 있으면 경고 뱃지 업그레이드
+    const hasIssueRows = (data.items || []).some(item => (item.issue_rows || []).length > 0);
+    if (hasIssueRows && !errLogs.length && !warnLogs.length) {
+      _setBadge('warn', '경고');
+      _setMessage('일부 행에 형식 문제가 있습니다. 뷰어에서 노란 행을 확인해 주세요.');
+    }
 
     // 뷰어 자동 펼침 + 첫 행 미리보기 요청
     _openViewer();
@@ -118,6 +140,14 @@ const Scan = (() => {
     if (data.can_execute) {
       _el('btn-run').disabled = false;
       App.setFloatingNext(true, 'run');
+    } else {
+      _el('btn-run').disabled = true;
+      App.setFloatingNext(false, null);
+      const blockErr = (data.logs || []).find(l => l.level === 'error');
+      if (blockErr) toast(blockErr.message, 'err', 8000);
+      else if ((data.missing_fields || []).length) {
+        toast(`실행 불가 — 필요 항목: ${data.missing_fields.join(', ')}`, 'warn', 6000);
+      }
     }
 
     // 명부 기준일 불일치 처리
@@ -232,13 +262,14 @@ const Scan = (() => {
   // 미리보기 요청 (startPreview → bridge)
   // ──────────────────────────────────────────────
   async function _requestPreview(kind) {
-    if (state.isPreviewLoading) return;
-
-    const cached = _previewData[kind];
-    if (cached && cached.rows) {
-      // 이미 로드된 경우 바로 렌더
+    if (_previewData[kind]) {
       _currentKind = kind;
       _renderPreview(kind);
+      return;
+    }
+    if (state.isPreviewLoading) {
+      _currentKind = kind;
+      _el('preview-warn').textContent = `${kind} 미리보기 로딩 중...`;
       return;
     }
 
@@ -249,6 +280,7 @@ const Scan = (() => {
       return;
     }
 
+    _currentKind = kind;
     state.isPreviewLoading = true;
     _el('preview-warn').textContent = `${kind} 미리보기 로딩 중...`;
 
@@ -289,12 +321,18 @@ const Scan = (() => {
       data_start_row: data_start_row ?? null,
       issue_rows:     issue_rows     || [],
     };
-    _currentKind = kind;
-    _renderPreview(kind);
+    if (_currentKind && _currentKind !== kind && !_previewData[_currentKind]) {
+      // 다른 kind로 전환됐지만 캐시 없음 → 렌더 없이 대기
+      // (다음 클릭 시 재요청됨 — 재귀 호출 금지)
+      _el('preview-warn').textContent = `${_currentKind} 파일을 클릭해서 미리보기를 열어 주세요.`;
+    } else {
+      _currentKind = _currentKind || kind;
+      _renderPreview(_currentKind);
+    }
   }
 
   function onPreviewFailed(kind, error) {
-    _el('preview-warn').textContent = `미리보기 실패 (${kind}): ${error}`;
+    _el('preview-warn').textContent = `${kind} 파일을 미리볼 수 없습니다.`;
   }
 
   // ──────────────────────────────────────────────
@@ -331,18 +369,19 @@ const Scan = (() => {
     const issueOnly = _filterState.issue;
     const dupOnly   = _filterState.dup;
 
-    const columns   = data.columns || [];
-    const rows      = data.rows    || [];
-    const issueSet  = new Set(data.issue_rows || []);
+    const columns  = data.columns || [];
+    const rows     = data.rows    || [];
+    const issueSet = new Set(data.issue_rows || []);
 
-    // "No" 컬럼 인덱스 찾기 (정규화 후 "no"인 컬럼)
-    const noColIdx = columns.findIndex(h => h.replace(/\s/g,'').toLowerCase() === 'no');
+    // 컬럼 인덱스
+    const noColIdx  = columns.findIndex(h => h.replace(/\s/g,'').toLowerCase() === 'no');
+    const nameCol   = columns.findIndex(h => ['성명','이름','학생이름'].some(k => h.includes(k)));
+    const gradeCol  = columns.findIndex(h => h.includes('학년'));
+    const classCol  = columns.findIndex(h => ['반','학급'].some(k => h.includes(k)) && !h.includes('학년'));
 
-    // 동명이인 계산
-    const nameCol  = columns.findIndex(h => ['성명','이름','학생이름'].some(k => h.includes(k)));
-    const gradeCol = columns.findIndex(h => h.includes('학년'));
-    const dupSet   = new Set();
-    if (dupOnly && nameCol >= 0) {
+    // 동명이인 — 항상 계산
+    const dupSet = new Set();
+    if (nameCol >= 0) {
       const cnt = {};
       rows.forEach((r, i) => {
         const nm    = (r[nameCol] || '').replace(/[A-Z]+$/, '').trim();
@@ -353,38 +392,76 @@ const Scan = (() => {
       Object.values(cnt).forEach(idxs => { if (idxs.length >= 2) idxs.forEach(i => dupSet.add(i)); });
     }
 
+    // 의심 행 — 항상 계산
+    // · 이름: 숫자 포함 OR 한글+영어 혼용(괄호/특수문자 포함 케이스도 잡음)
+    // · 학년: 한글 포함 ("3학년" 등)
+    // · 반:   한글 포함 ("2반" 등)
+    const suspectSet = new Set();
+    rows.forEach((r, i) => {
+      if (nameCol >= 0) {
+        const nm = (r[nameCol] || '').trim();
+        const hasKo  = /[가-힣]/.test(nm);
+        const hasEn  = /[A-Za-z]/.test(nm);
+        const hasNum = /\d/.test(nm);
+        // 숫자 포함, 영한 혼용, 특수문자+한글, 특수문자+영어(순수 영어 이름 제외)
+        const hasSpc = /[^\w가-힣\s]/.test(nm);  // 괄호, 점 등 특수문자
+        if (nm && (hasNum || (hasKo && hasEn) || (hasSpc && (hasKo || hasEn)))) {
+          suspectSet.add(i);
+        }
+      }
+      if (gradeCol >= 0) {
+        const gv = (r[gradeCol] || '').trim();
+        if (gv && /[가-힣]/.test(gv)) suspectSet.add(i);
+      }
+      if (classCol >= 0) {
+        const cv = (r[classCol] || '').trim();
+        if (cv && /[가-힣]/.test(cv)) suspectSet.add(i);
+      }
+    });
+
     // 필터
     const filtered = rows.reduce((acc, row, i) => {
-      // No 컬럼만 채워지고 나머지 다 빈 행 제외
       if (noColIdx >= 0) {
         const otherCols = row.filter((_, ci) => ci !== noColIdx);
         if (otherCols.every(v => !String(v).trim())) return acc;
       }
-      const rowText = row.join(' ').toLowerCase();
+      const rowText   = row.join(' ').toLowerCase();
       if (keyword && !rowText.includes(keyword)) return acc;
-      const isBlank = row.every(v => !String(v).trim());
-      const isIssue = issueSet.has(i);
-      const isDup   = dupSet.has(i);
-      if (blankOnly && !isBlank) return acc;
-      if (issueOnly && !isIssue) return acc;
-      if (dupOnly   && !isDup)   return acc;
-      acc.push({ row, i, isIssue, isDup });
+      const isBlank   = row.every(v => !String(v).trim());
+      const isSuspect = suspectSet.has(i);
+      const isIssue   = issueSet.has(i) || isSuspect;
+      const isDup     = dupSet.has(i);
+      if (blankOnly && !isBlank)  return acc;
+      if (issueOnly && !isIssue)  return acc;
+      if (dupOnly   && !isDup)    return acc;
+      acc.push({ row, i, isIssue, isDup, isSuspect });
       return acc;
     }, []);
 
     // 렌더
-    const table = _el('preview-table');
-    const thead = table.querySelector('thead');
-    const tbody = table.querySelector('tbody');
+    const table    = _el('preview-table');
+    const thead    = table.querySelector('thead');
+    const tbody    = table.querySelector('tbody');
     const startRow = data.data_start_row ?? 1;
 
     thead.innerHTML = '<tr><th style="width:40px;color:#94A3B8;font-weight:600;text-align:center">#</th>' +
       columns.map(h => `<th>${_esc(h)}</th>`).join('') + '</tr>';
-    tbody.innerHTML = filtered.map(({ row, i, isIssue, isDup }) => {
-      const cls = isIssue ? 'row-hold' : isDup ? 'row-dup' : '';
+    tbody.innerHTML = filtered.map(({ row, i, isIssue, isDup, isSuspect }) => {
+      // 우선순위: Python issue(빨강) > 의심(노랑) > 동명이인(연노랑 전체 행)
       const excelRow = startRow + i;
-      return `<tr class="${cls}"><td style="color:#94A3B8;font-size:11px;text-align:center;user-select:none">${excelRow}</td>${row.map(v => `<td>${_esc(v)}</td>`).join('')}</tr>`;
+      const finalCls = (isIssue && !isSuspect) ? 'row-hold' : isSuspect ? 'row-warn' : isDup ? 'row-dup' : '';
+      const cells = row.map(v => `<td>${_esc(v)}</td>`).join('');
+      return `<tr class="${finalCls}"><td style="color:#94A3B8;font-size:11px;text-align:center;user-select:none">${excelRow}</td>${cells}</tr>`;
     }).join('');
+
+    // 의심 행 있으면 경고 메시지
+    if (suspectSet.size > 0 && !keyword && !blankOnly && !issueOnly && !dupOnly) {
+      const warn = _el('preview-warn');
+      if (warn && !warn.textContent) {
+        warn.textContent = `⚠ 의심 행 ${suspectSet.size}건 — 이름/학년/반 형식을 확인해 주세요.`;
+        warn.style.color = '#92400E';
+      }
+    }
   }
 
   // ──────────────────────────────────────────────
@@ -511,6 +588,18 @@ const Scan = (() => {
     _el('btn-scan').disabled = true;
     _setBadge('running', '재스캔 중');
 
+    // 이전 스캔 결과 초기화
+    _previewData = {};
+    _currentKind = null;
+    _lastScanData = null;
+    _el('btn-run').disabled = true;
+    App.setFloatingNext(false, null);
+    if (typeof Panel !== 'undefined' && Panel.updateRosterMapBtn) Panel.updateRosterMapBtn(null);
+    _hideSchoolKindWarn();
+    _el('preview-warn').textContent = '';
+    _el('preview-file-info').textContent = '';
+    _updateGradeMap({ need_roster: false });
+
     const params = {
       work_root:          state.work_root,
       school_name:        state.selected_school,
@@ -544,6 +633,7 @@ const Scan = (() => {
     _lastScanData  = null;
     _previewData   = {};
     _currentKind   = null;
+    if (typeof Panel !== 'undefined' && Panel.updateRosterMapBtn) Panel.updateRosterMapBtn(null);
     _filterState   = { blank: false, issue: false, dup: false };
 
     _setBadge('idle', '스캔 전');
@@ -591,7 +681,7 @@ const Scan = (() => {
       return;
     }
 
-    App.goStep(3);
+    App.goTab('run');
   }
 
   // 외부(run_tab)에서 마지막 스캔 데이터 참조용

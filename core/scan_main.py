@@ -486,14 +486,16 @@ def validate_input_sheet_structure(
     data_start_row: int,
     required_cols: Dict[str, int],
     allow_blank_class_for_kindergarten: bool = False,
-) -> List[str]:
+) -> Tuple[List[str], List[int]]:
     """
     입력 시트 구조 검증:
     - 데이터 영역 병합 셀 있으면 경고
     - 데이터 중간 완전 빈 행 있으면 경고
     - 필수 컬럼 중간 빈칸 있으면 경고
+    반환: (issues, issue_row_nums)
     """
     issues: List[str] = []
+    issue_row_nums: List[int] = []
 
     merged_ranges = _collect_merged_ranges_in_data_area(ws, data_start_row)
     if merged_ranges:
@@ -503,31 +505,50 @@ def validate_input_sheet_structure(
             + (" ..." if len(merged_ranges) > 10 else "")
         )
 
-    last_data_row = data_start_row - 1
-    for r in range(data_start_row, ws.max_row + 1):
-        row_has_any = False
-        for c in required_cols.values():
-            v = ws.cell(r, c).value
-            if v is not None and str(v).strip() != "":
-                row_has_any = True
-                break
-        if row_has_any:
+    # iter_rows로 한 번에 읽어 max_row 오염 및 랜덤접근 느림 방지
+    # 연속 빈 행 MAX_BLANK_STREAK개 이상이면 데이터 끝으로 간주하고 조기 종료
+    MAX_BLANK_STREAK = 10
+    max_col = max(required_cols.values()) if required_cols else 1
+
+    last_data_row  = data_start_row - 1
+    blank_streak   = 0
+    collected_rows: list = []  # [(row_num, {name: value})]
+
+    for i, row_tuple in enumerate(ws.iter_rows(min_row=data_start_row, max_col=max_col, values_only=True)):
+        r = data_start_row + i
+        row_vals = {
+            name: (row_tuple[c - 1] if c - 1 < len(row_tuple) else None)
+            for name, c in required_cols.items()
+        }
+        collected_rows.append((r, row_vals))
+
+        has_any = any(v is not None and str(v).strip() != "" for v in row_vals.values())
+        if has_any:
             last_data_row = r
+            blank_streak  = 0
+        else:
+            blank_streak += 1
+            if blank_streak >= MAX_BLANK_STREAK:
+                break
 
     if last_data_row < data_start_row:
         issues.append(f"[ERROR] {kind} 파일에서 데이터 행을 찾을 수 없습니다.")
-        return issues
+        return issues, []
 
-    for r in range(data_start_row, last_data_row + 1):
-        vals = [ws.cell(r, c).value for c in required_cols.values()]
+    for r, row_vals in collected_rows:
+        if r > last_data_row:
+            break
+        vals = list(row_vals.values())
         if all(v is None or str(v).strip() == "" for v in vals):
             issues.append(
                 f"[WARN] {kind} 파일 {r}행이 비어 있습니다. "
                 "중간 빈 행이 있으면 데이터가 잘릴 수 있습니다."
             )
+            issue_row_nums.append(r)
 
-    for r in range(data_start_row, last_data_row + 1):
-        row_values = {name: ws.cell(r, c).value for name, c in required_cols.items()}
+    for r, row_values in collected_rows:
+        if r > last_data_row:
+            break
 
         # 완전 빈 행은 중간 빈 행 WARN에서 이미 처리 — 개별 컬럼 체크 스킵
         if all(v is None or str(v).strip() == "" for v in row_values.values()):
@@ -551,10 +572,12 @@ def validate_input_sheet_structure(
                     continue
                 if v is None or str(v).strip() == "":
                     issues.append(f"[WARN] {kind} 파일 {r}행 '{key}' 값이 비어 있습니다.")
+                    issue_row_nums.append(r)
         else:
             for key, v in row_values.items():
                 if v is None or str(v).strip() == "":
                     issues.append(f"[WARN] {kind} 파일 {r}행 '{key}' 값이 비어 있습니다.")
+                    issue_row_nums.append(r)
 
         # 학년/반 열 형식 검증
         KINDERGARTEN = {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
@@ -576,6 +599,7 @@ def validate_input_sheet_structure(
                         warn_grade = f"학년 열에 숫자가 아닌 값이 있습니다: '{gs}'"
                 if warn_grade:
                     issues.append(f"[WARN] {kind} 파일 {r}행 '학년' 열 — {warn_grade}")
+                    issue_row_nums.append(r)
 
         class_v = row_values.get("class")
         if class_v is not None and str(class_v).strip():
@@ -588,8 +612,9 @@ def validate_input_sheet_structure(
                 warn_class = f"반 열 끝에 '반' 포함 — 등록 파일에 중복됩니다: '{cs}'"
             if warn_class:
                 issues.append(f"[WARN] {kind} 파일 {r}행 '반' 열 — {warn_class}")
+                issue_row_nums.append(r)
 
-    return issues
+    return issues, sorted(set(issue_row_nums))
 
 
 
@@ -635,10 +660,20 @@ def analyze_roster_once(roster_ws, input_year: int) -> Dict:
     prefixes_by_grade = defaultdict(list)
     name_counter_by_grade = defaultdict(Counter)
 
-    for r in range(2, roster_ws.max_row + 1):
-        clv = roster_ws.cell(r, c_class).value
-        nmv = roster_ws.cell(r, c_name).value
-        idv = roster_ws.cell(r, c_id).value
+    # iter_rows + 연속 빈 행 조기종료 (max_row 오염 대응)
+    MAX_BLANK = 20
+    blank_streak = 0
+    max_col_r = max(c_class, c_name, c_id)
+    for row_tuple in roster_ws.iter_rows(min_row=2, max_col=max_col_r, values_only=True):
+        clv = row_tuple[c_class - 1] if c_class - 1 < len(row_tuple) else None
+        nmv = row_tuple[c_name  - 1] if c_name  - 1 < len(row_tuple) else None
+        idv = row_tuple[c_id    - 1] if c_id    - 1 < len(row_tuple) else None
+        if clv is None and nmv is None:
+            blank_streak += 1
+            if blank_streak >= MAX_BLANK:
+                break
+            continue
+        blank_streak = 0
         if clv is None or nmv is None:
             continue
 
@@ -661,9 +696,9 @@ def analyze_roster_once(roster_ws, input_year: int) -> Dict:
         if arr:
             prefix_mode_by_grade[g] = Counter(arr).most_common(1)[0][0]
 
-    # 1학년은 올해 신입생이라 명부에 없음 → input_year로 자동 보정
-    if 1 not in prefix_mode_by_grade and input_year:
-        prefix_mode_by_grade[1] = input_year
+    # scan 단계에서는 명부에 실제로 존재하는 학년만 기록한다.
+    # 신입생 학년 보정은 run_main.build_freshmen_prefix_map()에서
+    # 명부 anchor 학년을 기준으로 역산한다.
 
     # roster_names_by_grade: {학년(int): [이름(str), ...]}
     roster_names_by_grade = {
@@ -716,10 +751,18 @@ def freshmen_extra_grades(
         KINDERGARTEN = {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
         extra = set()
 
-        for r in range(header_row + 1, ws.max_row + 1):
-            grade_v = ws.cell(r, grade_col).value
-            if grade_v is None:
+        # iter_rows + 연속 빈 행 조기종료 (max_row 오염 대응)
+        MAX_BLANK = 10
+        blank_streak = 0
+        for row_tuple in ws.iter_rows(min_row=header_row + 1, min_col=grade_col,
+                                      max_col=grade_col, values_only=True):
+            grade_v = row_tuple[0]
+            if grade_v is None or str(grade_v).strip() == "":
+                blank_streak += 1
+                if blank_streak >= MAX_BLANK:
+                    break
                 continue
+            blank_streak = 0
 
             grade_s = re.sub(r"\s+", "", str(grade_v).strip())
             if not grade_s or grade_s in KINDERGARTEN:
@@ -780,7 +823,9 @@ def scan_pipeline(
 
     def log(msg: str):
         from datetime import datetime as _dt
-        logs.append(f"[{_dt.now().strftime('%H:%M:%S')}] {msg}")
+        entry = f"[{_dt.now().strftime('%H:%M:%S')}] {msg}"
+        logs.append(entry)
+        print("[SCAN]", entry, flush=True)
 
     work_root = Path(work_root).resolve()
     dirs = get_project_dirs(work_root)
@@ -958,7 +1003,8 @@ def scan_pipeline(
                     if slot_cols.get(key) is not None
                 }
 
-                issues = validate_input_sheet_structure(
+                log(f"[DEBUG] {kind_label} 구조 검증 시작 (max_row={ws.max_row})")
+                issues, issue_rows = validate_input_sheet_structure(
                     ws=ws,
                     kind=kind_label,
                     header_row=layout["header_row"],
@@ -966,6 +1012,7 @@ def scan_pipeline(
                     required_cols=required_cols,
                     allow_blank_class_for_kindergarten=allow_blank_class_for_kindergarten,
                 )
+                log(f"[DEBUG] {kind_label} 구조 검증 완료")
 
                 for msg in issues:
                     log(msg)
@@ -973,16 +1020,19 @@ def scan_pipeline(
                 headers = _sheet_headers(ws, layout["header_row"])
                 log(f"[TIMER] {kind_label} 구조 분석: {_time.perf_counter() - _t_file:.2f}s")
 
+                data_start = layout["data_start_row"]
+                issue_row_idxs = [r - data_start for r in issue_rows if r >= data_start]
+
                 return {
                     "file_name": file_path.name,
                     "file_path": str(file_path),
                     "sheet_name": ws.title,
                     "header_row": layout["header_row"],
-                    "data_start_row": layout["data_start_row"],
+                    "data_start_row": data_start,
                     "warning": "\n".join(issues) if issues else "",
                     "headers": headers,
                     "rows": [],
-                    "issue_rows": [],
+                    "issue_rows": issue_row_idxs,
                 }
             finally:
                 wb.close()
@@ -1035,7 +1085,7 @@ def scan_pipeline(
                 kind_key="teacher",
                 kind_label="교사",
                 header_slots=TEACHER_HEADER_SLOTS,
-                required_keys=["position", "name"],
+                required_keys=["name"],  # position(직위)은 필수 아님
             )
         except Exception as e:
             import traceback
@@ -1211,10 +1261,17 @@ def scan_pipeline(
         # 명부 없음은 missing_fields에 넣지 않음 — 수동 입력으로 대체 가능
         # 단, 경고 메시지는 로그에 남김 (위에서 이미 처리)
 
+        # 명부가 필요한데 없고 수동 입력도 없으면 실행 불가
+        roster_ok = (not sr.need_roster) or (sr.roster_info is not None)
+        if not roster_ok:
+            missing_fields.append("학생명부")
+            log("[ERROR] 학생명부가 입력되지 않았습니다. "
+                "명부를 추가하거나 학년도 아이디 규칙을 직접 입력한 뒤 재스캔해 주세요.")
+
         sr.missing_fields = missing_fields
         sr.needs_open_date = bool(sr.withdraw_file)
 
-        sr.can_execute_after_input = True
+        sr.can_execute_after_input = roster_ok
         sr.can_execute = len(sr.missing_fields) == 0
 
         sr.ok = True

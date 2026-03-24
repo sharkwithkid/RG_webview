@@ -7,26 +7,24 @@
 <style>
 /* ── 토큰 ─────────────────────────────────────────────── */
 :root {
-  --bg:          #FFFFFF;
+  --bg:          #F2F2F7;
   --surface:     #FFFFFF;
-  --surface-2:   #F5F5F5;
-  --surface-hover: #F0F0F0;
-  --border:      #EBEBEB;
+  --surface-2:   #F8F8FA;
+  --border:      #E4E4E9;
   --border-focus:#2563EB;
-  --text:        #1A1A1A;
-  --text-2:      #444;
-  --muted:       #999;
-  --muted-2:     #BBB;
+  --text:        #1C1C1E;
+  --muted:       #8E8E93;
+  --muted-2:     #AEAEB2;
   --primary:     #2563EB;
   --primary-h:   #1D4ED8;
-  --radius:      8px;
-  --radius-sm:   6px;
-  --radius-xs:   4px;
+  --radius:      10px;
+  --radius-sm:   7px;
+  --radius-xs:   5px;
   --ok-bg:  #F0FDF4; --ok-bd:  #BBF7D0; --ok-tx:  #16A34A;
   --warn-bg:#FFFBEB; --warn-bd:#FDE68A; --warn-tx:#B45309;
   --err-bg: #FFF1F2; --err-bd: #FECDD3; --err-tx: #DC2626;
   --run-bg: #EFF6FF; --run-bd: #BFDBFE; --run-tx: #2563EB;
-  --sidebar-w: 210px;
+  --sidebar-w: 240px;
   --nav-w:      52px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -43,44 +41,42 @@ body {
 /* ── 공통 컴포넌트 ─────────────────────────────────────── */
 button {
   cursor: pointer; border: none; font-family: inherit;
-  font-size: 13px; font-weight: 500; border-radius: var(--radius-sm);
-  transition: background .1s, opacity .1s;
+  font-size: 13px; font-weight: 600; border-radius: var(--radius-sm);
+  transition: background .1s, opacity .1s, box-shadow .1s;
 }
 button:disabled { opacity: .35; cursor: default; }
 
 .btn-primary {
   background: var(--primary); color: #fff;
-  padding: 0 12px; height: 28px; font-size: 12px; font-weight: 600;
-  letter-spacing: -.01em;
+  padding: 0 14px; height: 32px;
+  box-shadow: 0 1px 2px rgba(37,99,235,.25);
 }
 .btn-primary:hover:not(:disabled) { background: var(--primary-h); }
 .btn-ghost {
-  background: var(--surface-2);
-  border: none;
-  color: var(--text-2); padding: 0 10px; height: 28px; font-size: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: #3C3C43; padding: 0 12px; height: 32px;
 }
-.btn-ghost:hover:not(:disabled) { background: var(--surface-hover); }
-.btn-ghost.active { background: var(--run-bg); color: var(--primary); }
+.btn-ghost:hover:not(:disabled) { background: var(--surface-2); }
+.btn-ghost.active { background: #EFF6FF; border-color: #BFDBFE; color: var(--primary); }
 
 input[type="text"], input[type="date"], textarea, select {
   font-family: inherit; font-size: 13px; color: var(--text);
   background: var(--surface-2); border: 1px solid var(--border);
   border-radius: var(--radius-sm); outline: none;
-  transition: border-color .12s, box-shadow .12s;
+  transition: border-color .12s, background .12s;
 }
 input[type="text"]:focus, input[type="date"]:focus,
 textarea:focus, select:focus {
-  border-color: var(--primary);
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+  border-color: var(--border-focus);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.1);
 }
 input::placeholder, textarea::placeholder { color: var(--muted-2); }
 input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px; cursor: pointer; }
 
 .card {
-  background: var(--surface);
-  border: none;
-  border-radius: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .muted { font-size: 12px; color: var(--muted); line-height: 1.5; }
@@ -89,14 +85,14 @@ input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px
 
 .status-badge {
   display: inline-flex; align-items: center; justify-content: center;
-  padding: 0 8px; height: 24px; border-radius: 99px;
-  font-size: 11px; font-weight: 500;
+  padding: 0 10px; height: 28px; border-radius: 99px;
+  font-size: 11px; font-weight: 600; letter-spacing: .01em;
 }
-.badge-idle { background: var(--surface-2); color: var(--muted); }
-.badge-running { background: var(--run-bg); color: var(--run-tx); }
-.badge-ok   { background: var(--ok-bg);   color: var(--ok-tx); }
-.badge-warn { background: var(--warn-bg); color: var(--warn-tx); }
-.badge-err  { background: var(--err-bg);  color: var(--err-tx); }
+.badge-idle { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+.badge-running { background: var(--run-bg); border: 1px solid var(--run-bd); color: var(--run-tx); }
+.badge-ok   { background: var(--ok-bg);   border: 1px solid var(--ok-bd);   color: var(--ok-tx); }
+.badge-warn { background: var(--warn-bg); border: 1px solid var(--warn-bd); color: var(--warn-tx); }
+.badge-err  { background: var(--err-bg);  border: 1px solid var(--err-bd);  color: var(--err-tx); }
 
 .sep { height: 1px; background: var(--border); margin: 8px 0; }
 
@@ -116,24 +112,23 @@ input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px
   flex: 1; overflow-y: auto; display: flex;
   align-items: center; justify-content: center;
   padding: 40px 24px 60px;
-  background: #fff;
+  background: var(--bg);
 }
-.setup-inner { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 28px; }
-.page-title   { font-size: 18px; font-weight: 600; color: var(--text); letter-spacing: -.02em; }
-.page-subtitle{ font-size: 13px; color: var(--muted); margin-top: 3px; }
+.setup-inner { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 24px; }
+.page-title   { font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+.page-subtitle{ font-size: 13px; color: var(--muted); margin-top: 4px; }
 .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .stat-card {
-  padding: 14px 16px; min-height: 72px;
+  padding: 14px 16px; min-height: 80px;
   display: flex; flex-direction: column; gap: 4px;
-  border: 1px solid var(--border); border-radius: var(--radius);
 }
 .stat-card .label { font-size: 11px; color: var(--muted); font-weight: 500; }
-.stat-card .value { font-size: 20px; font-weight: 600; color: var(--text); margin-top: auto; letter-spacing: -.03em; }
-.setup-form { padding: 0; display: flex; flex-direction: column; gap: 16px; }
+.stat-card .value { font-size: 18px; font-weight: 700; color: var(--text); margin-top: auto; letter-spacing: -.02em; }
+.setup-form { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 5px; }
-.field-label { font-size: 12px; color: var(--muted); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.field-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; display: flex; align-items: center; gap: 8px; }
 .input-row { display: flex; gap: 8px; }
-.input-row input[type="text"] { flex: 1; height: 34px; padding: 0 12px; }
+.input-row input[type="text"] { flex: 1; height: 36px; padding: 0 12px; }
 .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 input[type="date"] { display: none; }
 
@@ -141,27 +136,18 @@ input[type="date"] { display: none; }
 .date-picker-wrap { position: relative; }
 .date-picker-input {
   display: flex; align-items: center; justify-content: space-between;
-  height: 34px; padding: 0 10px 0 12px;
+  height: 36px; padding: 0 10px 0 12px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface-2); cursor: pointer; user-select: none;
   font-size: 13px; color: var(--text);
-  transition: border-color .12s;
+  transition: border-color .12s, background .12s;
 }
-
-.date-picker-input:hover { border-color: #aaa; background: #fff; }
-.date-picker-input.open { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+.date-picker-input:hover { border-color: #93C5FD; background: var(--surface); }
+.date-picker-input.open { border-color: var(--border-focus); background: var(--surface); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
 .date-picker-input .dp-placeholder { color: var(--muted-2); }
-.date-picker-input .dp-icon { flex-shrink: 0; margin-left: 6px; opacity: .35; }
-.date-picker-input:hover .dp-icon { opacity: .6; }
-
-.date-picker-sm .date-picker-input {
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.date-picker-sm .dp-icon {
-  display: block;
-}
+.date-picker-input .dp-icon { flex-shrink: 0; margin-left: 6px; opacity: .4; }
+.date-picker-input:hover .dp-icon { opacity: .7; }
+.date-picker-sm .date-picker-input { height: 30px; font-size: 12px; padding: 0 8px 0 10px; }
 
 .dp-popup {
   display: none; position: absolute; z-index: 9999;
@@ -208,7 +194,7 @@ input[type="date"] { display: none; }
 
 .setup-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .sub-btns { display: flex; gap: 8px; }
-.btn-start { height: 40px; padding: 0 32px; font-size: 13px; border-radius: var(--radius); }
+.btn-start { height: 44px; padding: 0 36px; font-size: 14px; border-radius: var(--radius); }
 
 .file-badge {
   font-size: 10px; font-weight: 600; padding: 2px 7px;
@@ -231,66 +217,68 @@ input[type="date"] { display: none; }
 
 /* ── 헤더 ─────────────────────────────────────────────── */
 .app-header {
-  background: #fff;
+  background: rgba(255,255,255,.85);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
   border-bottom: 1px solid var(--border);
-  padding: 0 20px; height: 48px;
+  padding: 0 20px; height: 52px;
   display: flex; align-items: center; gap: 14px; flex-shrink: 0;
 }
-.app-header .app-name { font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: -.02em; }
+.app-header .app-name { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
 .app-header .work-date { font-size: 11px; color: var(--muted); margin-top: 1px; }
-.mode-btns { display: flex; gap: 1px; margin-left: auto; background: var(--surface-2); border-radius: 7px; padding: 3px; }
+.mode-btns { display: flex; gap: 2px; margin-left: auto; background: var(--bg); border-radius: 8px; padding: 3px; }
 .btn-mode {
-  height: 26px; padding: 0 12px; background: transparent;
-  border-radius: 5px; color: var(--muted); font-weight: 500; font-size: 12px;
+  height: 28px; padding: 0 14px; background: transparent;
+  border-radius: 6px; color: var(--muted); font-weight: 600; font-size: 12px;
   transition: background .1s, color .1s;
 }
-.btn-mode.active { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.btn-mode.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
 
 /* ── 본문 레이아웃 ─────────────────────────────────────── */
 .main-body {
   flex: 1; overflow: hidden; display: flex;
 }
 
-/* ── 스텝 네비게이션 (세로) ─────────────────────────── */
+/* ── 왼쪽 네비게이션 바 (스텝) ─────────────────────────── */
 .step-bar {
-  width: 160px; flex-shrink: 0;
-  background: #fff; border-right: 1px solid var(--border);
+  width: 200px; flex-shrink: 0;
+  background: var(--surface-2); border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
-  padding: 16px 8px; gap: 1px; overflow-y: auto;
+  padding: 14px 10px; gap: 2px; overflow-y: auto;
 }
 .step-bar-label {
-  font-size: 10px; font-weight: 600; color: var(--muted-2);
-  text-transform: uppercase; letter-spacing: .08em;
-  padding: 0 10px; margin-bottom: 8px;
+  font-size: 10px; font-weight: 700; color: var(--muted-2);
+  text-transform: uppercase; letter-spacing: .06em;
+  padding: 0 8px; margin-bottom: 6px; margin-top: 4px;
 }
+.step-bar-label:first-child { margin-top: 0; }
 .step-sep { display: none; }
 .step-item {
-  display: flex; align-items: center; gap: 9px;
-  padding: 0 10px; height: 34px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 10px; height: 36px; border-radius: var(--radius-sm);
   cursor: pointer; transition: background .1s;
+  text-decoration: none;
 }
-.step-item:hover { background: var(--surface-2); }
-.step-item.active { background: var(--surface-2); }
+.step-item:hover { background: var(--border); }
+.step-item.active { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .step-badge {
-  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700;
-  background: transparent; color: var(--muted-2);
-  border: 1.5px solid var(--border);
+  font-size: 11px; font-weight: 700;
+  background: #DCDCE0; color: var(--muted);
 }
-.step-badge.done    { background: var(--ok-bg); color: var(--ok-tx); border-color: var(--ok-bg); }
-.step-badge.active  { background: var(--primary); color: #fff; border-color: var(--primary); }
-.step-badge.warn    { background: var(--warn-bg); color: var(--warn-tx); border-color: var(--warn-bg); }
-.step-label { font-size: 13px; font-weight: 400; color: var(--muted); }
-.step-item.active .step-label { color: var(--text); font-weight: 500; }
-.step-item:has(.step-badge.done) .step-label { color: var(--text); font-weight: 500; }
+.step-badge.done    { background: var(--ok-bg);   color: var(--ok-tx); }
+.step-badge.active  { background: var(--primary);  color: #fff; }
+.step-badge.warn    { background: var(--warn-bg);  color: var(--warn-tx); }
+.step-label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.step-item.active .step-label { color: var(--text); font-weight: 600; }
 
 /* ── 사이드바 (학교 정보) ───────────────────────────────── */
 .sidebar {
   width: var(--sidebar-w); flex-shrink: 0;
   overflow-y: auto; overflow-x: hidden;
   border-right: 1px solid var(--border);
-  background: #fff;
+  background: var(--surface);
   display: flex; flex-direction: column;
   padding: 0;
 }
@@ -298,191 +286,82 @@ input[type="date"] { display: none; }
 
 /* 사이드바 섹션 */
 .sb-section {
-  padding: 14px 16px;
+  padding: 14px 14px 12px;
   border-bottom: 1px solid var(--border);
-  display: flex; flex-direction: column; gap: 8px;
 }
 .sb-section:last-child { border-bottom: none; }
 .sb-label {
-  font-size: 10px; font-weight: 600; color: var(--muted-2);
-  text-transform: uppercase; letter-spacing: .08em;
+  font-size: 10px; font-weight: 700; color: var(--muted-2);
+  text-transform: uppercase; letter-spacing: .06em;
+  margin-bottom: 10px;
 }
 
 /* 사이드바 내 기존 UI 조정 */
 .school-search-wrap { position: relative; }
-
-.school-input-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  width: 100%;
-}
-
-.school-input-row input {
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: 0;
-}
-
-.school-input-row input {
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  padding: 0 9px;
-  font-size: 12px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  outline: none;
-  transition: border-color .12s, box-shadow .12s, background .12s;
-}
-
-.school-input-row input:focus {
-  background: #fff;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37,99,235,.08);
-}
-
-.school-input-row button {
-  flex: 0 0 52px;
-  width: 52px;
-  white-space: nowrap;
-  height: 28px;
-  padding: 0;
-  font-size: 12px;
-}
+.school-input-row { display: flex; gap: 6px; align-items: center; }
+.school-input-row input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; }
+.school-input-row button { flex-shrink: 0; white-space: nowrap; height: 32px; padding: 0 10px; }
 
 .school-dropdown {
   position: absolute; top: 100%; left: 0; z-index: 100;
-  background: #fff; border: 1px solid var(--border);
-  border-radius: var(--radius-sm); box-shadow: 0 4px 16px rgba(0,0,0,.08);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: 0 4px 16px rgba(0,0,0,.1);
   max-height: 180px; overflow-y: auto; display: none;
-  /* 인풋 박스 너비만큼 — 적용 버튼 제외 */
-  right: 46px;
+  right: 56px;
 }
-.school-dropdown::-webkit-scrollbar { width: 3px; }
-.school-dropdown::-webkit-scrollbar-track { background: transparent; }
-.school-dropdown::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 99px; }
 .school-dropdown.open { display: block; }
 .school-item {
   padding: 7px 12px; font-size: 12px; cursor: pointer;
   border-bottom: 1px solid var(--border);
 }
 .school-item:last-child { border-bottom: none; }
-.school-item:hover, .school-item.hl { background: var(--surface-2); }
+.school-item:hover, .school-item.hl { background: var(--run-bg); }
 
-.current-school-name { font-size: 14px; font-weight: 600; color: var(--text); word-break: keep-all; line-height: 1.3; }
+.current-school-name { font-size: 14px; font-weight: 700; color: var(--text); word-break: keep-all; line-height: 1.3; }
+.date-chk-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.date-chk-row:last-of-type { margin-bottom: 0; }
+.date-chk-row label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #3C3C43; cursor: pointer; white-space: nowrap; flex-shrink: 0; width: 72px; }
+.date-chk-row input[type="date"] { flex: 1; height: 30px; padding: 0 8px; font-size: 12px; }
+.btn-full { width: 100%; height: 32px; text-align: center; font-size: 12px; }
 
-.date-chk-row {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  align-items: center;
-  gap: 6px;
-}
-
-.date-chk-row label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: var(--text-2);
-  cursor: pointer;
-  white-space: nowrap;
-  width: 48px;
-}
-
-.date-chk-row .date-picker-wrap {
-  width: 100%;
-}
-
-.date-chk-row .date-picker-input {
-  width: 100%;
-}
-
-.date-picker-input .dp-text {
-  text-align: left;
-  flex: 1;
-}
-
-.btn-full { height: 28px; font-size: 12px; align-self: flex-start; }
-
-#school-input.focus-highlight {
-  background: #fff !important;
-  border-color: var(--primary) !important;
-  box-shadow: 0 0 0 3px rgba(37,99,235,.10);
-}
-
-/* 4. 학년도 박스 — 회색 배경 완전 제거 */
 .grade-map-body {
-  display: flex; flex-direction: column; gap: 3px;
-  padding: 0; background: none; border-radius: 0;
+  display: none; flex-direction: column; gap: 6px;
+  padding: 8px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  margin-top: 6px;
 }
-#grade-map-body { display: flex !important; }
-
-/* 학년도 숫자 인풋 — 안정화 버전 */
-.grade-row-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-width: 0;
-  padding: 3px 0;
-  border-bottom: 1px solid var(--border);
-}
-.grade-row-item:last-of-type { border-bottom: none; }
-
-.grade-row-item label {
-  font-size: 12px;
-  color: var(--muted);
-  flex-shrink: 0;
-}
-
+.grade-map-body.open { display: flex; }
+.grade-row-item { display: flex; align-items: center; justify-content: space-between; min-width: 0; }
+.grade-row-item label { font-size: 12px; color: var(--muted); flex-shrink: 0; }
 .grade-row-item input[type="number"] {
-  width: 60px;
-  min-width: 60px;
-  height: 22px;
-  padding: 0 2px;
-  border: none;
-  border-radius: 3px;
-  font-size: 12px;
-  font-weight: 400;
-  font-family: inherit;
-  background: transparent;
-  color: var(--text);
-  text-align: center;
-
-  /* 핵심 */
-  appearance: textfield;
-  -moz-appearance: textfield;
+  width: 68px; min-width: 0; height: 26px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 5px;
+  font-size: 12px; font-weight: 600; font-family: inherit;
 }
-
-/* 스피너 제거 (크롬/웹뷰) */
-.grade-row-item input[type="number"]::-webkit-outer-spin-button,
-.grade-row-item input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
 .btn-new-school {
-  width: 100%; height: 32px; padding: 0;
-  background: var(--surface-2); border: none;
-  border-radius: var(--radius-sm); color: var(--text-2);
-  cursor: pointer; font-size: 12px; font-weight: 500;
-  font-family: inherit; text-align: center;
+  width: 100%; height: 32px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: #3C3C43;
+  cursor: pointer; font-size: 12px; font-weight: 600;
 }
-.btn-new-school:hover { background: var(--surface-hover); }
-
-/* 학년도 버튼은 숨김 처리 */
-#btn-grade-toggle { display: none !important; }
+.btn-new-school:hover { background: var(--border); }
 
 .roster-btns { display: flex; gap: 6px; }
-.roster-btns button { flex: 1; height: 28px; font-size: 12px; padding: 0; text-align: center; }
+.roster-btns button { flex: 1; height: 30px; text-align: center; font-size: 12px; }
 
-/* ── 스크롤바 전체 ───────────────────────────────────── */
-* { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,.15) transparent; }
-*::-webkit-scrollbar { width: 3px; height: 3px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 99px; }
-*::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.25); }
+/* ── 스크롤바 ─────────────────────────────────────────── */
+.sidebar::-webkit-scrollbar,
+.step-bar::-webkit-scrollbar,
+.content-area::-webkit-scrollbar,
+.notice-list-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
+.sidebar::-webkit-scrollbar-track,
+.step-bar::-webkit-scrollbar-track,
+.content-area::-webkit-scrollbar-track,
+.notice-list-wrap::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb,
+.step-bar::-webkit-scrollbar-thumb,
+.content-area::-webkit-scrollbar-thumb,
+.notice-list-wrap::-webkit-scrollbar-thumb { background: #C7C7CC; border-radius: 99px; }
 
 /* cursor:pointer 전역 */
 button:not(:disabled), a, [data-action]:not(:disabled),
@@ -508,66 +387,55 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 /* ── 콘텐츠 영역 ─────────────────────────────────────── */
 .content-area {
   flex: 1; overflow-y: auto;
-  padding: 0; display: flex; flex-direction: column; gap: 0;
-  background: #fff;
+  padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--bg);
 }
 
 /* ── 탭 패널 ─────────────────────────────────────────── */
-.tab-panel { display: none; flex-direction: column; gap: 0; }
+.tab-panel { display: none; flex-direction: column; gap: 12px; }
 .tab-panel.active { display: flex; }
-
-/* 탭 안에서 카드 구분은 border-bottom으로 */
-.tab-panel > .card {
-  border-bottom: 1px solid var(--border);
-  padding: 18px 20px;
-  border-radius: 0;
-}
-
-/* 뷰어 카드는 패딩 없이 내부에서 처리 */
-.tab-panel > .card:has(.viewer-header) {
-  padding: 0;
-}
 
 /* ── 스캔탭 ──────────────────────────────────────────── */
 .scan-head { display: flex; align-items: flex-start; gap: 12px; }
 .scan-head-left { flex: 1; }
-.scan-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.scan-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .scan-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .scan-table th, .scan-table td {
-  border-bottom: 1px solid var(--border); padding: 7px 12px; text-align: left;
+  border: 1px solid var(--border); padding: 6px 10px; text-align: left;
 }
-.scan-table th { background: var(--surface-2); font-weight: 600; color: var(--text-2); border-top: 1px solid var(--border); }
+.scan-table th { background: var(--surface-2); font-weight: 600; color: #3C3C43; }
 .scan-table td.kind { color: var(--text); font-weight: 600; }
 .scan-table td.file-link { color: var(--primary); cursor: pointer; text-decoration: underline; }
 .scan-table td.file-link:hover { color: var(--primary-h); }
 #scan-tbody tr.viewer-active td {
   background: var(--run-bg);
+  border-top: 1.5px solid #BFDBFE;
+  border-bottom: 1.5px solid #BFDBFE;
 }
-#scan-tbody tr.viewer-active td:first-child { border-left: 2px solid var(--primary); }
+#scan-tbody tr.viewer-active td:first-child { border-left: 2.5px solid var(--primary); }
 .spin-cell { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .spin-btn {
-  width: 18px; height: 18px; background: var(--surface-2);
+  width: 20px; height: 20px; background: var(--surface-2);
   border: 1px solid var(--border); border-radius: 4px;
-  font-size: 11px; font-weight: 700; color: var(--text-2);
+  font-size: 12px; font-weight: 700; color: #3C3C43;
   display: flex; align-items: center; justify-content: center; padding: 0;
 }
-.spin-val { font-size: 12px; font-weight: 600; color: var(--muted); width: 22px; text-align: center; }
+.spin-val { font-size: 12px; font-weight: 700; color: var(--muted-2); width: 22px; text-align: center; }
 .school-kind-warn {
-  padding: 8px 12px; background: var(--warn-bg);
-  border-left: 3px solid var(--warn-tx);
-  font-size: 12px; font-weight: 500; color: var(--warn-tx);
+  padding: 8px 12px; background: var(--warn-bg); border: 1px solid var(--warn-bd);
+  border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; color: var(--warn-tx);
   display: none;
 }
 
 /* ── 뷰어 ────────────────────────────────────────────── */
-.viewer-header { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
-.viewer-body { padding: 12px 20px 16px; display: flex; flex-direction: column; gap: 8px; }
+.viewer-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+.viewer-body { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 8px; }
 .filter-row { display: flex; gap: 8px; align-items: center; }
-.filter-row input { flex: 1; height: 30px; padding: 0 10px; }
+.filter-row input { flex: 1; height: 32px; padding: 0 10px; }
 .preview-table-wrap { overflow: auto; max-height: 600px; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
-.data-table th, .data-table td { border-bottom: 1px solid var(--border); padding: 6px 12px; text-align: left; }
-.data-table th { background: var(--surface-2); font-weight: 600; color: var(--text-2); position: sticky; top: 0; z-index: 2; }
+.data-table th, .data-table td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
+.data-table th { background: var(--surface-2); font-weight: 600; color: #3C3C43; position: sticky; top: 0; z-index: 2; box-shadow: 0 1px 0 var(--border); }
 .data-table tr.row-hold td { background: #FFF1F2; }
 .data-table tr.row-warn td { background: #FFFBEB; }
 .data-table tr.row-skip td { background: var(--surface-2); }
@@ -576,89 +444,67 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 /* ── 실행탭 ──────────────────────────────────────────── */
 .run-summary-grid { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 6px 16px; font-size: 12px; }
 .run-summary-grid .lbl { color: var(--muted); }
-.run-summary-grid .val { font-weight: 600; color: var(--text); }
+.run-summary-grid .val { font-weight: 700; color: var(--text); }
 .output-file-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 0;
   border-bottom: 1px solid var(--border); font-size: 12px;
 }
 .output-file-item:last-child { border-bottom: none; }
-.output-file-name { flex: 1; color: var(--primary); cursor: pointer; }
-.output-file-name:hover { text-decoration: underline; }
-.sheet-tabs { display: flex; gap: 1px; flex-wrap: wrap; margin-bottom: 10px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 3px; width: fit-content; }
+.output-file-name { flex: 1; color: var(--primary); cursor: pointer; text-decoration: underline; }
+.output-file-name:hover { color: var(--primary-h); }
+.sheet-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
 .sheet-tab {
-  padding: 4px 12px; border-radius: 5px; font-size: 12px;
-  font-weight: 400; cursor: pointer; background: transparent; color: var(--muted);
-  border: none; font-family: inherit; transition: background .1s, color .1s;
+  padding: 4px 12px; border-radius: var(--radius-sm); font-size: 12px;
+  font-weight: 500; cursor: pointer; background: var(--surface-2); color: var(--muted);
+  border: 1px solid transparent; font-family: inherit;
 }
-.sheet-tab.active { background: #fff; color: var(--text); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.sheet-tab.active { background: var(--surface); color: var(--text); border-color: var(--border); font-weight: 600; }
 
 /* ── 안내문탭 ─────────────────────────────────────────── */
-.notice-body { display: flex; gap: 0; flex: 1; min-height: 0; }
-.notice-list-wrap { width: 160px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); }
-.notice-list-item { padding: 9px 14px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); color: var(--text-2); }
+.notice-body { display: flex; gap: 10px; flex: 1; min-height: 0; }
+.notice-list-wrap { width: 180px; flex-shrink: 0; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.notice-list-item { padding: 9px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
 .notice-list-item:last-child { border-bottom: none; }
-.notice-list-item:hover { background: var(--surface-2); }
-.notice-list-item.active { background: var(--surface-2); color: var(--text); font-weight: 500; }
-.notice-right { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; padding: 14px; }
-.notice-text { flex: 1; resize: none; padding: 10px 12px; font-size: 13px; min-height: 320px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.notice-list-item:hover, .notice-list-item.active { background: var(--run-bg); color: var(--primary); font-weight: 600; }
+.notice-right { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.notice-text { flex: 1; resize: none; padding: 10px 12px; font-size: 13px; min-height: 320px; }
 
 /* ── diff 모드 ─────────────────────────────────────────── */
 .diff-year-row { display: flex; align-items: center; gap: 10px; }
 .diff-year-row input[type="number"] {
-  width: 100px; height: 30px; padding: 0 10px;
+  width: 100px; height: 34px; padding: 0 10px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   font-size: 13px; font-family: inherit;
 }
 
 /* ── 커스텀 확인 모달 ──────────────────────────────────── */
 .confirm-modal-backdrop {
-  position: fixed;
-  top: 0; bottom: 0;
-  left: calc(var(--sidebar-w) + 200px);
-  right: 0;
-  z-index: 5000;
-  background: rgba(255,255,255,.55);
-  backdrop-filter: none;
-  display: flex; align-items: center; justify-content: center;
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0,0,0,.3); display: flex;
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
 }
 .confirm-modal {
-  background: #fff; border-radius: 12px;
-  border: 1px solid var(--border);
-  box-shadow: 0 8px 40px rgba(0,0,0,.14), 0 2px 8px rgba(0,0,0,.06);
-  padding: 24px; width: 360px; max-width: 90%;
-  display: flex; flex-direction: column; gap: 14px;
+  background: var(--surface); border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.18);
+  padding: 24px; width: 400px; max-width: 92vw;
+  display: flex; flex-direction: column; gap: 16px;
 }
-.confirm-modal-title { font-size: 14px; font-weight: 600; color: var(--text); }
-.confirm-modal-body  { font-size: 13px; color: var(--text-2); line-height: 1.6; }
-.confirm-modal-options { display: flex; flex-direction: column; gap: 6px; }
+.confirm-modal-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.confirm-modal-body  { font-size: 13px; color: #3C3C43; line-height: 1.6; }
+.confirm-modal-options { display: flex; flex-direction: column; gap: 8px; }
 .confirm-modal-option {
   display: flex; align-items: flex-start; gap: 10px;
   padding: 10px 12px; border-radius: var(--radius-sm);
-  background: var(--surface-2); cursor: pointer;
-  transition: background .1s;
-  border: 1.5px solid transparent;
+  border: 1px solid var(--border); cursor: pointer;
+  transition: border-color .1s, background .1s;
 }
-.confirm-modal-option:hover { background: var(--surface-hover); }
+.confirm-modal-option:hover { background: var(--surface-2); border-color: #BFDBFE; }
 .confirm-modal-option input[type="radio"] { margin-top: 1px; accent-color: var(--primary); flex-shrink: 0; }
 .confirm-modal-option.selected { background: var(--run-bg); border-color: var(--primary); }
-.confirm-modal-option-label { font-size: 13px; font-weight: 500; color: var(--text); }
+.confirm-modal-option-label { font-size: 13px; font-weight: 600; color: var(--text); }
 .confirm-modal-option-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.confirm-modal-footer { display: flex; justify-content: flex-end; gap: 6px; }
-
-
-#page-main .date-picker-sm .date-picker-input {
-  height: 30px;
-  padding: 0 10px 0 12px;
-  font-size: 12px;
-}
-
-#page-main .date-picker-sm .dp-icon {
-  width: 14px;
-  height: 14px;
-  margin-left: 6px;
-}
-
-
+.confirm-modal-footer { display: flex; justify-content: flex-end; gap: 8px; }
 </style>
 </head>
 <body>
@@ -700,7 +546,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
     <div class="field">
       <label class="field-label">작업자</label>
-      <input type="text" id="worker" placeholder="작업자 이름" style="height:34px;padding:0 12px;">
+      <input type="text" id="worker" placeholder="작업자 이름" style="height:38px;padding:0 12px;">
     </div>
 
     <div class="date-row">
@@ -830,25 +676,27 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           </div>
         </div>
 
-        <!-- 섹션: 학년도 아이디 규칙 + 학생명부 -->
+        <!-- 섹션: 학년도 설정 -->
         <div class="sb-section">
-          <div class="sb-label">학년도 아이디 규칙</div>
-          <div class="grade-map-body open" id="grade-map-body">
+          <button class="btn-ghost btn-full" id="btn-grade-toggle" data-action="toggle-grade" style="text-align:left;justify-content:flex-start;gap:6px">
+            <span style="flex:1">학년도 아이디 규칙</span> <span>▾</span>
+          </button>
+          <div class="grade-map-body" id="grade-map-body">
             <span class="muted" style="font-size:11px">스캔 후 자동 감지 · 직접 수정 가능</span>
             <div id="grade-rows"></div>
-            <button class="btn-primary" style="width:100%;height:28px;font-size:12px;margin-top:4px" data-action="apply-grade">적용</button>
-            <button class="btn-ghost" id="btn-open-roster-map" disabled
-                    style="width:100%;height:28px;font-size:12px;margin-top:2px" data-action="open-roster-map">
+            <button class="btn-primary" style="height:28px;font-size:12px" data-action="apply-grade">적용</button>
+            <div class="sep" style="margin:4px 0"></div>
+            <button class="btn-ghost btn-full" id="btn-open-roster-map" disabled
+                    style="height:28px;font-size:12px" data-action="open-roster-map">
               학생명부 열기
             </button>
             <span class="muted" id="roster-map-hint" style="font-size:11px;display:none">학생명부 파일이 없습니다.</span>
           </div>
-          <button id="btn-grade-toggle" data-action="toggle-grade" style="display:none"></button>
         </div>
 
-        <!-- 섹션: 메일 기록 -->
+        <!-- 섹션: 날짜 기록 -->
         <div class="sb-section">
-          <div class="sb-label">메일 기록</div>
+          <div class="sb-label">날짜 기록</div>
           <div class="date-chk-row">
             <label><input type="checkbox" id="chk-arrived"> 도착일</label>
             <div class="date-picker-wrap date-picker-sm" style="flex:1">
@@ -891,11 +739,11 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           </div>
         </div>
 
-        <!-- 섹션: 전체 명단 (DB) -->
+        <!-- 섹션: 명단 -->
         <div class="sb-section">
-          <div class="sb-label">전체 명단 (DB)</div>
+          <div class="sb-label">명단 파일</div>
           <div class="roster-btns">
-            <button class="btn-ghost" id="btn-record-roster" disabled data-action="record-roster">명단 반영</button>
+            <button class="btn-ghost" id="btn-record-roster" disabled data-action="record-roster">전체 명단 반영</button>
             <button class="btn-ghost" id="btn-open-roster"   disabled data-action="open-roster">파일 열기</button>
           </div>
         </div>
@@ -913,7 +761,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
       <!-- 스캔 탭 -->
       <div class="tab-panel active" id="tab-scan">
-        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
           <div class="scan-head">
             <div class="scan-head-left">
               <div class="card-title">스캔 검수</div>
@@ -972,7 +820,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="school-kind-warn" id="school-kind-warn">⚠ 학교 구분을 자동으로 판별하지 못했습니다. 직접 선택한 뒤 실행해 주세요.</div>
           <div id="school-kind-row" style="display:none;align-items:center;gap:8px;margin-top:6px">
             <span class="muted">학교 구분</span>
-            <select id="school-kind-select" style="height:28px;padding:0 8px;width:130px">
+            <select id="school-kind-select" style="height:32px;padding:0 8px;width:130px">
               <option>초등부</option><option>중등부</option><option>고등부</option><option>기타(빈칸)</option>
             </select>
           </div>
@@ -992,9 +840,9 @@ button:not(:disabled), a, [data-action]:not(:disabled),
             <div class="viewer-body">
               <div class="filter-row">
                 <input type="text" id="preview-search" placeholder="이름, 반, 학년 등 검색">
-                <button class="btn-ghost active" id="btn-blank-only" data-filter="blank" style="height:28px;font-size:12px">빈 행/결측만</button>
-                <button class="btn-ghost"        id="btn-issue-only" data-filter="issue" style="height:28px;font-size:12px">의심 행만</button>
-                <button class="btn-ghost"        id="btn-dup-only"   data-filter="dup"   style="height:28px;font-size:12px">동명이인만</button>
+                <button class="btn-ghost active" id="btn-blank-only" data-filter="blank" style="height:32px;font-size:12px">빈 행/결측만</button>
+                <button class="btn-ghost"        id="btn-issue-only" data-filter="issue" style="height:32px;font-size:12px">의심 행만</button>
+                <button class="btn-ghost"        id="btn-dup-only"   data-filter="dup"   style="height:32px;font-size:12px">동명이인만</button>
               </div>
               <div class="muted" id="preview-warn">검수할 파일을 위 표에서 선택하세요.</div>
               <div class="preview-table-wrap">
@@ -1007,7 +855,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
       <!-- 실행·결과 탭 -->
       <div class="tab-panel" id="tab-run">
-        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
           <div class="scan-head">
             <div class="scan-head-left">
               <div class="card-title">실행 / 결과</div>
@@ -1021,11 +869,11 @@ button:not(:disabled), a, [data-action]:not(:disabled),
             </div>
           </div>
           <textarea id="result-note" placeholder="이번 작업 관련 비고를 적어 주세요." style="height:68px;padding:8px 12px;resize:none"></textarea>
-          <div id="run-hold-warn" style="display:none;padding:10px 14px;background:#FFFBEB;border-left:3px solid #B45309;font-size:12px;font-weight:600;color:#92400E"></div>
+          <div id="run-hold-warn" style="display:none;padding:10px 14px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius-sm);font-size:12px;font-weight:600;color:#92400E"></div>
         </div>
 
-        <div class="card" style="">
-          <div class="card-title" style="margin-bottom:8px">상태 요약</div>
+        <div class="card" style="padding:14px">
+          <div class="card-title" style="margin-bottom:10px">상태 요약</div>
           <div class="run-summary-grid">
             <span class="lbl">학교</span>       <span class="val" id="sum-school">-</span>
             <span class="lbl">학년도</span>     <span class="val" id="sum-year">-</span>
@@ -1038,22 +886,22 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           </div>
         </div>
 
-        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
           <div style="display:flex;align-items:center;gap:8px">
             <span class="card-title" style="flex:1">출력 파일</span>
-            <button class="btn-ghost" style="height:28px;font-size:12px" data-action="open-folder">폴더 열기</button>
+            <button class="btn-ghost" style="height:30px;font-size:12px" data-action="open-folder">폴더 열기</button>
           </div>
           <div id="output-file-list"><span class="muted">실행 전</span></div>
         </div>
 
-        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
           <div>
             <div class="card-title">파일 뷰어</div>
             <div class="muted" id="run-preview-info" style="margin-top:2px;font-size:11px">시트: - | 행 수: -</div>
           </div>
           <div style="display:flex;gap:8px">
-            <input type="text" id="run-search" placeholder="현재 시트에서 검색" style="flex:1;height:30px;padding:0 10px">
-            <button class="btn-ghost" id="btn-run-dup" data-action="run-dup" style="height:28px;font-size:12px">동명이인만</button>
+            <input type="text" id="run-search" placeholder="현재 시트에서 검색" style="flex:1;height:34px;padding:0 10px">
+            <button class="btn-ghost" id="btn-run-dup" data-action="run-dup" style="height:34px;font-size:12px">동명이인만</button>
           </div>
           <div class="sheet-tabs" id="sheet-tabs"></div>
           <div class="preview-table-wrap">
@@ -1064,7 +912,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
       <!-- 안내문 탭 -->
       <div class="tab-panel" id="tab-notice">
-        <div class="card" style="flex:1;display:flex;flex-direction:column;gap:12px">
+        <div class="card" style="padding:16px;flex:1;display:flex;flex-direction:column;gap:12px">
           <div>
             <div class="card-title">안내문</div>
             <div class="muted" style="margin-top:4px">학교명·학년도·개학일·홈페이지 주소가 자동으로 반영되는 안내문 초안입니다.</div>
@@ -1084,7 +932,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
       <!-- diff 탭 -->
       <div class="tab-panel" id="tab-diff">
-        <div class="card" style="display:flex;flex-direction:column;gap:14px">
+        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:14px">
           <div>
             <div class="card-title">재학생 명단 비교</div>
             <div class="muted" style="margin-top:4px">기준 명부와 학교 재학생 명단을 비교해 차이 항목을 정리합니다.</div>
@@ -1099,8 +947,8 @@ button:not(:disabled), a, [data-action]:not(:disabled),
             <div class="status-badge badge-idle" id="diff-status-badge">실행 전</div>
           </div>
         </div>
-        <div class="card" style="">
-          <div class="card-title" style="margin-bottom:8px">비교 결과</div>
+        <div class="card" style="padding:16px">
+          <div class="card-title" style="margin-bottom:10px">비교 결과</div>
           <div class="muted" id="diff-result-info">실행 후 결과가 표시됩니다.</div>
           <div id="diff-output-files" style="margin-top:10px"></div>
         </div>
@@ -1117,32 +965,31 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 <!-- ══ 열 매핑 다이얼로그 ═══════════════════════════════════ -->
 <div id="col-map-dialog" style="
   display:none;position:fixed;inset:0;z-index:9999;
-  background:rgba(0,0,0,.2);align-items:center;justify-content:center;
-  backdrop-filter:blur(6px);
+  background:rgba(0,0,0,.4);align-items:center;justify-content:center;
 ">
   <div style="
-    width:860px;max-width:96vw;max-height:88vh;
-    border-radius:12px;overflow:hidden;
-    box-shadow:0 24px 64px rgba(0,0,0,.15), 0 4px 16px rgba(0,0,0,.08);
+    width:900px;max-width:96vw;max-height:90vh;
+    border-radius:16px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.2);
     background:#fff;display:flex;flex-direction:column;
   ">
-  <div style="padding:18px 24px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
-    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:3px">명단 열 매핑 설정</div>
+  <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);flex-shrink:0">
+    <div style="font-size:16px;font-weight:800;color:#0F172A;margin-bottom:4px">명단 열 매핑 설정</div>
     <div class="muted">열 머리글을 클릭해서 각 항목의 열을 지정하세요.</div>
   </div>
-  <div style="padding:12px 24px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:16px">
+  <div style="padding:16px 24px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:16px">
     <div style="display:flex;align-items:center;gap:8px">
       <span class="muted">시트:</span>
-      <select id="cm-sheet" style="height:28px;padding:0 8px;min-width:160px"></select>
+      <select id="cm-sheet" style="height:32px;padding:0 8px;min-width:160px"></select>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       <span class="muted">헤더 행:</span>
       <input type="number" id="cm-header-row" min="1" max="30" value="1"
-             style="width:56px;height:28px;padding:0 8px;text-align:center">
+             style="width:60px;height:32px;padding:0 8px;text-align:center">
     </div>
   </div>
   <div id="cm-role-btns" style="padding:10px 24px;border-bottom:1px solid var(--border);display:flex;gap:4px;flex-wrap:nowrap;flex-shrink:0"></div>
-  <div id="cm-guide" style="padding:6px 24px;font-size:12px;font-weight:600;color:var(--primary);flex-shrink:0"></div>
+  <div id="cm-guide" style="padding:8px 24px;font-size:12px;font-weight:700;color:var(--primary);flex-shrink:0"></div>
   <div style="flex:1;overflow:auto;padding:0 24px 8px">
     <table id="cm-preview-table" class="data-table" style="min-width:100%">
       <thead></thead><tbody></tbody>
@@ -1168,33 +1015,5 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 <script src="scan_tab.js"></script>
 <script src="run_tab.js"></script>
 <script src="notice_tab.js"></script>
-<script>
-// ── UI 패치 ──────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-
-  // 1. btn-open-roster (파일 열기) — open-folder와 동일 액션으로 폴백
-  const btnOpenRoster = document.getElementById('btn-open-roster');
-  if (btnOpenRoster) {
-    btnOpenRoster.addEventListener('click', () => {
-      // open-roster 액션이 없을 경우 open-folder로 대체 시도
-      const ev = new CustomEvent('action', { detail: { action: 'open-roster' }, bubbles: true });
-      btnOpenRoster.dispatchEvent(ev);
-    });
-  }
-
-  // 2. 새 학교 시작(초기화) 시 grade-rows 인풋 값도 비우기
-  const btnNewSchool = document.querySelector('[data-action="new-school"]');
-  if (btnNewSchool) {
-    btnNewSchool.addEventListener('click', () => {
-      setTimeout(() => {
-        document.querySelectorAll('#grade-rows input[type="number"]').forEach(el => {
-          el.value = '';
-        });
-      }, 100);
-    });
-  }
-
-});
-</script>
 </body>
 </html>

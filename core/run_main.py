@@ -87,6 +87,8 @@ class PipelineResult:
     transfer_out_done: int = 0
     transfer_out_hold: int = 0
     transfer_out_auto_skip: int = 0
+    notice_dup_rows: List[int] = field(default_factory=list)
+    notice_teacher_dup_rows: List[int] = field(default_factory=list)
 
     audit_summary: Dict[str, Any] = field(default_factory=dict)
 
@@ -273,7 +275,7 @@ def read_freshmen_rows(
                 ws, header_row=header_row, name_col=col_name
             )
 
-        issues = validate_input_sheet_structure(
+        issues, _ = validate_input_sheet_structure(
             ws=ws,
             kind="신입생",
             header_row=header_row,
@@ -393,7 +395,7 @@ def read_transfer_rows(
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
-        issues = validate_input_sheet_structure(
+        issues, _ = validate_input_sheet_structure(
             ws=ws,
             kind="전입생",
             header_row=header_row,
@@ -488,7 +490,7 @@ def read_teacher_rows(
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
-        issues = validate_input_sheet_structure(
+        issues, _ = validate_input_sheet_structure(
             ws=ws,
             kind="교사",
             header_row=header_row,
@@ -564,7 +566,7 @@ def read_withdraw_rows(
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
-        issues = validate_input_sheet_structure(
+        issues, _ = validate_input_sheet_structure(
             ws=ws,
             kind="전출생",
             header_row=header_row,
@@ -790,15 +792,25 @@ def build_withdraw_outputs(
             {"class": c, "now_class": cn, "name_key": nk, "name_disp": nd, "id": id_str, "grade": g}
         )
 
-    for r in range(2, roster_ws.max_row + 1):
-        nmv = roster_ws.cell(r, col_name).value
+    # iter_rows + 연속 빈 행 조기종료 (max_row 오염 대응)
+    MAX_BLANK = 20
+    blank_streak = 0
+    max_col_r = max(col_name, col_id, col_now, col_prev)
+    for row_tuple in roster_ws.iter_rows(min_row=2, max_col=max_col_r, values_only=True):
+        nmv  = row_tuple[col_name - 1] if col_name - 1 < len(row_tuple) else None
+        idv  = row_tuple[col_id   - 1] if col_id   - 1 < len(row_tuple) else None
+        nowv = row_tuple[col_now  - 1] if col_now  - 1 < len(row_tuple) else None
+        prevv= row_tuple[col_prev - 1] if col_prev - 1 < len(row_tuple) else None
+        if nmv is None and nowv is None and prevv is None:
+            blank_streak += 1
+            if blank_streak >= MAX_BLANK:
+                break
+            continue
+        blank_streak = 0
         if nmv is None: continue
         nd = normalize_name(nmv)
         nk = normalize_name_key(nmv)
         if not nk: continue
-        idv  = roster_ws.cell(r, col_id).value
-        nowv = roster_ws.cell(r, col_now).value
-        prevv = roster_ws.cell(r, col_prev).value
         _idx_class(nowv,  nowv, nk, idv, nd)
         _idx_class(prevv, nowv, nk, idv, nd)
         _idx_grade(nowv or prevv, nowv, nk, idv, nd)
@@ -879,10 +891,18 @@ def _require_headers(ws, sheet_label: str, required_labels: List[str], header_ro
 
 def find_last_data_row(ws, key_col: int, start_row: int) -> int:
     last = start_row - 1
-    for r in range(start_row, ws.max_row + 1):
-        v = ws.cell(row=r, column=key_col).value
+    MAX_BLANK = 20
+    blank_streak = 0
+    for i, row_tuple in enumerate(ws.iter_rows(min_row=start_row, min_col=key_col,
+                                                max_col=key_col, values_only=True)):
+        v = row_tuple[0] if row_tuple else None
         if v is not None and str(v).strip() != "":
-            last = r
+            last = start_row + i
+            blank_streak = 0
+        else:
+            blank_streak += 1
+            if blank_streak >= MAX_BLANK:
+                break
     return last
 
 
@@ -1232,7 +1252,8 @@ FILL_DUP      = PatternFill("solid", fgColor="FFFF00")
 FILL_GREY     = PatternFill("solid", fgColor="D9D9D9")
 
 
-def build_notice_student_sheet(ws_notice, register_students_ws, transfer_ids: set, transfer_highlight_ids: set):
+def build_notice_student_sheet(ws_notice, register_students_ws, transfer_ids: set, transfer_highlight_ids: set) -> List[int]:
+    """동명이인 행 번호(1-based, running_no 기준) 리스트를 반환한다."""
 
     hm_r = _require_headers(
         register_students_ws,
@@ -1279,6 +1300,7 @@ def build_notice_student_sheet(ws_notice, register_students_ws, transfer_ids: se
             name_counter[key] += 1
 
     cur_row = start_row; running_no = 1
+    dup_row_numbers: List[int] = []
     for rec in tmp_rows:
         dup_flag = name_counter.get(rec["key"], 0) >= 2
         if rec["is_transfer"] and rec.get("is_transfer_highlight"):
@@ -1296,13 +1318,24 @@ def build_notice_student_sheet(ws_notice, register_students_ws, transfer_ids: se
             for c in cells: c.fill = FILL_TRANSFER
         if dup_flag:
             for c in cells: c.fill = FILL_DUP
+            dup_row_numbers.append(running_no)
         running_no += 1; cur_row += 1
+    return dup_row_numbers
 
 
-def build_notice_teacher_sheet(ws_notice, teacher_rows, learn_ids=None, admin_ids=None):
+def build_notice_teacher_sheet(ws_notice, teacher_rows, learn_ids=None, admin_ids=None) -> List[int]:
+    """동명이인 행 번호(1-based, no 기준) 리스트를 반환한다."""
     start_row = 4
     try: ws_notice.column_dimensions["B"].width = 16.6
     except Exception: pass
+
+    # 교사 동명이인: 입력 명단 기준으로 같은 이름이 2번 이상이면 동명이인
+    from collections import Counter
+    name_counter: Counter = Counter(
+        str(t.get("name") or "").strip()
+        for t in teacher_rows
+        if str(t.get("name") or "").strip()
+    )
 
     admin_total = sum(1 for t in teacher_rows if t.get("admin_apply"))
     learn_total = sum(1 for t in teacher_rows if t.get("learn_apply"))
@@ -1310,6 +1343,7 @@ def build_notice_teacher_sheet(ws_notice, teacher_rows, learn_ids=None, admin_id
     use_admin = admin_total > 0 and len(a_ids) >= admin_total
     use_learn = learn_total > 0 and len(l_ids) >= learn_total
     ia = il = 0; r_out = start_row; no = 1
+    dup_row_numbers: List[int] = []
 
     for t in teacher_rows:
         pos = "" if t.get("position") is None else str(t["position"]).strip()
@@ -1332,9 +1366,13 @@ def build_notice_teacher_sheet(ws_notice, teacher_rows, learn_ids=None, admin_id
             for c in [5, 6]: ws_notice.cell(r_out, c).fill = FILL_GREY
         if not la:
             for c in [8, 9]: ws_notice.cell(r_out, c).fill = FILL_GREY
+        if nm and name_counter[nm] >= 2:
+            for c in range(1, 10): ws_notice.cell(r_out, c).fill = FILL_DUP
+            dup_row_numbers.append(no)
         no += 1; r_out += 1
 
     delete_rows_below(ws_notice, r_out - 1)
+    return dup_row_numbers
 
 
 def build_notice_file(
@@ -1343,7 +1381,7 @@ def build_notice_file(
     out_register_path: Path,
     teacher_rows: Optional[List[Dict]],
     transfer_done_rows: List[Dict],
-) -> None:
+) -> List[int]:
     
     ensure_xlsx_only(template_notice_path)
     ensure_xlsx_only(out_register_path)
@@ -1381,7 +1419,7 @@ def build_notice_file(
             if tr.get("id") and tr.get("needs_highlight")
         }
 
-        build_notice_student_sheet(ws_ns, ws_rs, transfer_ids, transfer_highlight_ids)
+        dup_row_numbers = build_notice_student_sheet(ws_ns, ws_rs, transfer_ids, transfer_highlight_ids)
 
         learn_ids_from_reg: Optional[List[str]] = None
         try:
@@ -1429,7 +1467,7 @@ def build_notice_file(
             pass
 
         teacher_rows = teacher_rows or []
-        build_notice_teacher_sheet(
+        teacher_dup_rows = build_notice_teacher_sheet(
             ws_nt,
             teacher_rows,
             learn_ids=learn_ids_from_reg,
@@ -1441,6 +1479,7 @@ def build_notice_file(
         clear_format_workbook_from_row(wb_notice, start_row=4)
         reset_view_to_a1(wb_notice)
         wb_notice.save(out_notice_path)
+        return dup_row_numbers, teacher_dup_rows
 
     finally:
         wb_reg.close()
@@ -1685,17 +1724,20 @@ def execute_pipeline(
         title_middle = (",".join(notice_kinds) + "_ID,PW안내") if notice_kinds else "ID,PW안내"
         out_notice_path = scan.output_dir / f"☆{school_name}_{title_middle}.xlsx"
 
-        build_notice_file(
+        _notice_result = build_notice_file(
             template_notice_path=scan.template_notice,
             out_notice_path=out_notice_path,
             out_register_path=out_register_path,
             teacher_rows=teacher_rows,
             transfer_done_rows=transfer_done_rows,
         )
+        notice_dup_rows, notice_teacher_dup_rows = _notice_result if _notice_result else ([], [])
 
         log(f"[OK] 안내파일 생성 완료: {out_notice_path.name}")
 
         pr = PipelineResult(ok=True, outputs=[out_register_path, out_notice_path], logs=logs)
+        pr.notice_dup_rows         = notice_dup_rows
+        pr.notice_teacher_dup_rows = notice_teacher_dup_rows
         pr.transfer_in_done   = len(transfer_done_rows)
         pr.transfer_in_hold   = len(transfer_hold_rows)
         pr.transfer_out_done  = len(withdraw_done_rows)

@@ -18,10 +18,15 @@ bridge.py — WebView ↔ Python 연결층
 
 from __future__ import annotations
 
+import time
 import json
 import re
 import traceback as tb_module
 from pathlib import Path
+
+# 디버그 출력용
+def _dbg(*args):
+    print("[BRIDGE]", *args, flush=True)
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QApplication, QFileDialog
@@ -38,6 +43,8 @@ from engine import (
     load_notice_templates,
 )
 from core.roster_log import write_work_result, write_email_sent
+
+from core.common import derive_grade_year_map
 
 
 # ── app_config 직접 읽기/쓰기 (별도 모듈 없음) ──────────────
@@ -190,12 +197,60 @@ def to_scan_payload(result) -> dict:
     if rbd is not None:
         roster_basis_date = rbd.isoformat() if hasattr(rbd, "isoformat") else str(rbd)
 
-    # 학년도 아이디 규칙: roster_info.prefix_mode_by_roster_grade → {학년str: 연도int}
     grade_year_map = {}
     roster_info = getattr(result, "roster_info", None)
+
+    # scan UI에는 "명부 직접값 + 없는 학년 역산" 결과를 보여준다.
+    # target_grades는:
+    # 1) 명부에서 관측된 현재 학년
+    # 2) 신입생 파일에서 실제 등장한 현재 학년
+    # 을 합쳐서 만든다.
     if roster_info is not None:
-        raw_map = getattr(roster_info, "prefix_mode_by_roster_grade", {}) or {}
-        grade_year_map = {str(k): int(v) for k, v in raw_map.items()}
+        target_grades = set()
+
+        prefix_mode = getattr(roster_info, "prefix_mode_by_roster_grade", {}) or {}
+        shift = int(getattr(roster_info, "ref_grade_shift", 0) or 0)
+
+        # 명부 관측 학년 -> 현재 학년으로 변환
+        for g_roster in prefix_mode.keys():
+            try:
+                g_cur = int(g_roster) - shift
+            except Exception:
+                continue
+            if g_cur > 0:
+                target_grades.add(g_cur)
+
+        # 신입생 파일에 실제 있는 학년 반영
+        freshmen_meta = getattr(result, "freshmen", None) or {}
+        extra_grades = freshmen_meta.get("extra_grades", []) or []
+        for g in extra_grades:
+            try:
+                g_i = int(g)
+            except Exception:
+                continue
+            if g_i > 0:
+                target_grades.add(g_i)
+
+        # 아무것도 못 잡았으면 최소한 명부 현재학년만이라도 유지
+        if not target_grades:
+            for g_roster in prefix_mode.keys():
+                try:
+                    g_cur = int(g_roster) - shift
+                except Exception:
+                    continue
+                if g_cur > 0:
+                    target_grades.add(g_cur)
+
+        # 1~6학년 항상 포함
+        target_grades.update({1, 2, 3, 4, 5, 6})
+
+        year_int = int(getattr(result, "year_int", 0) or 0)
+        derived = derive_grade_year_map(
+            target_grades=sorted(target_grades),
+            input_year=year_int,
+            roster_info=roster_info,
+        )
+        grade_year_map = {int(k): int(v) for k, v in derived.items()}
 
     return {
         "ok":                     bool(getattr(result, "ok", False)),
@@ -206,6 +261,7 @@ def to_scan_payload(result) -> dict:
         "need_roster":            bool(getattr(result, "need_roster", False)),
         "roster_date_mismatch":   bool(getattr(result, "roster_date_mismatch", False)),
         "roster_basis_date":      roster_basis_date,
+        "roster_path": str(getattr(result, "roster_path", None) or "") or None,
         "has_school_kind_warn":   False,
         "grade_year_map":         grade_year_map,
         "items":    items,
@@ -235,6 +291,8 @@ def to_run_payload(result) -> dict:
         "transfer_out_done":       int(getattr(result, "transfer_out_done",      0)),
         "transfer_out_hold":       int(getattr(result, "transfer_out_hold",      0)),
         "transfer_out_auto_skip":  int(getattr(result, "transfer_out_auto_skip", 0)),
+        "notice_dup_rows":          list(getattr(result, "notice_dup_rows", []) or []),
+        "notice_teacher_dup_rows":  list(getattr(result, "notice_teacher_dup_rows", []) or []),
         "warnings": warnings,
         "logs":     logs,
     }
@@ -279,10 +337,21 @@ class ScanWorker(QObject):
     def __init__(self, params: dict):
         super().__init__()
         self._params = params
-        self.scan_result = None  # Bridge가 run용으로 꺼내 쓴다
+        self.scan_result = None
 
     def run(self):
         try:
+            _dbg("ScanWorker.run start", {
+                "school_name": self._params.get("school_name"),
+                "work_root": self._params.get("work_root"),
+                "roster_xlsx": self._params.get("roster_xlsx"),
+                "work_date": self._params.get("work_date"),
+                "school_start_date": self._params.get("school_start_date"),
+                "roster_basis_date": self._params.get("roster_basis_date"),
+            })
+
+            started = time.time()
+
             result = scan_main_engine(
                 work_root=self._params["work_root"],
                 school_name=self._params["school_name"],
@@ -292,9 +361,17 @@ class ScanWorker(QObject):
                 roster_xlsx=self._params.get("roster_xlsx") or None,
                 col_map=self._params.get("col_map"),
             )
-            self.scan_result = result  # 원본 보관 (Bridge만 접근)
-            self.finished.emit(async_ok("scan_main", to_scan_payload(result)))
+
+            _dbg("scan_main_engine returned", time.time() - started)
+
+            self.scan_result = result
+            payload = async_ok("scan_main", to_scan_payload(result))
+            _dbg("ScanWorker before finished emit")
+            self.finished.emit(payload)
+
         except Exception as e:
+            _dbg("ScanWorker error", str(e))
+            self.scan_result = None
             self.failed.emit(async_error("scan_main", str(e), tb_module.format_exc()))
 
 
@@ -394,14 +471,15 @@ class PreviewWorker(QObject):
     def run(self):
         kind = self._params.get("kind", "")
         try:
-            from openpyxl import load_workbook as _load_wb
+            from core.common import safe_load_workbook as _safe_wb
+            from pathlib import Path as _Path
 
             file_path    = self._params["file_path"]
             sheet_name   = self._params.get("sheet_name", "")
             header_row   = int(self._params.get("header_row", 1))
             data_start   = int(self._params.get("data_start_row", 2))
 
-            wb = _load_wb(file_path, data_only=True, read_only=False)
+            wb = _safe_wb(_Path(file_path), data_only=True, read_only=True)
             try:
                 ws = (wb[sheet_name]
                       if sheet_name and sheet_name in wb.sheetnames
@@ -411,15 +489,25 @@ class PreviewWorker(QObject):
                 columns = [str(c) if c is not None else "" for c in (hdr[0] if hdr else [])]
 
                 all_rows = []
+                MAX_BLANK = 20
+                blank_streak = 0
                 for row in ws.iter_rows(min_row=data_start, values_only=True):
-                    all_rows.append([str(c) if c is not None else "" for c in row])
+                    cells = [str(c) if c is not None else "" for c in row]
+                    has_any = any(c.strip() for c in cells)
+                    if not has_any:
+                        blank_streak += 1
+                        if blank_streak >= MAX_BLANK:
+                            break
+                    else:
+                        blank_streak = 0
+                    all_rows.append(cells)
                     if len(all_rows) >= self.MAX_PREVIEW_ROWS + 1:
                         break
 
                 total_count = len(all_rows)
                 truncated   = total_count > self.MAX_PREVIEW_ROWS
                 rows        = all_rows[:self.MAX_PREVIEW_ROWS]
-                actual_sheet = ws.title if hasattr(ws, "title") else sheet_name
+                actual_sheet = getattr(ws, "title", None) or sheet_name
             finally:
                 wb.close()
 
@@ -434,9 +522,11 @@ class PreviewWorker(QObject):
             }, ensure_ascii=False))
 
         except Exception as e:
+            tb = tb_module.format_exc()
+            _dbg("PreviewWorker error:", str(e), "\n", tb)
             self.failed.emit(json.dumps({
                 "ok": False, "kind": kind,
-                "error": str(e), "traceback": tb_module.format_exc(),
+                "error": str(e), "traceback": tb,
             }, ensure_ascii=False))
 
 
@@ -694,6 +784,7 @@ class Bridge(QObject):
 
     @pyqtSlot(str, result=str)
     def startScanMain(self, params_json: str) -> str:
+        _dbg("startScanMain called", params_json)
         """
         params: {
           work_root, school_name,
@@ -726,20 +817,25 @@ class Bridge(QObject):
         thread = QThread()
         self._scan_worker = worker
         self._scan_thread = thread
+        _dbg("startScanMain starting worker thread")
         self._start_worker(worker, thread, self._on_scan_finished, self._on_scan_failed)
         return ok_response({})
 
     def _on_scan_finished(self, payload: str):
+        _dbg("_on_scan_finished entered")
         self._is_scanning = False
         # Worker의 scan_result 원본을 Bridge에 보관 (run_main_engine 인자용)
         if self._scan_worker is not None:
             self._last_scan_result = getattr(self._scan_worker, "scan_result", None)
         self.scanFinished.emit(payload)
+        _dbg("_on_scan_finished emitted")
 
     def _on_scan_failed(self, payload: str):
+        _dbg("_on_scan_failed entered")
         self._is_scanning = False
         self._last_scan_result = None
         self.scanFailed.emit(payload)
+        _dbg("_on_scan_failed emitted")
 
     # ── Run ────────────────────────────────────
 

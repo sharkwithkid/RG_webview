@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1534, in execute_pipeline
+    freshmen_rows = read_freshmen_rows(
+                    ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 237, in read_freshmen_rows
+    raise ValueError("\n".join(issues[:20]))
+                     ^^^^^^^^^^^^^^^^^^^^^^
+TypeError: sequence item 0: expected str instance, list found

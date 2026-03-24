@@ -3,7 +3,7 @@
  *
  * 의존: main.js (state, bridge, App, _el, _todayStr)
  * HTML ID: work-root, roster-log, worker, school-start-date, work-date,
- *           btn-start, col-map-badge, setup-banner,
+ *           btn-start, col-map-badge, work-root-badge, setup-banner,
  *           stat-school, stat-date, stat-step
  */
 
@@ -30,9 +30,8 @@ const Setup = (() => {
     state.roster_col_map = cm;
     _updateColMapBadge(cm);
 
-    // 마지막 작업 요약 카드
-    if (cfg.last_school) _el('stat-school').textContent = cfg.last_school;
-    if (cfg.work_date)   _el('stat-date').textContent   = cfg.work_date;
+    // work-root 배지 초기화
+    _updateWorkRootBadge(cfg.work_root ? 'ok' : null, cfg.work_root ? '폴더 확인 완료 ✓' : '');
 
     refreshBtn();
 
@@ -71,22 +70,21 @@ const Setup = (() => {
   // ──────────────────────────────────────────────
   async function onWorkRootChange() {
     const path = _getVal('work-root');
-    if (!path) { _hideBanner(); return; }
+    if (!path) { _updateWorkRootBadge(null); return; }
 
     const res = JSON.parse(await bridge.inspectWorkRoot(path));
     if (!res.ok) {
-      _showBanner('err', '폴더 오류: ' + res.error);
+      _updateWorkRootBadge('err', '폴더 오류');
       return;
     }
     if (!res.data.ok) {
       const msgs = (res.data.errors || [])
         .map(e => e.replace(/^\[ERROR\]\s*/, ''))
         .join('\n');
-      _showBanner('err', 'resources 구성 오류:\n' + msgs);
+      _updateWorkRootBadge('err', '구성 오류', msgs);
       _el('btn-start').disabled = true;
     } else {
-      _showBanner('ok', 'resources 폴더 정상 확인됨');
-      _autoClear();
+      _updateWorkRootBadge('ok', '폴더 확인 완료 ✓');
     }
   }
 
@@ -217,11 +215,7 @@ const Setup = (() => {
       state.work_date         = _getVal('work-date');
       state.roster_col_map    = cm;
 
-      // 3) 요약 카드 업데이트
-      _el('stat-date').textContent = state.work_date;
-      _el('stat-step').textContent = '기본 설정 완료';
-
-      // 4) main.js onSetupComplete 호출
+      // 3) main.js onSetupComplete 호출
       await App.onSetupComplete({
         work_root:         state.work_root,
         roster_log_path:   state.roster_log_path,
@@ -249,27 +243,33 @@ const Setup = (() => {
   }
 
   // ──────────────────────────────────────────────
-  // 배너 헬퍼
+  // 작업 폴더 badge 업데이트
   // ──────────────────────────────────────────────
-  let _clearTimer = null;
+  function _updateWorkRootBadge(type, label, tooltip) {
+    const badge = _el('work-root-badge');
+    if (!badge) return;
+    if (!type) {
+      badge.textContent = '';
+      badge.className   = 'file-badge';
+      badge.title       = '';
+      return;
+    }
+    badge.textContent = label;
+    badge.className   = `file-badge ${type}`;
+    badge.title       = tooltip || '';
+  }
 
+  // ──────────────────────────────────────────────
+  // 배너 헬퍼 → toast() 위임
+  // ──────────────────────────────────────────────
   function _showBanner(type, msg) {
-    const el = _el('setup-banner');
-    if (!el) return;
-    el.className   = `banner show ${type}`;
-    el.textContent = msg;
-    clearTimeout(_clearTimer);
+    // type 매핑: 'ok'→'ok', 'warn'→'warn', 'err'→'err'
+    toast(msg, type === 'err' ? 'err' : type === 'warn' ? 'warn' : 'ok');
   }
 
-  function _hideBanner() {
-    const el = _el('setup-banner');
-    if (el) el.className = 'banner';
-  }
+  function _hideBanner() { /* toast는 자동 소멸 */ }
 
-  function _autoClear() {
-    clearTimeout(_clearTimer);
-    _clearTimer = setTimeout(_hideBanner, 2500);
-  }
+  function _autoClear() { /* toast는 자동 소멸 */ }
 
   // ──────────────────────────────────────────────
   // 날짜 자동 하이픈 (YYYYMMDD → YYYY-MM-DD)

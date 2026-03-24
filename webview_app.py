@@ -23,7 +23,9 @@ from bridge import Bridge
 
 HTML_PATH = Path(__file__).parent / "ui" / "index.html"
 WINDOW_TITLE = "리딩게이트 반이동 자동화"
-WINDOW_W, WINDOW_H = 1000, 850
+
+WINDOW_W, WINDOW_H = 1020, 890
+MIN_WINDOW_W, MIN_WINDOW_H = 1020, 890
 
 
 def main():
@@ -42,7 +44,9 @@ def main():
     view = QWebEngineView()
     view.page().setWebChannel(channel)
     view.setWindowTitle(WINDOW_TITLE)
+    
     view.resize(WINDOW_W, WINDOW_H)
+    view.setMinimumSize(MIN_WINDOW_W, MIN_WINDOW_H)
 
     # ── index.html 로드 ──────────────────────────
     if not HTML_PATH.exists():
