@@ -288,23 +288,37 @@ def read_freshmen_rows(
 
         out: List[Dict[str, Any]] = []
         row = data_start_row
+        
         while True:
             grade = ws.cell(row=row, column=col_grade).value
             cls   = ws.cell(row=row, column=col_class).value
             num   = ws.cell(row=row, column=col_num).value if col_num is not None else None
             name  = ws.cell(row=row, column=col_name).value
 
-            if all(v is None or str(v).strip() == "" for v in [grade, cls, num, name]):
+            grade_s = "" if grade is None else str(grade).strip()
+            cls_s   = "" if cls is None else str(cls).strip()
+            name_s  = "" if name is None else str(name).strip()
+
+            # 필수열(학년/반/이름) 기준 빈 행이면 종료
+            if not grade_s and not cls_s and not name_s:
                 break
+
+            grade_norm = re.sub(r"\s+", "", grade_s)
+            cls_norm   = re.sub(r"\s+", "", cls_s)
+
+            is_kindergarten = (
+                grade_norm in {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+                or (not grade_s and cls_norm in {"유치원", "유치원반"})
+                or cls_norm in {"유치원", "유치원반"}
+            )
+
+            check_vals = [name] if is_kindergarten else [grade, cls, name]
+            if any(v is None or str(v).strip() == "" for v in check_vals):
+                raise ValueError(f"[ERROR] 신입생 파일 {row}행에 학년/반/이름 중 빈 값이 있습니다.")
 
             grade_meta = _parse_freshmen_grade_meta(
                 grade, input_year=input_year, school_name=school_name
             )
-            is_kinder = grade_meta.get("is_kindergarten", False)
-
-            check_vals = [grade, name] if is_kinder else [grade, cls, name]
-            if any(v is None or str(v).strip() == "" for v in check_vals):
-                raise ValueError(f"[ERROR] 신입생 파일 {row}행에 학년/반/이름 중 빈 값이 있습니다.")
 
             name_n = normalize_name(name)
             if not name_n:
@@ -591,6 +605,7 @@ def read_withdraw_rows(
             cls_s_raw = "" if cls is None else str(cls).strip()
             grade_norm = re.sub(r"\s+", "", grade_s)
             cls_norm = re.sub(r"\s+", "", cls_s_raw)
+
             KINDER = {"유치원", "유치원반"}
             is_kindergarten = (
                 grade_norm in {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}

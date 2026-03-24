@@ -1,8 +1,10 @@
 Traceback (most recent call last):
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1534, in execute_pipeline
+  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1597, in execute_pipeline
     freshmen_rows = read_freshmen_rows(
                     ^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 237, in read_freshmen_rows
-    raise ValueError("\n".join(issues[:20]))
-                     ^^^^^^^^^^^^^^^^^^^^^^
-TypeError: sequence item 0: expected str instance, list found
+  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 300, in read_freshmen_rows
+    grade_meta = _parse_freshmen_grade_meta(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 164, in _parse_freshmen_grade_meta
+    raise ValueError(f"[ERROR] 신입생 파일에서 학년 값을 인식할 수 없습니다: {s!r}")
+ValueError: [ERROR] 신입생 파일에서 학년 값을 인식할 수 없습니다: ''

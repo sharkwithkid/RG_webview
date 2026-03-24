@@ -32,5 +32,42 @@
     },
     "run_completed": true,
     "master_recorded": false
+  },
+  "성남하원초": {
+    "last_date": "2026-03-24",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 81,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 44
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남창성중": {
+    "last_date": "2026-03-24",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 75,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 5
+    },
+    "run_completed": true,
+    "master_recorded": true,
+    "master_recorded_at": "2026-03-24"
+  },
+  "용인성지초": {
+    "last_date": "2026-03-24",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 8,
+      "전입생": 5,
+      "전출생": 7,
+      "교직원": 5
+    },
+    "run_completed": true,
+    "master_recorded": false
   }
 }

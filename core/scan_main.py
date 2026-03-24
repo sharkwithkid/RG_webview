@@ -744,9 +744,16 @@ def freshmen_extra_grades(
         header_row = detect_header_row_freshmen(ws)
         slot_cols = _build_header_slot_map(ws, header_row, FRESHMEN_HEADER_SLOTS)
         grade_col = slot_cols.get("grade")
+        name_col = slot_cols.get("name", 5)
 
         if grade_col is None:
             return []
+
+        _, data_start_row = detect_example_and_data_start(
+            ws,
+            header_row=header_row,
+            name_col=name_col,
+        )
 
         KINDERGARTEN = {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
         extra = set()
@@ -754,8 +761,12 @@ def freshmen_extra_grades(
         # iter_rows + 연속 빈 행 조기종료 (max_row 오염 대응)
         MAX_BLANK = 10
         blank_streak = 0
-        for row_tuple in ws.iter_rows(min_row=header_row + 1, min_col=grade_col,
-                                      max_col=grade_col, values_only=True):
+        for row_tuple in ws.iter_rows(
+            min_row=data_start_row,
+            min_col=grade_col,
+            max_col=grade_col,
+            values_only=True,
+        ):
             grade_v = row_tuple[0]
             if grade_v is None or str(grade_v).strip() == "":
                 blank_streak += 1
@@ -1265,7 +1276,7 @@ def scan_pipeline(
         roster_ok = (not sr.need_roster) or (sr.roster_info is not None)
         if not roster_ok:
             missing_fields.append("학생명부")
-            log("[ERROR] 학생명부가 입력되지 않았습니다. "
+            log("[ERROR] 학년도 아이디 규칙이 필요합니다. "
                 "명부를 추가하거나 학년도 아이디 규칙을 직접 입력한 뒤 재스캔해 주세요.")
 
         sr.missing_fields = missing_fields

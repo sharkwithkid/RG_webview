@@ -24,8 +24,8 @@ from bridge import Bridge
 HTML_PATH = Path(__file__).parent / "ui" / "index.html"
 WINDOW_TITLE = "리딩게이트 반이동 자동화"
 
-WINDOW_W, WINDOW_H = 1020, 890
-MIN_WINDOW_W, MIN_WINDOW_H = 1020, 890
+WINDOW_W, WINDOW_H = 1020, 900
+MIN_WINDOW_W, MIN_WINDOW_H = 1020, 900
 
 
 def main():
