@@ -132,7 +132,7 @@ def run_main_engine(
 def scan_diff_engine(
     work_root: Union[str, Path],
     school_name: str,
-    target_year: int,
+    target_year: Optional[int],
     school_start_date: DateLike,
     work_date: DateLike,
     roster_basis_date: Optional[DateLike] = None,
@@ -151,11 +151,12 @@ def scan_diff_engine(
         school_start_date_d = _to_date(school_start_date)
         work_date_d = _to_date(work_date)
         roster_basis_date_d = _to_date(roster_basis_date) if roster_basis_date is not None else None
+        target_year_i = int(target_year) if target_year is not None else int(school_start_date_d.year)
 
         return scan_diff_pipeline(
             work_root=work_root_p,
             school_name=school_name_s,
-            target_year=int(target_year),
+            target_year=target_year_i,
             school_start_date=school_start_date_d,
             work_date=work_date_d,
             roster_basis_date=roster_basis_date_d,
@@ -168,8 +169,8 @@ def scan_diff_engine(
             ok=False,
             logs=[f"[ERROR] {e}"],
             school_name=school_name_s,
-            year_str=str(target_year),
-            year_int=int(target_year) if str(target_year).strip() else 0,
+            year_str=str(target_year or ""),
+            year_int=int(target_year) if target_year is not None and str(target_year).strip() else 0,
             project_root=work_root_p,
         )
 
@@ -177,7 +178,7 @@ def scan_diff_engine(
 def run_diff_engine(
     work_root: Union[str, Path],
     school_name: str,
-    target_year: int,
+    target_year: Optional[int],
     school_start_date: DateLike,
     work_date: DateLike,
     roster_basis_date: Optional[DateLike] = None,
@@ -196,11 +197,12 @@ def run_diff_engine(
         school_start_date_d = _to_date(school_start_date)
         work_date_d = _to_date(work_date)
         roster_basis_date_d = _to_date(roster_basis_date) if roster_basis_date is not None else None
+        target_year_i = int(target_year) if target_year is not None else int(school_start_date_d.year)
 
         return run_diff_pipeline(
             work_root=work_root_p,
             school_name=school_name_s,
-            target_year=int(target_year),
+            target_year=target_year_i,
             school_start_date=school_start_date_d,
             work_date=work_date_d,
             roster_basis_date=roster_basis_date_d,

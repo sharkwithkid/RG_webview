@@ -24,8 +24,8 @@ from bridge import Bridge
 HTML_PATH = Path(__file__).parent / "ui" / "index.html"
 WINDOW_TITLE = "리딩게이트 반이동 자동화"
 
-WINDOW_W, WINDOW_H = 1020, 900
-MIN_WINDOW_W, MIN_WINDOW_H = 1020, 900
+WINDOW_W, WINDOW_H = 1040, 800
+MIN_WINDOW_W, MIN_WINDOW_H = 1040, 800
 
 
 def main():
@@ -47,6 +47,7 @@ def main():
     
     view.resize(WINDOW_W, WINDOW_H)
     view.setMinimumSize(MIN_WINDOW_W, MIN_WINDOW_H)
+    view.setMaximumSize(WINDOW_W, WINDOW_H)
 
     # ── index.html 로드 ──────────────────────────
     if not HTML_PATH.exists():

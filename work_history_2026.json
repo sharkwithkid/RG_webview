@@ -69,5 +69,126 @@
     },
     "run_completed": true,
     "master_recorded": false
+  },
+  "거제장승포초": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 21,
+      "전입생": 4,
+      "전출생": 9,
+      "교직원": 21
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "대구지산중": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 101,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 1
+    },
+    "run_completed": true,
+    "master_recorded": true,
+    "master_recorded_at": "2026-03-25"
+  },
+  "과천문원중": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 400,
+      "전입생": 15,
+      "전출생": 0,
+      "교직원": 7
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "과천갈현초": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 268,
+      "전입생": 7,
+      "전출생": 16,
+      "교직원": 22
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남신백현중": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 130,
+      "전입생": 8,
+      "전출생": 4,
+      "교직원": 41
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "창원성주초": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 60,
+      "전입생": 1,
+      "전출생": 2,
+      "교직원": 30
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "고양주엽초": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 16,
+      "전입생": 60,
+      "전출생": 0,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "과천문원초": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 243,
+      "전입생": 62,
+      "전출생": 81,
+      "교직원": 126
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "부산엄궁초": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 50,
+      "전입생": 0,
+      "전출생": 8,
+      "교직원": 32
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "서울문현초": {
+    "last_date": "2026-03-25",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 106,
+      "전입생": 10,
+      "전출생": 35,
+      "교직원": 72
+    },
+    "run_completed": true,
+    "master_recorded": false
   }
 }

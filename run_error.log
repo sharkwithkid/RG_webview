@@ -1,10 +1,7 @@
 Traceback (most recent call last):
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1597, in execute_pipeline
+  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1638, in execute_pipeline
     freshmen_rows = read_freshmen_rows(
                     ^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 300, in read_freshmen_rows
-    grade_meta = _parse_freshmen_grade_meta(
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 164, in _parse_freshmen_grade_meta
-    raise ValueError(f"[ERROR] 신입생 파일에서 학년 값을 인식할 수 없습니다: {s!r}")
-ValueError: [ERROR] 신입생 파일에서 학년 값을 인식할 수 없습니다: ''
+  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 303, in read_freshmen_rows
+    raise ValueError("\n".join(issues[:20]))
+ValueError: [WARN] 신입생 파일 6행이 비어 있습니다. 중간 빈 행이 있으면 데이터가 잘릴 수 있습니다.

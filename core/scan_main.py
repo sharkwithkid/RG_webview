@@ -439,21 +439,65 @@ def _sheet_headers(ws, header_row: int, max_col: int = 12) -> List[str]:
     return headers
 
 
-def _sheet_preview_rows(ws, data_start_row: int, max_col: int = 12, limit: int = 300) -> List[List[str]]:
+def _sheet_preview_rows(
+    ws,
+    data_start_row: int,
+    required_cols: Optional[Dict[str, int]] = None,
+    max_col: int = 12,
+    limit: int = 300,
+) -> List[List[str]]:
+    """
+    미리보기용 행 추출.
+
+    원칙:
+    - 종료 판단은 No가 아니라 required_cols(필수 열) 기준으로 한다.
+    - 필수 열이 10행 이상 연속 공백이면 데이터 끝으로 간주한다.
+    - 데이터 끝(last_data_row) 이전 행은 빈 행이라도 자리 그대로 유지한다.
+      → 중간 빈 행 / No만 있는 행도 표에서 확인 가능해야 함.
+    """
     rows: List[List[str]] = []
     col_limit = min(ws.max_column or 1, max_col)
 
-    for r in range(data_start_row, min(ws.max_row, data_start_row + limit - 1) + 1):
-        row_vals = []
-        has_any = False
-        for c in range(1, col_limit + 1):
+    req_cols = dict(required_cols or {})
+    max_req_col = max(req_cols.values()) if req_cols else col_limit
+    scan_max_col = max(col_limit, max_req_col)
+    MAX_BLANK_STREAK = 10
+
+    last_data_row = data_start_row - 1
+    blank_streak = 0
+    collected: List[tuple[int, List[str], bool]] = []
+
+    for r in range(data_start_row, ws.max_row + 1):
+        all_vals: List[str] = []
+        for c in range(1, scan_max_col + 1):
             v = ws.cell(r, c).value
-            s = "" if v is None else str(v).strip()
-            if s:
-                has_any = True
-            row_vals.append(s)
-        if has_any:
-            rows.append(row_vals)
+            all_vals.append("" if v is None else str(v).strip())
+
+        if req_cols:
+            req_vals = [all_vals[c - 1] if c - 1 < len(all_vals) else "" for c in req_cols.values()]
+            has_required = any(v for v in req_vals)
+        else:
+            has_required = any(v for v in all_vals[:col_limit])
+
+        if has_required:
+            last_data_row = r
+            blank_streak = 0
+        else:
+            blank_streak += 1
+            if blank_streak >= MAX_BLANK_STREAK:
+                break
+
+        collected.append((r, all_vals[:col_limit], has_required))
+
+    if last_data_row < data_start_row:
+        return []
+
+    for r, row_vals, _ in collected:
+        if r > last_data_row:
+            break
+        rows.append(row_vals)
+        if len(rows) >= limit:
+            break
 
     return rows
     
@@ -805,15 +849,53 @@ def load_preview_rows(
     header_row: int,
     data_start_row: int,
     limit: int = 100,
+    sheet_name: str = "",
 ) -> List[List[str]]:
     """
-    UI에서 미리보기 요청 시 호출. 스캔 단계에서는 실행하지 않음.
+    UI에서 미리보기 요청 시 호출.
+
+    종료 판단과 중간 빈 행 보존은 스캔 코어와 같은 기준을 사용한다.
+    즉 No가 아니라 kind별 필수 열을 기준으로 본다.
     """
     try:
         wb = safe_load_workbook(Path(xlsx_path), data_only=True)
         try:
-            ws = get_first_sheet_with_warning(wb, Path(xlsx_path).name)
-            return _sheet_preview_rows(ws, data_start_row, limit=limit)
+            if sheet_name and sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+            else:
+                ws = get_first_sheet_with_warning(wb, Path(xlsx_path).name)
+
+            kind_alias = {
+                '신입생': 'freshmen',
+                '전입생': 'transfer_in',
+                '전출생': 'transfer_out',
+                '교직원': 'teachers',
+                '교사': 'teachers',
+            }
+            norm_kind = kind_alias.get(kind, kind)
+
+            kind_slots = {
+                'freshmen': (FRESHMEN_HEADER_SLOTS, ['grade', 'class', 'name']),
+                'transfer_in': (TRANSFER_HEADER_SLOTS, ['grade', 'class', 'name']),
+                'transfer_out': (WITHDRAW_HEADER_SLOTS, ['grade', 'class', 'name']),
+                'teachers': (TEACHER_HEADER_SLOTS, ['name']),
+            }
+            header_slots, required_keys = kind_slots.get(norm_kind, ({}, []))
+            required_cols: Dict[str, int] = {}
+            if header_slots and header_row:
+                slot_cols = _build_header_slot_map(ws, header_row, header_slots)
+                required_cols = {
+                    key: slot_cols.get(key)
+                    for key in required_keys
+                    if slot_cols.get(key) is not None
+                }
+
+            return _sheet_preview_rows(
+                ws,
+                data_start_row,
+                required_cols=required_cols,
+                limit=limit,
+            )
         finally:
             wb.close()
     except Exception:
@@ -995,9 +1077,24 @@ def scan_pipeline(
                 return None
 
             _t_file = _time.perf_counter()
-            layout = detect_input_layout(file_path, kind_key)
-            wb = layout["_wb"]
-            ws = layout["_ws"]
+            try:
+                layout = detect_input_layout(file_path, kind_key)
+                wb = layout["_wb"]
+                ws = layout["_ws"]
+            except Exception:
+                log(f"[ERROR] {kind_label} 파일에서 헤더를 찾을 수 없습니다. 파일 구조를 확인해 주세요.")
+                return {
+                    "file_name": file_path.name,
+                    "file_path": str(file_path),
+                    "sheet_name": "",
+                    "header_row": None,
+                    "data_start_row": None,
+                    "warning": "헤더를 찾을 수 없습니다. 파일 구조를 확인해 주세요.",
+                    "headers": [],
+                    "rows": [],
+                    "issue_rows": [],
+                    "severity": "error",
+                }
 
             try:
                 log(
@@ -1044,64 +1141,45 @@ def scan_pipeline(
                     "headers": headers,
                     "rows": [],
                     "issue_rows": issue_row_idxs,
+                    "severity": "warn" if issues else "ok",
                 }
             finally:
                 wb.close()
 
-        try:
-            sr.freshmen = run_structure_check(
-                file_path=freshmen_file,
-                kind_key="freshmen",
-                kind_label="신입생",
-                header_slots=FRESHMEN_HEADER_SLOTS,
-                required_keys=["grade", "class", "name"],
-                allow_blank_class_for_kindergarten=True,
-            )
-        except Exception as e:
-            import traceback
-            log(f"[WARN] 신입생 파일 헤더 분석 중 오류: {e}")
-            log(f"[DEBUG] {traceback.format_exc()}")
+        sr.freshmen = run_structure_check(
+            file_path=freshmen_file,
+            kind_key="freshmen",
+            kind_label="신입생",
+            header_slots=FRESHMEN_HEADER_SLOTS,
+            required_keys=["grade", "class", "name"],
+            allow_blank_class_for_kindergarten=True,
+        )
 
-        try:
-            sr.transfer_in = run_structure_check(
-                file_path=transfer_file,
-                kind_key="transfer",
-                kind_label="전입생",
-                header_slots=TRANSFER_HEADER_SLOTS,
-                required_keys=["grade", "class", "name"],
-                allow_blank_class_for_kindergarten=True,
-            )
-        except Exception as e:
-            import traceback
-            log(f"[WARN] 전입생 파일 헤더 분석 중 오류: {e}")
-            log(f"[DEBUG] {traceback.format_exc()}")
+        sr.transfer_in = run_structure_check(
+            file_path=transfer_file,
+            kind_key="transfer",
+            kind_label="전입생",
+            header_slots=TRANSFER_HEADER_SLOTS,
+            required_keys=["grade", "class", "name"],
+            allow_blank_class_for_kindergarten=True,
+        )
 
-        try:
-            sr.transfer_out = run_structure_check(
-                file_path=withdraw_file,
-                kind_key="withdraw",
-                kind_label="전출생",
-                header_slots=WITHDRAW_HEADER_SLOTS,
-                required_keys=["grade", "class", "name"],
-                allow_blank_class_for_kindergarten=True,
-            )
-        except Exception as e:
-            import traceback
-            log(f"[WARN] 전출생 파일 헤더 분석 중 오류: {e}")
-            log(f"[DEBUG] {traceback.format_exc()}")
+        sr.transfer_out = run_structure_check(
+            file_path=withdraw_file,
+            kind_key="withdraw",
+            kind_label="전출생",
+            header_slots=WITHDRAW_HEADER_SLOTS,
+            required_keys=["grade", "class", "name"],
+            allow_blank_class_for_kindergarten=True,
+        )
 
-        try:
-            sr.teachers = run_structure_check(
-                file_path=teacher_file,
-                kind_key="teacher",
-                kind_label="교사",
-                header_slots=TEACHER_HEADER_SLOTS,
-                required_keys=["name"],  # position(직위)은 필수 아님
-            )
-        except Exception as e:
-            import traceback
-            log(f"[WARN] 교사 파일 헤더 분석 중 오류: {e}")
-            log(f"[DEBUG] {traceback.format_exc()}")
+        sr.teachers = run_structure_check(
+            file_path=teacher_file,
+            kind_key="teacher",
+            kind_label="교사",
+            header_slots=TEACHER_HEADER_SLOTS,
+            required_keys=["name"],  # position(직위)은 필수 아님
+        )
 
         need_roster_by_transfer = bool(transfer_file)
         need_roster_by_withdraw = bool(withdraw_file)
@@ -1150,15 +1228,21 @@ def scan_pipeline(
                     log(f"[INFO] 학생명부: {roster_path.name}")
                     _tick("명부 파일 로드")
                 except ValueError as roster_err:
-                    if need_roster_by_withdraw:
-                        # 전출 처리는 명부 파일 없이 진행 불가 → ERROR로 중단
+                    if need_roster_by_transfer or need_roster_by_withdraw:
+                        # 전입/전출 처리는 명부 파일 없이 진행 불가
+                        missing_for = []
+                        if need_roster_by_transfer:
+                            missing_for.append("전입")
+                        if need_roster_by_withdraw:
+                            missing_for.append("전출")
+                        joined = "/".join(missing_for)
                         raise ValueError(
                             "[ERROR] 학생명부 파일이 없습니다. "
-                            "전출 처리는 명부 파일 없이는 진행할 수 없습니다."
+                            f"{joined} 처리는 학생명부 파일 없이는 진행할 수 없습니다."
                         ) from roster_err
                     else:
-                        # 전입/신입생 타학년만 있는 경우 → 수동 입력으로 대체 가능
-                        log("[WARN] 학생명부를 찾지 못했습니다. 학년도 아이디 규칙을 직접 입력하거나 명부를 추가한 뒤 재스캔해 주세요.")
+                        # 신입생 타학년만 있는 경우 → 수동 입력으로 대체 가능
+                        log("[WARN] 학생명부를 찾지 못했습니다. 학년도 아이디 규칙이 필요합니다. 학년별 값을 입력한 뒤 적용해 주세요.")
                         sr.roster_path = None
                         sr.roster_info = None
                         roster_ws = None
@@ -1269,20 +1353,36 @@ def scan_pipeline(
         if sr.template_notice is None:
             missing_fields.append("안내 템플릿")
 
-        # 명부 없음은 missing_fields에 넣지 않음 — 수동 입력으로 대체 가능
-        # 단, 경고 메시지는 로그에 남김 (위에서 이미 처리)
+        if any(
+            (meta or {}).get("severity") == "error"
+            for meta in [sr.freshmen, sr.transfer_in, sr.transfer_out, sr.teachers]
+            if meta is not None
+        ):
+            missing_fields.append("입력 파일 헤더/구조 확인")
 
-        # 명부가 필요한데 없고 수동 입력도 없으면 실행 불가
+        # 명부가 필요한 경우를 둘로 나눔
+        # - 전입/전출 포함: 학생명부 필수 (수동 입력으로 대체 불가)
+        # - 신입생 타학년만 포함: 수동 입력으로 대체 가능
+        roster_required_strict = bool(need_roster_by_transfer or need_roster_by_withdraw)
+        roster_can_be_replaced_by_manual = bool(need_roster_by_freshmen and not roster_required_strict)
+
         roster_ok = (not sr.need_roster) or (sr.roster_info is not None)
         if not roster_ok:
             missing_fields.append("학생명부")
-            log("[ERROR] 학년도 아이디 규칙이 필요합니다. "
-                "명부를 추가하거나 학년도 아이디 규칙을 직접 입력한 뒤 재스캔해 주세요.")
+            if roster_required_strict:
+                if need_roster_by_transfer and need_roster_by_withdraw:
+                    log("[ERROR] 전입/전출 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
+                elif need_roster_by_transfer:
+                    log("[ERROR] 전입생 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
+                else:
+                    log("[ERROR] 전출생 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
+            else:
+                log("[ERROR] 학년도 아이디 규칙이 필요합니다. 학년별 값을 입력한 뒤 적용해 주세요.")
 
         sr.missing_fields = missing_fields
         sr.needs_open_date = bool(sr.withdraw_file)
 
-        sr.can_execute_after_input = roster_ok
+        sr.can_execute_after_input = roster_can_be_replaced_by_manual and (sr.roster_info is None)
         sr.can_execute = len(sr.missing_fields) == 0
 
         sr.ok = True

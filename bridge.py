@@ -180,6 +180,10 @@ def to_scan_payload(result) -> dict:
             "header_row":     meta.get("header_row",     1),
             "data_start_row": meta.get("data_start_row", 2),
             "row_count":      meta.get("row_count",      0),
+            "warning":        meta.get("warning",        ""),
+            "issue_rows":     list(meta.get("issue_rows", []) or []),
+            "extra_grades":   list(meta.get("extra_grades", []) or []),
+            "severity":       meta.get("severity", "ok"),
         }
 
     items = [
@@ -416,7 +420,7 @@ class DiffScanWorker(QObject):
             result = scan_diff_engine(
                 work_root=self._params["work_root"],
                 school_name=self._params["school_name"],
-                target_year=int(self._params["target_year"]),
+                target_year=self._params.get("target_year"),
                 school_start_date=self._params["school_start_date"],
                 work_date=self._params["work_date"],
                 roster_basis_date=self._params.get("roster_basis_date"),
@@ -442,7 +446,7 @@ class DiffRunWorker(QObject):
             result = run_diff_engine(
                 work_root=self._params["work_root"],
                 school_name=self._params["school_name"],
-                target_year=int(self._params["target_year"]),
+                target_year=self._params.get("target_year"),
                 school_start_date=self._params["school_start_date"],
                 work_date=self._params["work_date"],
                 roster_basis_date=self._params.get("roster_basis_date"),
@@ -462,7 +466,7 @@ class PreviewWorker(QObject):
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
-    MAX_PREVIEW_ROWS = 200
+    MAX_PREVIEW_ROWS = 300
 
     def __init__(self, params: dict):
         super().__init__()
@@ -473,6 +477,7 @@ class PreviewWorker(QObject):
         try:
             from core.common import safe_load_workbook as _safe_wb
             from pathlib import Path as _Path
+            from core.scan_main import load_preview_rows as _load_preview_rows
 
             file_path    = self._params["file_path"]
             sheet_name   = self._params.get("sheet_name", "")
@@ -487,34 +492,37 @@ class PreviewWorker(QObject):
 
                 hdr = list(ws.iter_rows(min_row=header_row, max_row=header_row, values_only=True))
                 columns = [str(c) if c is not None else "" for c in (hdr[0] if hdr else [])]
-
-                all_rows = []
-                MAX_BLANK = 20
-                blank_streak = 0
-                for row in ws.iter_rows(min_row=data_start, values_only=True):
-                    cells = [str(c) if c is not None else "" for c in row]
-                    has_any = any(c.strip() for c in cells)
-                    if not has_any:
-                        blank_streak += 1
-                        if blank_streak >= MAX_BLANK:
-                            break
-                    else:
-                        blank_streak = 0
-                    all_rows.append(cells)
-                    if len(all_rows) >= self.MAX_PREVIEW_ROWS + 1:
-                        break
-
-                total_count = len(all_rows)
-                truncated   = total_count > self.MAX_PREVIEW_ROWS
-                rows        = all_rows[:self.MAX_PREVIEW_ROWS]
                 actual_sheet = getattr(ws, "title", None) or sheet_name
             finally:
                 wb.close()
 
+            preview_result = _load_preview_rows(
+                _Path(file_path),
+                kind=kind,
+                header_row=header_row,
+                data_start_row=data_start,
+                limit=self.MAX_PREVIEW_ROWS,
+                sheet_name=actual_sheet,
+            )
+            if isinstance(preview_result, dict):
+                rows = preview_result.get("rows", []) or []
+                actual_count = int(preview_result.get("actual_count", len(rows)) or 0)
+                max_row = int(preview_result.get("max_row", 0) or 0)
+            else:
+                rows = preview_result or []
+                actual_count = len(rows)
+                max_row = 0
+
+            displayed_count = len(rows)
+            truncated   = actual_count > displayed_count
+
             self.finished.emit(json.dumps({
                 "ok": True, "kind": kind,
                 "columns": columns, "rows": rows,
-                "total_count": total_count, "truncated": truncated,
+                "displayed_count": displayed_count,
+                "actual_count": actual_count,
+                "max_row": max_row,
+                "truncated": truncated,
                 "source_file":    Path(file_path).name,
                 "sheet_name":     actual_sheet,
                 "header_row":     header_row,
@@ -910,8 +918,6 @@ class Bridge(QObject):
             return error_response("작업 폴더가 없습니다")
         if not params.get("school_name"):
             return error_response("학교가 선택되지 않았습니다")
-        if not params.get("target_year"):
-            return error_response("대상 연도가 없습니다")
         if not _validate_date(params.get("school_start_date", "")):
             return error_response("개학일 형식이 올바르지 않습니다 (YYYY-MM-DD)")
         if not _validate_date(params.get("work_date", "")):
@@ -957,8 +963,6 @@ class Bridge(QObject):
             return error_response("작업 폴더가 없습니다")
         if not params.get("school_name"):
             return error_response("학교가 선택되지 않았습니다")
-        if not params.get("target_year"):
-            return error_response("대상 연도가 없습니다")
         if self._is_diff_running:
             return error_response("이미 명단비교 실행이 진행 중입니다")
 

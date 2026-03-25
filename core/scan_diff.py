@@ -73,6 +73,7 @@ class DiffScanResult:
     missing_fields: List[str] = field(default_factory=list)
     can_execute: bool = False
 
+    roster_date_mismatch: bool = False
     roster_basis_date: Optional[date] = None
     school_start_date: Optional[date] = None
     work_date: Optional[date] = None
@@ -704,7 +705,7 @@ def build_diff_rows(
 def scan_diff_pipeline(
     work_root: Path,
     school_name: str,
-    target_year: int,
+    target_year: Optional[int],
     school_start_date: date,
     work_date: date,
     roster_basis_date: Optional[date] = None,
@@ -716,6 +717,8 @@ def scan_diff_pipeline(
 
     def log(msg: str):
         logs.append(msg)
+
+    target_year = int(target_year) if target_year is not None else int(school_start_date.year)
 
     sr = DiffScanResult(
         ok=False,
@@ -792,10 +795,15 @@ def scan_diff_pipeline(
                 detected_year = roster_year
 
             if detected_year != target_year:
-                raise ValueError(
-                    f"[ERROR] 학생명부의 학년도가 맞지 않습니다. "
-                    f"(감지: {detected_year}학년도, 대상: {target_year}학년도)"
+                log(
+                    f"[WARN] 학생명부 학년도가 비교 기준과 다릅니다. "
+                    f"(감지: {detected_year}학년도, 기준: {target_year}학년도)"
                 )
+                sr.year_int = int(detected_year)
+                sr.year_str = str(detected_year)
+            else:
+                sr.year_int = int(target_year)
+                sr.year_str = str(target_year)
 
             log(f"[OK] 올해 학생명부 감지: {roster_path.name}")
 
@@ -817,8 +825,9 @@ def scan_diff_pipeline(
                     )
 
                 if sr.roster_basis_date != work_date:
+                    sr.roster_date_mismatch = True
                     log(
-                        "[INFO] 현재 작업일과 명부 기준일이 다릅니다. "
+                        "[DEBUG] 작업일과 명부 기준일이 다릅니다. "
                         f"(작업일={work_date.isoformat()}, 명부 기준일={sr.roster_basis_date.isoformat()})"
                     )
 
@@ -857,7 +866,6 @@ def scan_diff_pipeline(
         )
 
         missing_fields: List[str] = []
-        if sr.roster_xlsx_path is None: missing_fields.append("학교전체명단 파일")
         if sr.roster_path       is None: missing_fields.append("올해 학생명부")
         if sr.compare_file      is None: missing_fields.append("재학생 명렬표")
         if sr.template_transfer_in  is None: missing_fields.append("전입생 템플릿")

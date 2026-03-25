@@ -331,7 +331,7 @@ def execute_diff_pipeline(
 def run_diff_pipeline(
     work_root: Path,
     school_name: str,
-    target_year: int,
+    target_year: Optional[int],
     school_start_date: date,
     work_date: date,
     roster_basis_date: Optional[date] = None,
@@ -344,6 +344,7 @@ def run_diff_pipeline(
 
     work_root   = Path(work_root).resolve()
     school_name = (school_name or "").strip()
+    target_year = int(target_year) if target_year is not None else int(school_start_date.year)
 
     if not school_name:
         log("[ERROR] 학교명을 입력해 주세요.")

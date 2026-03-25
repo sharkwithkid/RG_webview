@@ -430,14 +430,12 @@ const Panel = (() => {
   function applyGrade() {
     const overrides = getGradeOverrides();
     if (!Object.keys(overrides).length) {
-      toast('입력된 학년도 값이 없습니다.', 'info');
       return;
     }
-    const lines = Object.entries(overrides)
-      .sort((a, b) => a[0] - b[0])
-      .map(([g, y]) => `${g}학년 → ${y}`);
 
-    toast('학년도 아이디 규칙이 적용됩니다:\n' + lines.join('\n'), 'ok', 4000);
+    if (typeof Scan !== 'undefined' && Scan.applyManualGradeReady) {
+      Scan.applyManualGradeReady(overrides);
+    }
   }
 
   // ──────────────────────────────────────────────

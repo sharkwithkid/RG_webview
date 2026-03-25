@@ -28,6 +28,7 @@ const Run = (() => {
   let _pendingSheets = [];  // 순차 로드 대기 시트 큐
   let _dupOnly      = false;
   let _lastRunData  = null;
+  let _previewMeta  = {}; // { sheetName: { actual_count, max_row, displayed_count } }
   let _noticeDupRows = new Set();         // 학생 안내문 시트 동명이인 행 번호
   let _noticeTeacherDupRows = new Set(); // 교사 안내문 시트 동명이인 행 번호
 
@@ -87,26 +88,40 @@ const Run = (() => {
 
     // 경고 / 완료 뱃지
     const warnLogs = (data.logs || []).filter(l => l.level === 'warn');
-    if (warnLogs.length) {
+
+    // 실제 확인 필요 건수 (자동 제외는 경고에서 제외)
+    const realHold = (data.transfer_in_hold || 0) + (data.transfer_out_hold || 0)
+                   - (data.transfer_out_auto_skip || 0);
+    const holdWarn = _el('run-hold-warn');
+    const hasRunWarn = warnLogs.length > 0;
+    const hasHoldWarn = realHold > 0;
+
+    if (hasRunWarn || hasHoldWarn) {
       _setBadge('warn', '경고');
-      _el('run-info').textContent = `실행 완료 — 경고 ${warnLogs.length}건: ${warnLogs[0].message}`;
+
+      let msg = '';
+      if (hasRunWarn && hasHoldWarn) {
+        msg = `실행 중 경고가 발생했고 확인 필요 건이 ${realHold}건 있습니다.`;
+      } else if (hasRunWarn) {
+        msg = '실행 중 경고가 발생했습니다. 실행 로그를 확인해 주세요.';
+      } else {
+        msg = `확인 필요 건이 ${realHold}건 있습니다.`;
+      }
+
+      _el('run-info').textContent = msg;
+      _renderHoldWarnCard({
+        warnLogs,
+        transferInHold: Number(data.transfer_in_hold || 0),
+        transferOutHold: Number(data.transfer_out_hold || 0),
+        transferOutAutoSkip: Number(data.transfer_out_auto_skip || 0),
+        realHold,
+      });
+      App.setStepState(3, 'warn');
     } else {
       _setBadge('ok', '실행 완료');
       _el('run-info').textContent = '실행 완료';
-    }
-
-    // 보류 경고
-    const realHold = (data.transfer_in_hold || 0) + (data.transfer_out_hold || 0)
-                   - (data.transfer_out_auto_skip || 0);
-    const autoSkip = data.transfer_out_auto_skip || 0;
-    const holdWarn = _el('run-hold-warn');
-    if (realHold > 0) {
-      let msg = `보류 ${realHold}건이 있습니다. 생성된 파일의 보류 시트를 확인해 주세요.`;
-      if (autoSkip > 0) msg += ` (자동제외 ${autoSkip}건 별도)`;
-      holdWarn.textContent   = msg;
-      holdWarn.style.display = '';
-    } else {
       holdWarn.style.display = 'none';
+      App.setStepState(3, 'done');
     }
 
     // 상태 요약 그리드
@@ -195,6 +210,34 @@ const Run = (() => {
     toast('실행 오류 — 실행 로그 보기에서 자세한 내용을 확인하세요.', 'err');
   }
 
+
+  function _renderHoldWarnCard({ warnLogs = [], transferInHold = 0, transferOutHold = 0, transferOutAutoSkip = 0, realHold = 0 }) {
+    const holdWarn = _el('run-hold-warn');
+    if (!holdWarn) return;
+
+    const withdrawReview = Math.max(0, transferOutHold - transferOutAutoSkip);
+    const lines = [];
+
+    if (warnLogs.length > 0) {
+      lines.push('<div class="warn-line">실행 중 경고가 발생했습니다. 실행 로그를 확인해 주세요.</div>');
+    }
+    if (withdrawReview > 0) {
+      lines.push(`<div class="warn-line"><strong>퇴원 보류 ${withdrawReview}건</strong> — 동명이인 또는 명부 확인이 필요합니다.</div>`);
+    }
+    if (transferInHold > 0) {
+      lines.push(`<div class="warn-line">전입 보류 ${transferInHold}건이 있습니다.</div>`);
+    }
+    if (transferOutAutoSkip > 0) {
+      lines.push(`<div class="warn-line">자동 제외 ${transferOutAutoSkip}건은 보류 건수에서 제외했습니다.</div>`);
+    }
+    if (!lines.length && realHold > 0) {
+      lines.push(`<div class="warn-line">확인 필요 건이 ${realHold}건 있습니다.</div>`);
+    }
+
+    holdWarn.innerHTML = lines.join('');
+    holdWarn.style.display = lines.length ? '' : 'none';
+  }
+
   // ──────────────────────────────────────────────
   // 상태 요약 그리드
   // ──────────────────────────────────────────────
@@ -255,6 +298,7 @@ const Run = (() => {
     if (!filePath) return;
     _currentFile  = filePath;
     _sheetData    = {};
+    _previewMeta   = {};
     _currentSheet = null;
 
     // 시트탭 초기화
@@ -298,6 +342,11 @@ const Run = (() => {
   function onPreviewLoaded(payload) {
     const { sheet_name, columns, rows, row_colors } = payload;
     _sheetData[sheet_name] = { headers: columns, rows, rowColors: row_colors || [] };
+    _previewMeta[sheet_name] = {
+      actual_count: Number.isFinite(payload.actual_count) ? payload.actual_count : rows.length,
+      max_row: Number.isFinite(payload.max_row) ? payload.max_row : null,
+      displayed_count: Number.isFinite(payload.displayed_count) ? payload.displayed_count : rows.length,
+    };
 
     // 시트탭 추가
     const tabs = _el('sheet-tabs');
@@ -400,8 +449,11 @@ const Run = (() => {
       return `<tr class="${cls}">${row.map(v => `<td>${_esc(v)}</td>`).join('')}</tr>`;
     }).join('');
 
+    const meta = _previewMeta[_currentSheet] || {};
+    const totalCount = Number.isFinite(meta.actual_count) ? meta.actual_count : filtered.length;
+    const maxRow = Number.isFinite(meta.max_row) ? meta.max_row : null;
     _el('run-preview-info').textContent =
-      `시트: ${_currentSheet} | 행 수: ${filtered.length}`;
+      `시트: ${_currentSheet} | 실제 ${totalCount}행${maxRow != null ? ` | 최대 ${maxRow}행` : ''}`;
   }
 
   function filterTable() { _renderRunTable(); }
@@ -442,6 +494,7 @@ const Run = (() => {
     _pendingSheets = [];
     _dupOnly       = false;
     _lastRunData   = null;
+    _previewMeta    = {};
     _noticeDupRows        = new Set();
     _noticeTeacherDupRows = new Set();
 
@@ -464,6 +517,56 @@ const Run = (() => {
     ['sum-school','sum-year','sum-freshmen','sum-teacher',
      'sum-transfer','sum-withdraw','sum-transfer-check','sum-withdraw-check']
       .forEach(id => { const el = _el(id); if (el) el.textContent = '-'; });
+  }
+
+  function _handleDiffRosterDateMismatch(basisDate) {
+    const workDate = state.work_date;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'confirm-modal-backdrop';
+
+    backdrop.innerHTML = `
+      <div class="confirm-modal">
+        <div class="confirm-modal-title">명부 기준일 설정</div>
+        <div class="confirm-modal-body">
+          학생명부 마지막 수정일과 작업일이 다릅니다.<br>
+          어느 날짜를 명부 기준일로 사용할까요?
+        </div>
+        <div class="confirm-modal-options">
+          <label class="confirm-modal-option selected">
+            <input type="radio" name="diff-cm-date" value="basis" checked>
+            <div>
+              <div class="confirm-modal-option-label">수정일 사용 — ${basisDate}</div>
+              <div class="confirm-modal-option-desc">명부 파일의 마지막 수정일을 기준으로 합니다.</div>
+            </div>
+          </label>
+          <label class="confirm-modal-option">
+            <input type="radio" name="diff-cm-date" value="work">
+            <div>
+              <div class="confirm-modal-option-label">작업일 사용 — ${workDate}</div>
+              <div class="confirm-modal-option-desc">오늘 작업일을 기준으로 진행합니다.</div>
+            </div>
+          </label>
+        </div>
+        <div class="confirm-modal-footer">
+          <button class="btn-primary" id="diff-cm-date-confirm" style="height:36px;padding:0 20px">확인</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(backdrop);
+
+    backdrop.querySelectorAll('input[type="radio"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        backdrop.querySelectorAll('.confirm-modal-option').forEach(opt => opt.classList.remove('selected'));
+        radio.closest('.confirm-modal-option').classList.add('selected');
+      });
+    });
+
+    backdrop.querySelector('#diff-cm-date-confirm').addEventListener('click', () => {
+      const selected = backdrop.querySelector('input[name="diff-cm-date"]:checked')?.value;
+      backdrop.remove();
+      _runWithBasisDate(selected === 'work' ? workDate : basisDate);
+    });
   }
 
   function _setBadge(type, text) {
@@ -497,12 +600,34 @@ const Diff = (() => {
   // 실행 시작
   // ──────────────────────────────────────────────
   async function start() {
-    if (state.isDiffRunning) return;
+    if (state.isDiffScanning || state.isDiffRunning) return;
     if (!state.work_root)       { toast('작업 폴더가 설정되지 않았습니다.', 'warn'); return; }
     if (!state.selected_school) { toast('학교를 먼저 선택해 주세요.', 'warn'); return; }
 
-    const targetYear = parseInt(_el('diff-target-year')?.value || new Date().getFullYear(), 10);
+    state.isDiffScanning = true;
+    _el('btn-run-diff').disabled = true;
+    _setBadge('running', '사전 점검 중');
+    _el('diff-result-info').textContent = '사전 점검 중...';
 
+    const params = {
+      work_root:         state.work_root,
+      school_name:       state.selected_school,
+      school_start_date: state.school_start_date,
+      work_date:         state.work_date,
+      roster_xlsx:       state.roster_log_path || '',
+      col_map:           state.roster_col_map  || {},
+    };
+
+    const res = JSON.parse(await bridge.startScanDiff(JSON.stringify(params)));
+    if (!res.ok) {
+      state.isDiffScanning = false;
+      _el('btn-run-diff').disabled = false;
+      _setBadge('err', '사전 점검 실패');
+      _el('diff-result-info').textContent = res.error || '명단 비교 사전 점검 시작 실패';
+    }
+  }
+
+  async function _runWithBasisDate(basisDate) {
     state.isDiffRunning = true;
     _el('btn-run-diff').disabled = true;
     _setBadge('running', '실행 중');
@@ -511,9 +636,9 @@ const Diff = (() => {
     const params = {
       work_root:         state.work_root,
       school_name:       state.selected_school,
-      target_year:       targetYear,
       school_start_date: state.school_start_date,
       work_date:         state.work_date,
+      roster_basis_date: basisDate || '',
       roster_xlsx:       state.roster_log_path || '',
       col_map:           state.roster_col_map  || {},
     };
@@ -531,10 +656,34 @@ const Diff = (() => {
   // Diff Scan 완료 (사전 점검 결과 — 현재 bridge에서 별도 시그널 없음)
   // ──────────────────────────────────────────────
   function onScanFinished(data) {
-    // 향후 사전 점검 결과 UI 표시 시 사용
+    if (!data.ok) {
+      _setBadge('err', '사전 점검 실패');
+      const err = (data.logs || []).find(l => l.level === 'error');
+      _el('diff-result-info').textContent = err ? err.message : '사전 점검 실패';
+      _el('btn-run-diff').disabled = false;
+      return;
+    }
+
+    const hasError = (data.logs || []).some(l => l.level === 'error');
+    if (hasError || data.can_execute === false) {
+      _setBadge('err', '사전 점검 실패');
+      const err = (data.logs || []).find(l => l.level === 'error');
+      _el('diff-result-info').textContent = err ? err.message : '사전 점검 실패';
+      _el('btn-run-diff').disabled = false;
+      return;
+    }
+
+    if (data.roster_date_mismatch && data.roster_basis_date) {
+      _handleDiffRosterDateMismatch(data.roster_basis_date);
+      return;
+    }
+
+    _runWithBasisDate(data.roster_basis_date || '');
   }
 
   function onScanFailed(error) {
+    _el('btn-run-diff').disabled = false;
+    _setBadge('err', '사전 점검 실패');
     _el('diff-result-info').textContent = `사전 점검 실패: ${error}`;
   }
 
@@ -596,9 +745,6 @@ const Diff = (() => {
     const filesEl = _el('diff-output-files');
     if (filesEl) filesEl.innerHTML = '';
     _el('btn-run-diff').disabled = true;
-    // 연도는 올해로 복원
-    const yearEl = _el('diff-target-year');
-    if (yearEl) yearEl.value = new Date().getFullYear();
   }
 
   function _setBadge(type, text) {

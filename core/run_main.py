@@ -168,6 +168,7 @@ def build_freshmen_prefix_map(
     freshmen_rows: List[Dict[str, Any]],
     input_year: int,
     roster_info: Optional[Dict[str, Any]] = None,
+    manual_grade_year_map: Optional[Dict[int, int]] = None,
 ) -> Dict[int, int]:
     grades = sorted({
         int(r["grade"])
@@ -178,14 +179,23 @@ def build_freshmen_prefix_map(
     if not grades:
         return {}
 
+    manual_grade_year_map = {
+        int(k): int(v)
+        for k, v in (manual_grade_year_map or {}).items()
+        if str(k).strip() != "" and str(v).strip() != ""
+    }
+
     # 1) 기본값: 입학년도 기준 역산
     result: Dict[int, int] = {
         g: input_year - (g - 1)
         for g in grades
     }
 
-    # 2) 명부 정보 없으면 기본값 그대로
+    # 2) 명부 정보 없으면 기본값 + 수동 입력값만 반영
     if not roster_info:
+        for g, y in manual_grade_year_map.items():
+            if g in result:
+                result[g] = y
         return result
 
     prefix_mode = (
@@ -230,6 +240,11 @@ def build_freshmen_prefix_map(
             anchor_pref = direct_current_grade_map[anchor_g]
             result[g] = anchor_pref + (anchor_g - g)
 
+    # 6) 수동 입력값이 있으면 최우선 적용
+    for g, y in manual_grade_year_map.items():
+        if g in result:
+            result[g] = y
+
     return result
 
 
@@ -240,6 +255,7 @@ def read_freshmen_rows(
     data_start_row: Optional[int] = None,
     roster_info: Optional[Dict[str, Any]] = None,
     school_name: str = "",
+    manual_grade_year_map: Optional[Dict[int, int]] = None,
 ) -> List[Dict]:
 
     ensure_xlsx_only(xlsx_path)
@@ -343,6 +359,7 @@ def read_freshmen_rows(
             out,
             input_year=input_year,
             roster_info=roster_info,
+            manual_grade_year_map=manual_grade_year_map,
         )
 
         for r in out:
@@ -652,9 +669,15 @@ def build_transfer_ids(
     roster_info: Dict,
     input_year: int,
     freshmen_rows: Optional[List[Dict]] = None,
+    manual_grade_year_map: Optional[Dict[int, int]] = None,
 ) -> Tuple[List[Dict], List[Dict], Dict[int, int]]:
 
     freshmen_rows = freshmen_rows or []
+    manual_grade_year_map = {
+        int(k): int(v)
+        for k, v in (manual_grade_year_map or {}).items()
+        if str(k).strip() != "" and str(v).strip() != ""
+    }
 
     resolved = resolve_transfer_name_conflicts(
         transfer_rows=transfer_rows,
@@ -665,6 +688,7 @@ def build_transfer_ids(
         freshmen_rows,
         input_year=input_year,
         roster_info=roster_info,
+        manual_grade_year_map=manual_grade_year_map,
     )
 
     shift = (
@@ -687,6 +711,18 @@ def build_transfer_ids(
         name_out = rr["name_out"]
         dup_with_roster = rr["dup_with_roster"]
         needs_highlight = rr["needs_highlight"]
+
+        if g_cur in manual_grade_year_map:
+            pref = manual_grade_year_map[g_cur]
+            final_prefix_by_current_grade[g_cur] = pref
+            done.append({
+                **tr,
+                "name": name_out,
+                "id": f"{pref}{name_out}",
+                "dup_with_roster": dup_with_roster,
+                "needs_highlight": needs_highlight,
+            })
+            continue
 
         if g_cur in freshmen_prefix_map:
             pref = freshmen_prefix_map[g_cur]
@@ -729,6 +765,48 @@ def build_transfer_ids(
     hold.sort(key=lambda r: (r["grade"], _safe_int(r["class"]), _safe_int(r["number"]), r["name"]))
 
     return done, hold, final_prefix_by_current_grade
+
+
+def dedup_transfer_rows_against_freshmen(
+    freshmen_rows: List[Dict],
+    transfer_done_rows: List[Dict],
+) -> Tuple[List[Dict], int]:
+    """
+    신입생 명단과 전입 완료 명단을 교차 비교해
+    학년/반/이름이 완전히 동일한 전입생을 자동 제외한다.
+    """
+    if not freshmen_rows or not transfer_done_rows:
+        return transfer_done_rows, 0
+
+    def _norm_class(v: Any) -> str:
+        if v is None:
+            return ""
+        return re.sub(r"\s+", "", str(v).strip())
+
+    freshmen_keys = {
+        (
+            int(r.get("grade", 0) or 0),
+            _norm_class(r.get("class", "")),
+            normalize_name_key(r.get("name", "")),
+        )
+        for r in freshmen_rows
+        if normalize_name_key(r.get("name", ""))
+    }
+
+    kept: List[Dict] = []
+    skipped = 0
+    for row in transfer_done_rows:
+        key = (
+            int(row.get("grade", 0) or 0),
+            _norm_class(row.get("class", "")),
+            normalize_name_key(row.get("name", "")),
+        )
+        if key in freshmen_keys:
+            skipped += 1
+            continue
+        kept.append(row)
+
+    return kept, skipped
 
 
 # =========================
@@ -1564,28 +1642,18 @@ def execute_pipeline(
     layout_overrides = layout_overrides or {}
 
     # grade_year_map 오버라이드 — UI에서 수동 설정한 학년별 학년도
-    # {현재학년: 학년도} → prefix_mode_by_roster_grade {학년: prefix4} 로 변환
-    grade_year_map: Dict[int, int] = layout_overrides.get("grade_year_map", {})
-    if grade_year_map:
-        manual_prefix_mode = {g: y for g, y in grade_year_map.items()}
-        if scan.roster_info:
-            ri = scan.roster_info
-            existing = dict(
-                ri.get("prefix_mode_by_roster_grade", {})
-                if isinstance(ri, dict)
-                else getattr(ri, "prefix_mode_by_roster_grade", {}) or {}
-            )
-            existing.update(manual_prefix_mode)
-            if isinstance(ri, dict):
-                ri["prefix_mode_by_roster_grade"] = existing
-            else:
-                ri.prefix_mode_by_roster_grade = existing
-        else:
-            scan.roster_info = RosterInfo(
-                roster_time="manual",
-                ref_grade_shift=0,
-                prefix_mode_by_roster_grade=manual_prefix_mode,
-            )
+    # 우선순위: 수동 입력 > 명부 최빈값
+    grade_year_map: Dict[int, int] = {
+        int(k): int(v)
+        for k, v in (layout_overrides.get("grade_year_map", {}) or {}).items()
+        if str(k).strip() != "" and str(v).strip() != ""
+    }
+    if grade_year_map and not scan.roster_info:
+        scan.roster_info = RosterInfo(
+            roster_time="manual",
+            ref_grade_shift=0,
+            prefix_mode_by_roster_grade={},
+        )
 
     try:
         if not scan.ok:
@@ -1615,7 +1683,8 @@ def execute_pipeline(
             header_row=h,
             data_start_row=s,
             roster_info=scan.roster_info,
-            school_name=scan.school_name, 
+            school_name=scan.school_name,
+                manual_grade_year_map=grade_year_map,
             )
             
             log(f"[OK] 신입생 {len(freshmen_rows)}명 로드")
@@ -1660,7 +1729,7 @@ def execute_pipeline(
         transfer_hold_rows: List[Dict] = []
         if transfer_rows:
             if not scan.roster_info:
-                raise ValueError("[ERROR] 전입생 처리에 필요한 학생명부 정보가 없습니다.\n학년도 아이디 규칙을 직접 입력하거나 학생명부를 준비해 주세요.")
+                raise ValueError("[ERROR] 전입생 처리를 위해 학생명부가 필요합니다. 학생명부를 준비해 주세요.")
             transfer_done_rows, transfer_hold_rows, _ = build_transfer_ids(
                 transfer_rows=transfer_rows, roster_info=scan.roster_info,
                 input_year=year_int, freshmen_rows=freshmen_rows,
@@ -1668,6 +1737,17 @@ def execute_pipeline(
             log(f"[OK] 전입 ID 매칭 완료 | 완료 {len(transfer_done_rows)}명, 보류 {len(transfer_hold_rows)}명")
         else:
             log("[INFO] 전입생 없음 → 전입 ID 생성 스킵")
+
+        transfer_dedup_skipped = 0
+        if freshmen_rows and transfer_done_rows:
+            transfer_done_rows, transfer_dedup_skipped = dedup_transfer_rows_against_freshmen(
+                freshmen_rows=freshmen_rows,
+                transfer_done_rows=transfer_done_rows,
+            )
+            if transfer_dedup_skipped:
+                log(
+                    f"[WARN] 신입생 명단과 학년/반/이름이 동일한 전입생 {transfer_dedup_skipped}명은 자동 제외했습니다."
+                )
 
         # 전출 퇴원 리스트
         withdraw_done_rows: List[Dict] = []

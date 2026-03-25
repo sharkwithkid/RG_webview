@@ -42,6 +42,10 @@ const state = {
   currentPage:        'setup',
   currentTab:         'scan',
 
+  currentPage:        'setup',
+  currentTab:         'scan',
+  currentMode:        'main',
+
   pending_roster_log: false,
 };
 
@@ -398,6 +402,7 @@ const App = {
     _highlightStep(1);  // 스텝1(학교 선택) active
 
     // 모드 버튼만 갱신 (goTab 미호출이므로 수동 처리)
+    state.currentMode = 'main';
     _el('btn-mode-main').classList.add('active');
     _el('btn-mode-diff').classList.remove('active');
 
@@ -407,6 +412,17 @@ const App = {
   async onSchoolSelected(schoolName) {
     state.selected_school = schoolName;
     state.current_seq_no  = null;
+
+    if (state.work_root) {
+      try {
+        const inspRes = JSON.parse(await bridge.inspectWorkRoot(state.work_root));
+        if (inspRes.ok && inspRes.data?.ok) {
+          state.school_folders = inspRes.data.school_folders || [];
+        }
+      } catch (e) {
+        console.warn('inspectWorkRoot refresh failed:', e);
+      }
+    }
 
     const domRes = JSON.parse(
       await bridge.getSchoolDomain(
@@ -437,11 +453,14 @@ const App = {
       if (countStr) history_text += `\n${countStr}`;
     }
 
-    // 학교 폴더명에서 표시 이름 추출 — 맥 NFD 정규화 대응
-    const normalize = s => s.normalize ? s.normalize('NFC') : s;
-    const folderName = state.school_folders.find(f =>
-      normalize(f).includes(normalize(schoolName))
-    ) || schoolName;
+    // 학교 폴더명에서 표시 이름 추출 — 새 학교 시작 이후에도 실제 폴더명이 안정적으로 뜨게 보강
+    const normalize = s => (s && s.normalize ? s.normalize('NFC') : (s || ''));
+    const compact = s => normalize(s).replace(/[\s._-]+/g, '');
+    const schoolNameCompact = compact(schoolName);
+    const folderName = state.school_folders.find(f => {
+      const nf = normalize(f);
+      return nf.includes(normalize(schoolName)) || compact(nf).includes(schoolNameCompact);
+    }) || schoolName;
 
     Panel.updateSchoolInfo({ school_name: folderName, history_text });
     Panel.setGradeCount(schoolName);
@@ -450,19 +469,25 @@ const App = {
     App.setStepState(2, 'active');
     for (let i = 3; i <= 4; i++) App.setStepState(i, 'idle');
 
-    _el('btn-scan').disabled     = false;
-    _el('btn-run').disabled      = true;
-    _el('btn-run-diff').disabled = false;
+    _el('btn-scan').disabled = false;
+    _el('btn-run').disabled  = true;
 
     // 학교 선택 시점: 명단 파일이 있으면 파일 열기 버튼 바로 활성화
     // (전체 명단 반영은 실행 완료 후에만 활성화)
     Panel.setRosterBtns(false, !!state.roster_log_path);
 
-     _setSchoolInputHighlight(false);
+    _setSchoolInputHighlight(false);
 
-    App.goTab('scan');
-    Scan.reset();
-  },
+    if (state.currentMode === 'diff') {
+      App.goTab('diff');
+      Diff.reset();
+      _el('btn-run-diff').disabled = false;
+    } else {
+      _el('btn-run-diff').disabled = true;
+      App.goTab('scan');
+      Scan.reset();
+    }
+    },
 
   goTab(tab) {
     state.currentTab = tab;
@@ -496,9 +521,9 @@ const App = {
       }
       App.goTab('run');
     } else if (idx === 4) {
-      // 안내문 탭: 실행 완료 후에만 이동
-      if (_el('btn-run').disabled) {
-        toast('먼저 실헹을 완료해 주세요.', 'warn');
+      // 안내문 탭: 학교가 선택돼 있어야 이동 가능
+      if (!state.selected_school) {
+        toast('먼저 학교를 선택하고 적용하세요.', 'warn');
         return;
       }
       App.goTab('notice');
@@ -507,9 +532,16 @@ const App = {
 
   setMode(mode) {
     const isMain = mode === 'main';
+    state.currentMode = isMain ? 'main' : 'diff';
+
     _el('btn-mode-main').classList.toggle('active', isMain);
     _el('btn-mode-diff').classList.toggle('active', !isMain);
-    App.goTab(isMain ? (state.currentTab === 'diff' ? 'scan' : state.currentTab) : 'diff');
+
+    App.goTab(
+      isMain
+        ? (state.currentTab === 'diff' ? 'scan' : state.currentTab)
+        : 'diff'
+    );
   },
 
   // 플로팅 다음 버튼 상태 제어
