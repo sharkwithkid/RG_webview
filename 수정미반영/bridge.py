@@ -515,16 +515,33 @@ class PreviewWorker(QObject):
                 hdr = list(ws.iter_rows(min_row=header_row, max_row=header_row, values_only=True))
                 header_values = [str(c) if c is not None else "" for c in (hdr[0] if hdr else [])]
 
+                def _is_effectively_empty(vals, headers):
+                    trimmed = [str(v).strip() for v in vals]
+                    if not any(trimmed):
+                        return True
+                    nonempty = [i for i, v in enumerate(trimmed) if v]
+                    if len(nonempty) != 1:
+                        return False
+                    only_idx = nonempty[0]
+                    header = str(headers[only_idx] if only_idx < len(headers) else '').strip().lower()
+                    return header in {'no', 'no.', '번호'}
+
                 max_cols = len(header_values)
                 rows = []
                 sheet_max_row = int(getattr(ws, 'max_row', 0) or 0)
-                end_row = min(sheet_max_row, start_row + self.MAX_PREVIEW_ROWS - 1) if sheet_max_row > 0 else (start_row + self.MAX_PREVIEW_ROWS - 1)
+                actual_count = 0
+                displayed_count = 0
                 max_row = 0
-                for row_idx, row in enumerate(ws.iter_rows(min_row=start_row, max_row=end_row, values_only=True), start=start_row):
+                for row_idx, row in enumerate(ws.iter_rows(min_row=start_row, values_only=True), start=start_row):
                     vals = ["" if v is None else str(v) for v in row]
                     max_cols = max(max_cols, len(vals))
-                    rows.append(vals)
+                    if _is_effectively_empty(vals, header_values):
+                        continue
+                    actual_count += 1
                     max_row = row_idx
+                    if displayed_count < self.MAX_PREVIEW_ROWS:
+                        rows.append(vals)
+                        displayed_count += 1
 
                 columns = header_values if header_values else [""] * max_cols
                 if len(columns) < max_cols:
@@ -536,11 +553,11 @@ class PreviewWorker(QObject):
             self.finished.emit(json.dumps({
                 "ok": True, "kind": kind,
                 "columns": columns, "rows": rows,
-                "displayed_count": len(rows),
-                "actual_count": len(rows),
-                "total_count": len(rows),
+                "displayed_count": displayed_count,
+                "actual_count": actual_count,
+                "total_count": actual_count,
                 "max_row": max_row,
-                "truncated": bool(sheet_max_row > 0 and end_row < sheet_max_row),
+                "truncated": bool(actual_count > displayed_count),
                 "source_file": Path(file_path).name,
                 "sheet_name": actual_sheet,
                 "header_row": header_row,

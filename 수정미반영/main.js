@@ -517,13 +517,13 @@ const App = {
     } else if (idx === 1) {
       App.resetToSchoolSelect();
     } else if (idx === 2) {
-      // 스캔 탭: 학교가 선택돼 있어야 이동 가능
       if (!state.selected_school) {
         toast('먼저 학교를 선택하고 적용하세요.', 'warn');
         return;
       }
-      App.goTab('scan');
+      App.goTab(state.currentMode === 'diff' ? 'diff' : 'scan');
     } else if (idx === 3) {
+      if (state.currentMode === 'diff') return;
       // 실행 탭: 스캔 완료 + 체크박스 모두 확인 필요
       const scanCheck = _checkScanReady();
       if (!scanCheck.ok) {
@@ -532,7 +532,7 @@ const App = {
       }
       App.goTab('run');
     } else if (idx === 4) {
-      // 안내문 탭: 학교가 선택돼 있어야 이동 가능
+      if (state.currentMode === 'diff') return;
       if (!state.selected_school) {
         toast('먼저 학교를 선택하고 적용하세요.', 'warn');
         return;
@@ -671,6 +671,7 @@ function _resetSharedState() {
   Panel.reset();
   Scan.reset();
   Run.reset();
+  if (typeof Diff !== 'undefined' && Diff.reset) Diff.reset();
   Notice.clear();
   App.setFloatingNext(false, null);
 

@@ -411,6 +411,59 @@ HANGUL_RE = re.compile(r"[가-힣]")
 EN_RE     = re.compile(r"[A-Za-z]")
 
 
+def normalize_compare_name(raw: Any) -> str:
+    """
+    비교(diff) 모드용 이름 표시값 정리.
+    - 원문을 최대한 유지한다.
+    - 앞뒤 공백 제거
+    - 중간 연속 공백만 1칸으로 정리
+    - 한글/영문/대문자 suffix는 그대로 둔다.
+    """
+    if raw is None:
+        return ""
+    s = str(raw).replace("　", " ").replace(" ", " ")
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def normalize_compare_name_key(raw: Any) -> str:
+    """
+    비교(diff) 모드용 이름 키.
+    - 원문 기반 비교를 우선한다.
+    - 공백만 제거하고 나머지 문자는 유지한다.
+    - 영문은 casefold 처리만 하여 대소문자 차이만 무시한다.
+    """
+    s = normalize_compare_name(raw)
+    if not s:
+        return ""
+    return re.sub(r"\s+", "", s).casefold()
+
+
+def get_compare_name_warnings(raw: Any) -> List[str]:
+    """
+    비교(diff) 모드용 이름 형식 경고.
+    자동 수정은 하지 않고, 원문 기준 비교 후 사용자에게 확인만 요청한다.
+    """
+    s = normalize_compare_name(raw)
+    if not s:
+        return []
+
+    warnings: List[str] = []
+    has_ko = bool(HANGUL_RE.search(s))
+    has_en = bool(EN_RE.search(s))
+
+    if has_ko and has_en:
+        warnings.append("이름 형식 확인 필요 — 한글과 영문이 함께 있습니다. 원문 기준으로 비교합니다.")
+
+    if re.search(r"\s", s):
+        warnings.append("이름 형식 확인 필요 — 이름에 공백이 있습니다. 공백만 정리해 비교합니다.")
+
+    if has_ko and re.search(r"[A-Z]+$", s):
+        warnings.append("이름 형식 확인 필요 — 이름 끝 영문 구분자가 있습니다. 원문 기준으로 비교합니다.")
+
+    return warnings
+
+
 def normalize_name(raw: Any) -> str:
     """
     학생/교사 이름을 표시용으로 정규화한다.

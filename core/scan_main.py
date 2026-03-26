@@ -492,9 +492,17 @@ def _sheet_preview_rows(
     if last_data_row < data_start_row:
         return []
 
-    for r, row_vals, _ in collected:
+    def _is_blank_or_seq_only(row_vals: List[str]) -> bool:
+        nonempty = [i for i, v in enumerate(row_vals) if str(v).strip()]
+        return (not nonempty) or nonempty == [0]
+
+    for r, row_vals, has_required in collected:
         if r > last_data_row:
             break
+        # 미리보기에서는 필수열이 비어 있고 No(첫 열)만 있는 행, 완전 빈 행은 숨긴다.
+        # 종료 판단은 기존처럼 required_cols 기준 10행 연속 공백을 유지한다.
+        if (not has_required) and _is_blank_or_seq_only(row_vals):
+            continue
         rows.append(row_vals)
         if len(rows) >= limit:
             break
@@ -871,14 +879,21 @@ def load_preview_rows(
                 '전출생': 'transfer_out',
                 '교직원': 'teachers',
                 '교사': 'teachers',
+                '재학생 명단': 'compare',
             }
             norm_kind = kind_alias.get(kind, kind)
+
+            compare_slots = {}
+            if norm_kind == 'compare':
+                from core.scan_diff import COMPARE_HEADER_SLOTS as _COMPARE_HEADER_SLOTS
+                compare_slots = _COMPARE_HEADER_SLOTS
 
             kind_slots = {
                 'freshmen': (FRESHMEN_HEADER_SLOTS, ['grade', 'class', 'name']),
                 'transfer_in': (TRANSFER_HEADER_SLOTS, ['grade', 'class', 'name']),
                 'transfer_out': (WITHDRAW_HEADER_SLOTS, ['grade', 'class', 'name']),
                 'teachers': (TEACHER_HEADER_SLOTS, ['name']),
+                'compare': (compare_slots, ['grade', 'class', 'name']),
             }
             header_slots, required_keys = kind_slots.get(norm_kind, ({}, []))
             required_cols: Dict[str, int] = {}

@@ -30,7 +30,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.utils import text_contains
+from core.utils import text_contains, normalize_text
 from core.common import (
     get_project_dirs,
     ensure_xlsx_only,
@@ -39,8 +39,12 @@ from core.common import (
     _detect_header_row_generic,
     normalize_name,
     normalize_name_key,
+    normalize_compare_name,
+    normalize_compare_name_key,
+    get_compare_name_warnings,
     load_roster_sheet,
     parse_roster_year_from_filename,
+    parse_class_str,
 )
 
 
@@ -110,15 +114,82 @@ COMPARE_HEADER_SLOTS = {
 TARGET_GRADES = set(range(2, 7))
 
 ROSTER_HEADER_SLOTS = {
-    "grade": ["학년"],
-    "class": ["반", "학급"],
-    "name": ["이름", "성명", "학생이름"],
+    "current_class": ["현재반"],
+    "previous_class": ["이전반"],
+    "name": ["학생이름", "이름", "성명"],
+    "student_id": ["아이디", "ID"],
 }
 
 
 # =========================
 # L1. Compare input / layout detection
 # =========================
+EXAMPLE_NAMES_RAW = ["홍길동", "이순신", "유관순", "임꺽정"]
+EXAMPLE_NAMES_NORM = {normalize_text(n) for n in EXAMPLE_NAMES_RAW}
+EXAMPLE_KEYWORDS = ["예시"]
+
+
+def _row_is_empty(ws, row: int, max_col: Optional[int] = None) -> bool:
+    if max_col is None:
+        max_col = ws.max_column or 1
+    for c in range(1, max_col + 1):
+        v = ws.cell(row=row, column=c).value
+        if v is not None and str(v).strip() != "":
+            return False
+    return True
+
+
+def _row_has_example_keyword(ws, row: int, max_col: Optional[int] = None) -> bool:
+    if max_col is None:
+        max_col = ws.max_column or 1
+    for c in range(1, max_col + 1):
+        v = ws.cell(row=row, column=c).value
+        if v is None:
+            continue
+        s = normalize_text(str(v))
+        if not s:
+            continue
+        for kw in EXAMPLE_KEYWORDS:
+            if kw in s:
+                return True
+    return False
+
+
+def _cell_is_example_name(value: Any) -> bool:
+    if value is None:
+        return False
+    s = normalize_text(str(value))
+    return bool(s) and s in EXAMPLE_NAMES_NORM
+
+
+def detect_example_and_data_start(ws, header_row: int, name_col: int, max_search_row: Optional[int] = None, max_col: Optional[int] = None) -> Tuple[List[int], int]:
+    """메인 스캔과 동일 기준으로 예시 행과 실제 데이터 시작 행을 감지한다."""
+    if max_search_row is None:
+        max_search_row = ws.max_row
+
+    example_rows: List[int] = []
+    r = header_row + 1
+
+    while r <= max_search_row:
+        if _row_is_empty(ws, r, max_col=max_col):
+            r += 1
+            continue
+
+        if _row_has_example_keyword(ws, r, max_col=max_col):
+            example_rows.append(r)
+            r += 1
+            continue
+
+        v_name = ws.cell(row=r, column=name_col).value
+        if _cell_is_example_name(v_name):
+            example_rows.append(r)
+            r += 1
+            continue
+
+        return example_rows, r
+
+    raise ValueError('[ERROR] 데이터 시작 행을 찾을 수 없습니다. 헤더 행 아래에 실제 데이터가 있는지 확인해 주세요.')
+
 def detect_header_row_compare(ws) -> int:
     """
     비교용 재학생 명렬표 헤더 탐지.
@@ -153,26 +224,89 @@ def detect_compare_input_layout(xlsx_path: Path) -> Dict[str, Any]:
         if name_col is None:
             raise ValueError("[ERROR] 재학생 명렬표 헤더에서 이름 열을 찾을 수 없습니다.")
 
-        data_start_row = header_row + 1
-        while data_start_row <= ws.max_row:
-            vals = [
-                ws.cell(row=data_start_row, column=c).value
-                for c in range(1, min(ws.max_column, 10) + 1)
-            ]
-            if any(v is not None and str(v).strip() != "" for v in vals):
-                break
-            data_start_row += 1
-
-        if data_start_row > ws.max_row:
-            raise ValueError("[ERROR] 재학생 명렬표에서 데이터 시작 행을 찾을 수 없습니다.")
+        example_rows, data_start_row = detect_example_and_data_start(
+            ws,
+            header_row=header_row,
+            name_col=name_col,
+            max_col=min(ws.max_column or 1, 10),
+        )
 
         return {
             "header_row": header_row,
+            "example_rows": example_rows,
             "data_start_row": data_start_row,
             "slot_cols": slot_cols,
         }
     finally:
         wb.close()
+
+
+def validate_compare_input_rows(ws, header_row: int, data_start_row: int, slot_cols: Dict[str, int]) -> Tuple[List[str], List[int], int]:
+    """
+    비교용 재학생 명단 시트 경고 검증.
+    - 이름은 원문 기준으로 비교하고, 형식만 WARN 처리한다.
+    - 메인 스캔 톤과 맞춰 [WARN] 문구를 누적한다.
+    """
+    issues: List[str] = []
+    issue_row_nums: List[int] = []
+
+    col_grade = slot_cols.get("grade")
+    col_class = slot_cols.get("class")
+    col_name = slot_cols.get("name")
+    if col_grade is None or col_name is None:
+        return issues, issue_row_nums, 0
+
+    max_col = max([c for c in [col_grade, col_class, col_name] if c is not None], default=1)
+    last_data_row = data_start_row - 1
+    blank_streak = 0
+    row_count = 0
+
+    for i, row_tuple in enumerate(ws.iter_rows(min_row=data_start_row, max_col=max_col, values_only=True)):
+        r = data_start_row + i
+        grade_v = row_tuple[col_grade - 1] if col_grade - 1 < len(row_tuple) else None
+        class_v = row_tuple[col_class - 1] if (col_class is not None and col_class - 1 < len(row_tuple)) else None
+        name_v = row_tuple[col_name - 1] if col_name - 1 < len(row_tuple) else None
+
+        vals = [grade_v, class_v, name_v]
+        has_any = any(v is not None and str(v).strip() != "" for v in vals)
+        if has_any:
+            last_data_row = r
+            blank_streak = 0
+        else:
+            blank_streak += 1
+            if blank_streak >= 10:
+                break
+            continue
+
+        row_count += 1
+
+        grade_s = "" if grade_v is None else str(grade_v).strip()
+        name_s = "" if name_v is None else str(name_v).strip()
+        if not grade_s or not name_s:
+            issues.append(f"[WARN] 재학생 파일 {r}행 '학년/이름' 값을 확인해 주세요.")
+            issue_row_nums.append(r)
+            continue
+
+        gs_norm = re.sub(r"\s+", "", grade_s)
+        warn_grade = None
+        if "-" in grade_s:
+            warn_grade = f"학년 열에 하이픈(-) 포함 — 학년+반이 합쳐진 것 같습니다: '{grade_s}'"
+        elif gs_norm.endswith("학년"):
+            warn_grade = f"학년 열에 '학년' 글자 포함 — 숫자만 입력해야 합니다: '{grade_s}'"
+        else:
+            try:
+                float(grade_s)
+            except ValueError:
+                warn_grade = f"학년 열에 숫자가 아닌 값이 있습니다: '{grade_s}'"
+        if warn_grade:
+            issues.append(f"[WARN] 재학생 파일 {r}행 '학년' 열 — {warn_grade}")
+            issue_row_nums.append(r)
+
+        for msg in get_compare_name_warnings(name_v):
+            issues.append(f"[WARN] 재학생 파일 {r}행 '{normalize_compare_name(name_v)}' — {msg}")
+            issue_row_nums.append(r)
+
+    return issues, sorted(set(issue_row_nums)), row_count
 
 
 def find_diff_templates(template_dir: Path) -> Tuple[Optional[Path], Optional[Path], List[str]]:
@@ -372,7 +506,7 @@ def read_compare_rows(
                 row += 1
                 continue
 
-            name_n = normalize_name(name_v)
+            name_n = normalize_compare_name(name_v)
             if not name_n:
                 raise ValueError(
                     f"[ERROR] 재학생 명렬표 {row}행 이름을 인식할 수 없습니다."
@@ -387,7 +521,7 @@ def read_compare_rows(
                     "class": class_s,
                     "class_raw": class_raw,
                     "name": name_n,
-                    "name_key": normalize_name_key(name_n),
+                    "name_key": normalize_compare_name_key(name_n),
                     "source_row": row,
                 }
             )
@@ -398,69 +532,107 @@ def read_compare_rows(
         wb.close()
 
 
-def collect_text_only_classes_from_roster(
-    roster_ws,
-    target_grades: Optional[set] = None,
-    ref_grade_shift: int = 0,
-) -> List[str]:
-    """
-    학생명부에서 숫자가 전혀 없는 반명을 수집한다.
-    단, '선생님반', '유치원반'은 경고 대상에서 제외한다.
-    예)
-    - 경고 대상: 테스트반, 임시반, 체험반
-    - 제외: 선생님반, 유치원반
-    - 제외(정상 가능): 1-온누리반, 2-A, 3반
-    """
-    if target_grades is None:
-        target_grades = TARGET_GRADES
-
-    header_row = _detect_header_row_generic(
+def _detect_roster_header_row(roster_ws) -> int:
+    return _detect_header_row_generic(
         roster_ws,
         ROSTER_HEADER_SLOTS,
         max_search_row=20,
         max_col=20,
         min_match_slots=3,
     )
+
+
+def _get_roster_slot_cols(roster_ws) -> Tuple[int, Optional[int], Optional[int], int, Optional[int]]:
+    header_row = _detect_roster_header_row(roster_ws)
     slot_cols = _build_header_slot_map(roster_ws, header_row, ROSTER_HEADER_SLOTS)
 
-    col_grade = slot_cols.get("grade")
-    col_class = slot_cols.get("class")
-    col_name  = slot_cols.get("name")
+    col_now = slot_cols.get("current_class")
+    col_prev = slot_cols.get("previous_class")
+    col_name = slot_cols.get("name")
+    col_id = slot_cols.get("student_id")
 
-    if col_grade is None or col_class is None or col_name is None:
-        return []
+    missing: List[str] = []
+    if col_now is None:
+        missing.append("현재반")
+    if col_prev is None:
+        missing.append("이전반")
+    if col_name is None:
+        missing.append("학생이름")
+
+    if missing:
+        raise ValueError(
+            "[ERROR] 학생명부 헤더에서 " + ", ".join(missing) + " 열을 찾을 수 없습니다."
+        )
+
+    return header_row, col_now, col_prev, col_name, col_id
+
+
+def _pick_roster_class_values(now_v: Any, prev_v: Any) -> Tuple[Any, str, str, str]:
+    now_raw = "" if now_v is None else str(now_v).strip()
+    prev_raw = "" if prev_v is None else str(prev_v).strip()
+
+    class_source = now_v if now_raw else prev_v
+    class_raw = now_raw or prev_raw
+    class_s = normalize_class_value(class_source)
+    return class_source, class_raw, class_s, now_raw
+
+
+def _parse_roster_compare_grade(class_value: Any, ref_grade_shift: int) -> Optional[int]:
+    if class_value is None:
+        return None
+    parsed = parse_class_str(class_value)
+    if parsed is None:
+        return None
+    roster_grade = parsed[0]
+    return roster_grade - ref_grade_shift
+
+
+def collect_text_only_classes_from_roster(
+    roster_ws,
+    target_grades: Optional[set] = None,
+    ref_grade_shift: int = 0,
+) -> List[str]:
+    """
+    학생명부에서 숫자가 전혀 없는 현재반명을 수집한다.
+    메인 로직과 동일하게 현재반을 기본으로 보되, 현재반이 비어 있으면 이전반을 보조로 사용한다.
+    """
+    if target_grades is None:
+        target_grades = TARGET_GRADES
+
+    header_row, col_now, col_prev, col_name, _ = _get_roster_slot_cols(roster_ws)
 
     found = set()
     data_start_row = header_row + 1
     row = data_start_row
 
     while row <= roster_ws.max_row:
-        grade_v = roster_ws.cell(row=row, column=col_grade).value
-        class_v = roster_ws.cell(row=row, column=col_class).value
-        name_v  = roster_ws.cell(row=row, column=col_name).value
+        now_v = roster_ws.cell(row=row, column=col_now).value
+        prev_v = roster_ws.cell(row=row, column=col_prev).value if col_prev is not None else None
+        name_v = roster_ws.cell(row=row, column=col_name).value
 
-        vals = [grade_v, class_v, name_v]
+        vals = [now_v, prev_v, name_v]
         if all(v is None or str(v).strip() == "" for v in vals):
-            row += 1; continue
-        if any(v is None or str(v).strip() == "" for v in vals):
-            row += 1; continue
+            row += 1
+            continue
+        if name_v is None or str(name_v).strip() == "":
+            row += 1
+            continue
 
-        grade_i = parse_grade_int(grade_v)
-        if grade_i is None:
-            row += 1; continue
+        class_value, class_raw, _, _ = _pick_roster_class_values(now_v, prev_v)
+        compare_grade = _parse_roster_compare_grade(class_value, ref_grade_shift)
+        if compare_grade is None or compare_grade not in target_grades:
+            row += 1
+            continue
 
-        compare_grade = grade_i - ref_grade_shift
-        if compare_grade not in target_grades:
-            row += 1; continue
-
-        class_raw = "" if class_v is None else str(class_v).strip()
         if not class_raw:
-            row += 1; continue
+            row += 1
+            continue
 
         class_compact = re.sub(r"\s+", "", class_raw)
 
         if is_excluded_misc_class(class_compact):
-            row += 1; continue
+            row += 1
+            continue
 
         if not re.search(r"\d", class_compact):
             found.add(class_raw)
@@ -477,73 +649,59 @@ def read_roster_compare_rows(
 ) -> List[Dict[str, Any]]:
     """
     학생명부 ws에서 비교용 (학년, 반, 이름) 목록만 읽는다.
+
+    메인 로직 기준:
+    - 반/학년 파싱은 현재반을 기본으로 사용
+    - 현재반이 비어 있으면 이전반을 보조로 사용
+    - 비교 키는 학년+이름만 쓰므로, 반이 비어도 행 자체를 버리지 않는다
     """
     if target_grades is None:
         target_grades = TARGET_GRADES
 
-    header_row = _detect_header_row_generic(
-        roster_ws,
-        ROSTER_HEADER_SLOTS,
-        max_search_row=20,
-        max_col=20,
-        min_match_slots=3,
-    )
-    slot_cols = _build_header_slot_map(roster_ws, header_row, ROSTER_HEADER_SLOTS)
-
-    col_grade = slot_cols.get("grade")
-    col_class = slot_cols.get("class")
-    col_name  = slot_cols.get("name")
-
-    missing: List[str] = []
-    if col_grade is None: missing.append("학년")
-    if col_class is None: missing.append("반")
-    if col_name  is None: missing.append("이름")
-
-    if missing:
-        raise ValueError(
-            "[ERROR] 학생명부 헤더에서 "
-            + ", ".join(missing)
-            + " 열을 찾을 수 없습니다."
-        )
+    header_row, col_now, col_prev, col_name, col_id = _get_roster_slot_cols(roster_ws)
 
     data_start_row = header_row + 1
     out: List[Dict[str, Any]] = []
     row = data_start_row
 
     while row <= roster_ws.max_row:
-        grade_v = roster_ws.cell(row=row, column=col_grade).value
-        class_v = roster_ws.cell(row=row, column=col_class).value
-        name_v  = roster_ws.cell(row=row, column=col_name).value
+        now_v = roster_ws.cell(row=row, column=col_now).value
+        prev_v = roster_ws.cell(row=row, column=col_prev).value if col_prev is not None else None
+        name_v = roster_ws.cell(row=row, column=col_name).value
+        id_v = roster_ws.cell(row=row, column=col_id).value if col_id is not None else None
 
-        vals = [grade_v, class_v, name_v]
-
+        vals = [now_v, prev_v, name_v]
         if all(v is None or str(v).strip() == "" for v in vals):
-            row += 1; continue
-        if any(v is None or str(v).strip() == "" for v in vals):
-            row += 1; continue
+            row += 1
+            continue
+        if name_v is None or str(name_v).strip() == "":
+            row += 1
+            continue
 
-        grade_i = parse_grade_int(grade_v)
-        if grade_i is None:
-            row += 1; continue
+        class_value, class_raw, class_s, now_class_raw = _pick_roster_class_values(now_v, prev_v)
+        compare_grade = _parse_roster_compare_grade(class_value, ref_grade_shift)
+        if compare_grade is None or compare_grade not in target_grades:
+            row += 1
+            continue
 
-        compare_grade = grade_i - ref_grade_shift
-        if compare_grade not in target_grades:
-            row += 1; continue
-
-        name_n = normalize_name(name_v)
+        name_n = normalize_compare_name(name_v)
         if not name_n:
-            row += 1; continue
+            row += 1
+            continue
 
-        class_raw = "" if class_v is None else str(class_v).strip()
-        class_s   = normalize_class_value(class_v)
+        if re.sub(r"\s+", "", class_raw) == "테스트반":
+            row += 1
+            continue
 
         out.append(
             {
-                "grade":      compare_grade,
-                "class":      class_s,
-                "class_raw":  class_raw,
-                "name":       name_n,
-                "name_key":   normalize_name_key(name_n),
+                "grade": compare_grade,
+                "class": class_s,
+                "class_raw": class_raw,
+                "now_class_raw": now_class_raw,
+                "name": name_n,
+                "name_key": normalize_compare_name_key(name_n),
+                "student_id": "" if id_v is None else str(id_v).strip(),
                 "source_row": row,
             }
         )
@@ -603,7 +761,7 @@ def build_diff_rows(
                 for r in compare_group:
                     rec = {
                         "grade": r["grade"], "class": r.get("class", ""),
-                        "name": r["name"], "hold_reason": "학년+이름 중복으로 자동 판정 불가",
+                        "name": r["name"], "hold_reason": "동학년 동명이인으로 자동 판정 불가",
                     }
                     transfer_in_hold.append(rec)
                     unresolved_rows.append(rec)
@@ -615,7 +773,7 @@ def build_diff_rows(
                         continue
                     rec = {
                         "grade": r["grade"], "class": r.get("class", ""),
-                        "name": r["name"], "hold_reason": "학년+이름 중복으로 자동 판정 불가",
+                        "name": r["name"], "hold_reason": "동학년 동명이인으로 자동 판정 불가",
                     }
                     transfer_out_hold.append(rec)
                     unresolved_rows.append(rec)
@@ -711,6 +869,7 @@ def scan_diff_pipeline(
     roster_basis_date: Optional[date] = None,
     roster_xlsx: Optional[Path] = None,
     col_map: Optional[dict] = None,
+    layout_overrides: Optional[dict] = None,
 ) -> DiffScanResult:
 
     logs: List[str] = []
@@ -857,6 +1016,33 @@ def scan_diff_pipeline(
             raise ValueError("[ERROR] 비교용 재학생 명렬표 파일을 찾을 수 없습니다.")
 
         compare_layout = detect_compare_input_layout(compare_file)
+        compare_override = ((layout_overrides or {}).get("compare") or {})
+        override_start = compare_override.get("data_start_row")
+        if override_start is not None:
+            try:
+                compare_layout["data_start_row"] = max(1, int(override_start))
+                log(f"[INFO] 재학생 명단 시작행을 사용자 입력값으로 적용했습니다. ({compare_layout['data_start_row']}행)")
+            except Exception:
+                pass
+        wb_cmp = safe_load_workbook(compare_file, data_only=True)
+        try:
+            ws_cmp = wb_cmp.worksheets[0]
+            slot_cols = compare_layout.get("slot_cols") or _build_header_slot_map(ws_cmp, compare_layout["header_row"], COMPARE_HEADER_SLOTS)
+            issues, issue_rows, row_count = validate_compare_input_rows(
+                ws_cmp,
+                header_row=compare_layout["header_row"],
+                data_start_row=compare_layout["data_start_row"],
+                slot_cols=slot_cols,
+            )
+            compare_layout["slot_cols"] = slot_cols
+            compare_layout["issue_rows"] = issue_rows
+            compare_layout["row_count"] = row_count
+            compare_layout["warning"] = issues[0][7:].strip() if issues else ""
+            for msg in issues:
+                log(msg)
+        finally:
+            wb_cmp.close()
+
         sr.compare_layout = compare_layout
         log(f"[OK] 비교용 재학생 명렬표 감지: {compare_file.name}")
         log(

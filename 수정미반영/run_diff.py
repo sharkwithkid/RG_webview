@@ -446,7 +446,7 @@ def run_diff_pipeline(
             return DiffPipelineResult(ok=False, outputs=[], logs=logs)
 
         result = execute_diff_pipeline(scan=scan)
-        result.logs = logs + [m for m in result.logs if m not in logs]
+        result.logs = list(dict.fromkeys(logs + list(result.logs or [])))
         return result
 
     except Exception as e:

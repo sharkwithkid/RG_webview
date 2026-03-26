@@ -364,10 +364,13 @@ const Scan = (() => {
 
     const headerInfo = data.header_row     != null ? ` | 헤더행: ${data.header_row}`     : '';
     const startInfo  = data.data_start_row != null ? ` | 시작행: ${data.data_start_row}` : '';
+    const actualCount = Number.isFinite(data.actual_count) ? data.actual_count : (data.rows || []).length;
+    const displayedCount = Number.isFinite(data.displayed_count) ? data.displayed_count : (data.rows || []).length;
     _el('preview-file-info').textContent =
       `파일: ${data.source_file || '-'} | 시트: ${data.sheet_name || '-'}` +
       headerInfo + startInfo +
-      (data.truncated ? ` | ${data.rows.length}행까지 표시` : '');
+      ` | 실제 ${actualCount}행` +
+      (data.truncated ? ` · ${displayedCount}행만 표시` : '');
 
     const previewWarn = _el('preview-warn');
     if (previewWarn) {

@@ -108,13 +108,13 @@
     "master_recorded": false
   },
   "과천갈현초": {
-    "last_date": "2026-03-25",
+    "last_date": "2026-03-26",
     "worker": "임지윤",
     "counts": {
       "신입생": 268,
       "전입생": 7,
       "전출생": 16,
-      "교직원": 22
+      "교직원": 29
     },
     "run_completed": true,
     "master_recorded": false
@@ -144,11 +144,11 @@
     "master_recorded": false
   },
   "고양주엽초": {
-    "last_date": "2026-03-25",
+    "last_date": "2026-03-26",
     "worker": "임지윤",
     "counts": {
       "신입생": 16,
-      "전입생": 60,
+      "전입생": 11,
       "전출생": 0,
       "교직원": 0
     },
@@ -187,6 +187,102 @@
       "전입생": 10,
       "전출생": 35,
       "교직원": 72
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "부산대저초": {
+    "last_date": "2026-03-26",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 4,
+      "전입생": 1,
+      "전출생": 2,
+      "교직원": 1
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남분당중": {
+    "last_date": "2026-03-26",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 128,
+      "전입생": 8,
+      "전출생": 0,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남장안중": {
+    "last_date": "2026-03-26",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 192,
+      "전입생": 7,
+      "전출생": 0,
+      "교직원": 38
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "위례푸른초": {
+    "last_date": "2026-03-26",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 122,
+      "전입생": 32,
+      "전출생": 38,
+      "교직원": 61
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "부산다선초": {
+    "last_date": "2026-03-26",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 81,
+      "전입생": 7,
+      "전출생": 9,
+      "교직원": 32
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남수정초": {
+    "last_date": "2026-03-26",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 41,
+      "전입생": 3,
+      "전출생": 5,
+      "교직원": 32
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "의왕덕장중": {
+    "last_date": "2026-03-26",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 58,
+      "전입생": 4,
+      "전출생": 1,
+      "교직원": 32
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "양평초": {
+    "last_date": "2026-03-26",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 78,
+      "전입생": 0,
+      "전출생": 8,
+      "교직원": 37
     },
     "run_completed": true,
     "master_recorded": false

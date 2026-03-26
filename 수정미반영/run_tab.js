@@ -118,8 +118,8 @@ const Run = (() => {
       });
       App.setStepState(3, 'warn');
     } else {
-      _setBadge('ok', '실행 완료');
-      _el('run-info').textContent = '실행 완료';
+      _setBadge('ok', '완료');
+      _el('run-info').textContent = '완료';
       holdWarn.style.display = 'none';
       App.setStepState(3, 'done');
     }
