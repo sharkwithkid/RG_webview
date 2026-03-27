@@ -124,12 +124,18 @@ def build_compare_result_workbook(
 
         def add_unresolved_sheet(title: str, rows: List[Dict[str, Any]]):
             ws = wb.create_sheet(title)
-            ws.append(["학년", "반", "이름", "보류사유"])
+            # NOTE:
+            # 판정불가 시트는 단일 '반' 컬럼으로는 출처/판단 근거가 뭉개져서,
+            # 명단반 / 명부반 / 출처를 분리해 기록한다.
+            # 나중에 프론트 뷰어도 이 컬럼들까지 함께 노출하도록 맞춰야 한다.
+            ws.append(["학년", "이름", "출처", "명단반", "명부반", "보류사유"])
             for rec in rows or []:
                 ws.append([
                     rec.get("grade", ""),
-                    rec.get("class", ""),
                     rec.get("name", ""),
+                    rec.get("source", ""),
+                    rec.get("compare_class", ""),
+                    rec.get("roster_class", ""),
                     rec.get("hold_reason", rec.get("remark", "")),
                 ])
             return ws
@@ -313,6 +319,7 @@ def execute_diff_pipeline(
             scan.compare_file,
             header_row=scan.compare_layout["header_row"] if scan.compare_layout else None,
             data_start_row=scan.compare_layout["data_start_row"] if scan.compare_layout else None,
+            slot_cols=scan.compare_layout.get("slot_cols") if scan.compare_layout else None,
         )
 
         log(f"[INFO] 명부 비교 대상 수: {len(roster_rows)}명")

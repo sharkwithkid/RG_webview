@@ -161,57 +161,155 @@ def _logs_from_result(result) -> list:
     return [_parse_log_entry(l) for l in (getattr(result, "logs", None) or [])]
 
 
+def _meta_get(meta, key, default=None):
+    if meta is None:
+        return default
+    if isinstance(meta, dict):
+        return meta.get(key, default)
+    return getattr(meta, key, default)
+
+
+def _as_abs_issue_rows(issue_rows, data_start_row):
+    out = []
+    base = int(data_start_row or 1)
+    for r in list(issue_rows or []):
+        try:
+            r_i = int(r)
+        except Exception:
+            continue
+        if r_i >= base:
+            out.append(r_i)
+        else:
+            out.append(base + r_i)
+    # stable unique
+    seen = set()
+    uniq = []
+    for r in out:
+        if r not in seen:
+            seen.add(r)
+            uniq.append(r)
+    return uniq
+
+
+def _build_status_bundle(*, logs=None, warning_text='', issue_rows=None, running=False, ok=True, default_ok_text='완료', action_text=''):
+    logs = list(logs or [])
+    warn_msgs = []
+    err_msgs = []
+    for l in logs:
+        level = str(l.get('level', 'info'))
+        msg = str(l.get('message', '')).strip()
+        if not msg:
+            continue
+        if level == 'error':
+            if msg not in err_msgs:
+                err_msgs.append(msg)
+        elif level == 'warn':
+            if msg not in warn_msgs:
+                warn_msgs.append(msg)
+    for msg in str(warning_text or '').splitlines():
+        msg = msg.strip()
+        if msg and msg not in warn_msgs:
+            warn_msgs.append(msg)
+
+    if running:
+        level = 'running'; badge_type = 'running'; badge_text = '실행 중'
+    elif err_msgs or not ok:
+        level = 'error'; badge_type = 'err'; badge_text = '오류'
+    elif warn_msgs or list(issue_rows or []):
+        level = 'warn'; badge_type = 'warn'; badge_text = '경고'
+    else:
+        level = 'ok'; badge_type = 'ok'; badge_text = default_ok_text
+
+    detail_messages = err_msgs if level == 'error' else warn_msgs
+    if level == 'error':
+        summary_text = f"오류 {len(err_msgs)}건이 있습니다." if err_msgs else '오류가 있습니다.'
+    elif level == 'warn':
+        summary_text = f"경고 {len(warn_msgs)}건이 있습니다." if warn_msgs else '경고가 있습니다.'
+    elif running:
+        summary_text = '실행 중입니다.'
+    else:
+        summary_text = default_ok_text
+
+    return {
+        'level': level,
+        'badge': {'type': badge_type, 'text': badge_text},
+        'messages': ([{'level': 'error', 'text': m} for m in err_msgs] +
+                     [{'level': 'warn', 'text': m} for m in warn_msgs]),
+        'summary_text': summary_text,
+        'detail_messages': detail_messages,
+        'action_text': str(action_text or '').strip(),
+        'row_marks': {
+            'warn_rows': list(issue_rows or []),
+            'error_rows': [],
+            'issue_rows': list(issue_rows or []),
+        },
+    }
+
+
+def _normalize_scan_item(meta, kind_label):
+    if meta is None:
+        return None
+    data_start_row = _meta_get(meta, 'data_start_row', 2)
+    warning = _meta_get(meta, 'warning', '')
+    issue_rows = _as_abs_issue_rows(_meta_get(meta, 'issue_rows', []) or [], data_start_row)
+    logs = []
+    severity = _meta_get(meta, 'severity', 'ok')
+    if severity == 'error' and warning:
+        logs = [{'level': 'error', 'message': warning}]
+    item = {
+        'kind': kind_label,
+        'file_name': _meta_get(meta, 'file_name', ''),
+        'file_path': _meta_get(meta, 'file_path', ''),
+        'sheet_name': _meta_get(meta, 'sheet_name', ''),
+        'header_row': _meta_get(meta, 'header_row', 1),
+        'data_start_row': data_start_row,
+        'row_count': _meta_get(meta, 'row_count', 0),
+        'warning': warning,
+        'issue_rows': issue_rows,
+        'extra_grades': list(_meta_get(meta, 'extra_grades', []) or []),
+        'severity': severity,
+    }
+    item['status'] = _build_status_bundle(logs=logs, warning_text=(warning if severity != 'error' else ''), issue_rows=issue_rows, ok=(severity != 'error'), default_ok_text='확인 완료')
+    return item
+
+
+def _normalize_compare_item(compare_file, compare_layout):
+    if not compare_file:
+        return None
+    compare_layout = compare_layout or {}
+    issue_rows = _as_abs_issue_rows(_meta_get(compare_layout, 'issue_rows', []) or [], _meta_get(compare_layout, 'data_start_row', 2))
+    warning = _meta_get(compare_layout, 'warning', '')
+    item = {
+        'kind': '재학생',
+        'file_name': getattr(compare_file, 'name', str(compare_file)),
+        'file_path': str(compare_file),
+        'sheet_name': _meta_get(compare_layout, 'sheet_name', ''),
+        'header_row': _meta_get(compare_layout, 'header_row', 1),
+        'data_start_row': _meta_get(compare_layout, 'data_start_row', 2),
+        'row_count': _meta_get(compare_layout, 'row_count', 0),
+        'warning': warning,
+        'issue_rows': issue_rows,
+        'extra_grades': [],
+        'severity': _meta_get(compare_layout, 'severity', 'warn' if warning or issue_rows else 'ok'),
+    }
+    item['status'] = _build_status_bundle(logs=[], warning_text=warning, issue_rows=issue_rows, ok=(item['severity'] != 'error'), default_ok_text='확인 완료')
+    return item
+
+
 def to_scan_payload(result) -> dict:
-    """ScanResult -> JS 전달용 요약 dict"""
+    """ScanResult / DiffScanResult -> JS 전달용 요약 dict"""
     logs = _logs_from_result(result)
     warnings = [l for l in logs if l["level"] in ("warn", "error")]
 
-    # ScanResult.freshmen / transfer_in / transfer_out / teachers 는
-    # 각각 {file_name, sheet_name, header_row, data_start_row, ...} dict
-    def _item(kind_key: str, kind_label: str):
-        meta = getattr(result, kind_key, None)
-        if meta is None:
-            return None
-        return {
-            "kind":           kind_label,
-            "file_name":      meta.get("file_name",      ""),
-            "file_path":      meta.get("file_path",      ""),
-            "sheet_name":     meta.get("sheet_name",     ""),
-            "header_row":     meta.get("header_row",     1),
-            "data_start_row": meta.get("data_start_row", 2),
-            "row_count":      meta.get("row_count",      0),
-            "warning":        meta.get("warning",        ""),
-            "issue_rows":     list(meta.get("issue_rows", []) or []),
-            "extra_grades":   list(meta.get("extra_grades", []) or []),
-            "severity":       meta.get("severity", "ok"),
-        }
-
     items = [
         i for i in [
-            _item("freshmen",    "신입생"),
-            _item("transfer_in", "전입생"),
-            _item("transfer_out","전출생"),
-            _item("teachers",    "교직원"),
-        ]
-        if i is not None
+            _normalize_scan_item(getattr(result, 'freshmen', None), '신입생'),
+            _normalize_scan_item(getattr(result, 'transfer_in', None), '전입생'),
+            _normalize_scan_item(getattr(result, 'transfer_out', None), '전출생'),
+            _normalize_scan_item(getattr(result, 'teachers', None), '교직원'),
+            _normalize_compare_item(getattr(result, 'compare_file', None), getattr(result, 'compare_layout', None)),
+        ] if i is not None
     ]
-
-    compare_file = getattr(result, "compare_file", None)
-    compare_layout = getattr(result, "compare_layout", None) or {}
-    if compare_file:
-        items.append({
-            "kind": "재학생",
-            "file_name": getattr(compare_file, "name", str(compare_file)),
-            "file_path": str(compare_file),
-            "sheet_name": compare_layout.get("sheet_name", ""),
-            "header_row": compare_layout.get("header_row", 1),
-            "data_start_row": compare_layout.get("data_start_row", 2),
-            "row_count": compare_layout.get("row_count", 0),
-            "warning": compare_layout.get("warning", ""),
-            "issue_rows": list(compare_layout.get("issue_rows", []) or []),
-            "extra_grades": [],
-            "severity": compare_layout.get("severity", "ok"),
-        })
 
     roster_basis_date = ""
     rbd = getattr(result, "roster_basis_date", None)
@@ -220,19 +318,10 @@ def to_scan_payload(result) -> dict:
 
     grade_year_map = {}
     roster_info = getattr(result, "roster_info", None)
-
-    # scan UI에는 "명부 직접값 + 없는 학년 역산" 결과를 보여준다.
-    # target_grades는:
-    # 1) 명부에서 관측된 현재 학년
-    # 2) 신입생 파일에서 실제 등장한 현재 학년
-    # 을 합쳐서 만든다.
     if roster_info is not None:
         target_grades = set()
-
         prefix_mode = getattr(roster_info, "prefix_mode_by_roster_grade", {}) or {}
         shift = int(getattr(roster_info, "ref_grade_shift", 0) or 0)
-
-        # 명부 관측 학년 -> 현재 학년으로 변환
         for g_roster in prefix_mode.keys():
             try:
                 g_cur = int(g_roster) - shift
@@ -240,10 +329,8 @@ def to_scan_payload(result) -> dict:
                 continue
             if g_cur > 0:
                 target_grades.add(g_cur)
-
-        # 신입생 파일에 실제 있는 학년 반영
         freshmen_meta = getattr(result, "freshmen", None) or {}
-        extra_grades = freshmen_meta.get("extra_grades", []) or []
+        extra_grades = _meta_get(freshmen_meta, 'extra_grades', []) or []
         for g in extra_grades:
             try:
                 g_i = int(g)
@@ -251,30 +338,23 @@ def to_scan_payload(result) -> dict:
                 continue
             if g_i > 0:
                 target_grades.add(g_i)
-
-        # 아무것도 못 잡았으면 최소한 명부 현재학년만이라도 유지
-        if not target_grades:
-            for g_roster in prefix_mode.keys():
-                try:
-                    g_cur = int(g_roster) - shift
-                except Exception:
-                    continue
-                if g_cur > 0:
-                    target_grades.add(g_cur)
-
-        # 1~6학년 항상 포함
-        target_grades.update({1, 2, 3, 4, 5, 6})
-
+        target_grades.update({1,2,3,4,5,6})
         year_int = int(getattr(result, "year_int", 0) or 0)
-        derived = derive_grade_year_map(
-            target_grades=sorted(target_grades),
-            input_year=year_int,
-            roster_info=roster_info,
-        )
+        derived = derive_grade_year_map(target_grades=sorted(target_grades), input_year=year_int, roster_info=roster_info)
         grade_year_map = {int(k): int(v) for k, v in derived.items()}
+
+    overall_issue_rows = []
+    for item in items:
+        for r in item.get('issue_rows', []) or []:
+            if r not in overall_issue_rows:
+                overall_issue_rows.append(r)
+    status = _build_status_bundle(logs=logs, issue_rows=overall_issue_rows, ok=bool(getattr(result, 'ok', False)), default_ok_text='스캔 완료')
 
     return {
         "ok":                     bool(getattr(result, "ok", False)),
+        "school_profile_mode":    str(getattr(result, "school_profile_mode", "single") or "single"),
+        "school_kind_needs_choice": bool(getattr(result, "school_kind_needs_choice", False)),
+        "grade_rule_max_grade":   int(getattr(result, "grade_rule_max_grade", 6) or 6),
         "can_execute":            bool(getattr(result, "can_execute", False)),
         "can_execute_after_input":bool(getattr(result, "can_execute_after_input", False)),
         "missing_fields":         list(getattr(result, "missing_fields", []) or []),
@@ -288,6 +368,7 @@ def to_scan_payload(result) -> dict:
         "items":    items,
         "warnings": warnings,
         "logs":     logs,
+        "status":   status,
     }
 
 
@@ -295,16 +376,29 @@ def to_run_payload(result) -> dict:
     """PipelineResult -> JS 전달용 요약 dict (Path -> str 전수 변환)"""
     logs = _logs_from_result(result)
     warnings = [l for l in logs if l["level"] in ("warn", "error")]
-
-    audit    = getattr(result, "audit_summary", {}) or {}
-    in_cnt   = audit.get("input_counts", {})
-
+    audit = getattr(result, "audit_summary", {}) or {}
+    in_cnt = audit.get("input_counts", {})
+    transfer_in_hold = int(getattr(result, 'transfer_in_hold', 0) or 0)
+    transfer_out_hold = int(getattr(result, 'transfer_out_hold', 0) or 0)
+    transfer_out_auto_skip = int(getattr(result, 'transfer_out_auto_skip', 0) or 0)
+    real_hold = transfer_in_hold + transfer_out_hold - transfer_out_auto_skip
+    issue_rows = list(getattr(result, 'notice_dup_rows', []) or []) + list(getattr(result, 'notice_teacher_dup_rows', []) or [])
+    action_text = ''
+    if any('헤더를 찾을 수 없습니다.' in str(l.get('message', '')) for l in logs):
+        action_text = '헤더행과 열 이름을 확인해 주세요.'
+    status_logs = list(logs)
+    if real_hold > 0:
+        status_logs.append({'level':'warn','message':f'확인 필요 건이 {real_hold}건 있습니다.'})
+    status = _build_status_bundle(
+        logs=status_logs,
+        issue_rows=issue_rows,
+        ok=bool(getattr(result, 'ok', False)),
+        default_ok_text='완료',
+        action_text=action_text,
+    )
     return {
         "ok": bool(getattr(result, "ok", False)),
-        "output_files": [
-            {"name": p.name, "path": str(p)}
-            for p in (getattr(result, "outputs", None) or [])
-        ],
+        "output_files": [{"name": p.name, "path": str(p)} for p in (getattr(result, "outputs", None) or [])],
         "freshmen_count":          int(in_cnt.get("freshmen", 0)),
         "teacher_count":           int(in_cnt.get("teacher",  0)),
         "transfer_in_done":        int(getattr(result, "transfer_in_done",       0)),
@@ -316,6 +410,7 @@ def to_run_payload(result) -> dict:
         "notice_teacher_dup_rows":  list(getattr(result, "notice_teacher_dup_rows", []) or []),
         "warnings": warnings,
         "logs":     logs,
+        "status":   status,
     }
 
 
@@ -323,13 +418,18 @@ def to_diff_run_payload(result) -> dict:
     """DiffPipelineResult -> JS 전달용 요약 dict"""
     logs = _logs_from_result(result)
     warnings = [l for l in logs if l["level"] in ("warn", "error")]
+    issue_rows = []
+
+    status = _build_status_bundle(
+    logs=logs,
+    issue_rows=issue_rows,
+    ok=bool(getattr(result, 'ok', False)),
+    default_ok_text='완료'
+    )
 
     return {
         "ok": bool(getattr(result, "ok", False)),
-        "output_files": [
-            {"name": p.name, "path": str(p)}
-            for p in (getattr(result, "outputs", None) or [])
-        ],
+        "output_files": [{"name": p.name, "path": str(p)} for p in (getattr(result, "outputs", None) or [])],
         "compare_only_count": int(getattr(result, "compare_only_count", 0)),
         "roster_only_count":  int(getattr(result, "roster_only_count",  0)),
         "matched_count":      int(getattr(result, "matched_count",      0)),
@@ -344,6 +444,7 @@ def to_diff_run_payload(result) -> dict:
         "unresolved_rows":    list(getattr(result, "unresolved_rows", []) or []),
         "warnings": warnings,
         "logs":     logs,
+        "status":   status,
     }
 
 
@@ -518,35 +619,46 @@ class PreviewWorker(QObject):
                 max_cols = len(header_values)
                 rows = []
                 sheet_max_row = int(getattr(ws, 'max_row', 0) or 0)
-                end_row = min(sheet_max_row, start_row + self.MAX_PREVIEW_ROWS - 1) if sheet_max_row > 0 else (start_row + self.MAX_PREVIEW_ROWS - 1)
-                max_row = 0
-                for row_idx, row in enumerate(ws.iter_rows(min_row=start_row, max_row=end_row, values_only=True), start=start_row):
+                actual_count = max(0, sheet_max_row - start_row + 1)
+                displayed_count = 0
+                max_row = sheet_max_row
+                for row_idx, row in enumerate(ws.iter_rows(min_row=start_row, values_only=True), start=start_row):
                     vals = ["" if v is None else str(v) for v in row]
                     max_cols = max(max_cols, len(vals))
-                    rows.append(vals)
-                    max_row = row_idx
+                    if displayed_count < self.MAX_PREVIEW_ROWS:
+                        rows.append(vals)
+                        displayed_count += 1
+                    else:
+                        break
 
                 columns = header_values if header_values else [""] * max_cols
                 if len(columns) < max_cols:
                     columns += [""] * (max_cols - len(columns))
                 rows = [r + [""] * (max_cols - len(r)) for r in rows]
+                row_marks = {
+                    'warn_rows': _as_abs_issue_rows(issue_rows, data_start),
+                    'error_rows': [],
+                    'issue_rows': _as_abs_issue_rows(issue_rows, data_start),
+                    'muted_rows': list(range(start_row, max(data_start, start_row) )),
+                }
             finally:
                 wb.close()
 
             self.finished.emit(json.dumps({
                 "ok": True, "kind": kind,
                 "columns": columns, "rows": rows,
-                "displayed_count": len(rows),
-                "actual_count": len(rows),
-                "total_count": len(rows),
+                "displayed_count": displayed_count,
+                "actual_count": actual_count,
+                "total_count": actual_count,
                 "max_row": max_row,
-                "truncated": bool(sheet_max_row > 0 and end_row < sheet_max_row),
+                "truncated": bool(actual_count > displayed_count),
                 "source_file": Path(file_path).name,
                 "sheet_name": actual_sheet,
                 "header_row": header_row,
                 "data_start_row": data_start,
                 "start_row": start_row,
-                "issue_rows": issue_rows,
+                "issue_rows": _as_abs_issue_rows(issue_rows, data_start),
+                "row_marks": row_marks,
             }, ensure_ascii=False))
 
         except Exception as e:

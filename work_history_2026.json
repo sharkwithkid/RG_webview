@@ -286,5 +286,101 @@
     },
     "run_completed": true,
     "master_recorded": false
+  },
+  "하남감일중": {
+    "last_date": "2026-03-27",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 216,
+      "전입생": 13,
+      "전출생": 20,
+      "교직원": 9
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "부천소안초": {
+    "last_date": "2026-03-27",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 101,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "연천대광초중": {
+    "last_date": "2026-03-27",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 6,
+      "전입생": 6,
+      "전출생": 7,
+      "교직원": 9
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "용인신월초": {
+    "last_date": "2026-03-27",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 81,
+      "전입생": 153,
+      "전출생": 0,
+      "교직원": 55
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "고양향동초": {
+    "last_date": "2026-03-27",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 162,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 1
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "포천도평초": {
+    "last_date": "2026-03-27",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 2,
+      "전입생": 1,
+      "전출생": 0,
+      "교직원": 5
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "시흥가온초": {
+    "last_date": "2026-03-27",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 263,
+      "전입생": 32,
+      "전출생": 0,
+      "교직원": 121
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "인제서화중": {
+    "last_date": "2026-03-27",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 5,
+      "전입생": 0,
+      "전출생": 1,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
   }
 }

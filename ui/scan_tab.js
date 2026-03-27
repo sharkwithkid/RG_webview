@@ -90,9 +90,13 @@ const Scan = (() => {
     if (!data.ok) {
       const errLog = (data.logs || []).find(l => l.level === 'error');
       const errMsg = errLog ? errLog.message : '스캔 중 오류가 발생했습니다.';
+      const kindWarnOnError = !!data.school_kind_needs_choice || (data.logs || []).some(l =>
+        l.level === 'warn' && l.message.includes('학교 구분을 자동으로 판별하지 못했습니다')
+      );
       _setBadge('err', '스캔 실패');
-      _setMessage(errMsg);
-      _hideSchoolKindWarn();
+      _setMessage('');
+      _setSchoolKindWarn(kindWarnOnError);
+      _showScanWarnCard([errMsg], 'error', data.status || null);
       App.setStepState(2, 'warn');
       toast(errMsg, 'err', 6000);
       return;
@@ -101,8 +105,8 @@ const Scan = (() => {
     // 스텝 상태
     App.setStepState(2, 'done');
 
-    // 학교 구분 판별 실패 여부
-    const kindWarn = (data.logs || []).some(l =>
+    // 학교 구분 선택 필요 여부
+    const kindWarn = !!data.school_kind_needs_choice || (data.logs || []).some(l =>
       l.level === 'warn' && l.message.includes('학교 구분을 자동으로 판별하지 못했습니다')
     );
     _setSchoolKindWarn(kindWarn);
@@ -110,15 +114,24 @@ const Scan = (() => {
     // 경고 상태 정규화
     const errLogs  = (data.logs || []).filter(l => l.level === 'error');
     _scanWarnState = _buildWarnState(data);
+    const status = data.status || null;
 
-    if (errLogs.length) {
+    if (status?.badge) {
+      StatusUI.renderBadge('scan-status-badge', status.badge, '스캔 완료');
+      _setMessage('');
+      const errMsgs = (status.messages || []).filter(m => m.level === 'error');
+      const warnMsgs = (status.messages || []).filter(m => m.level === 'warn');
+      if (errMsgs.length) _showScanWarnCard(errMsgs.map(m => m.text), 'error');
+      else if (warnMsgs.length) _showScanWarnCard(warnMsgs.map(m => m.text), 'warn');
+      else _hideScanWarnCard();
+    } else if (errLogs.length) {
       _setBadge('err', '오류');
       _setMessage('');
-      _showScanWarnCard(errLogs.map(l => String(l.message || '').trim()).filter(Boolean), 'error');
+      _showScanWarnCard(errLogs.map(l => String(l.message || '').trim()).filter(Boolean), 'error', _lastScanData?.status || null);
     } else if (_scanWarnState.hasWarn) {
       _setBadge('warn', '경고');
       _setMessage('');
-      _showScanWarnCard(_scanWarnState.messages, 'warn');
+      _showScanWarnCard(_scanWarnState.messages, 'warn', _lastScanData?.status || null);
     } else {
       _setBadge('ok', '스캔 완료');
       _setMessage('');
@@ -243,6 +256,8 @@ const Scan = (() => {
     if (next < 1) return;
     el.textContent = String(next);
     el.style.color = '#0F172A';
+    delete _previewData[kind];
+    if (_currentKind === kind) _requestPreview(kind);
   }
 
   // 수정 시작행 오버라이드 수집 (startRunMain 호출 시 사용)
@@ -293,12 +308,15 @@ const Scan = (() => {
     state.isPreviewLoading = true;
     _el('preview-warn').textContent = `${kind} 미리보기 로딩 중...`;
 
+    const spinEl = _el(`spin-${kind}`);
+    const spinVal = parseInt(spinEl?.textContent || '', 10);
     const params = {
       kind,
       file_path:      item.file_path,
       sheet_name:     item.sheet_name     || '',
-      header_row:     item.header_row     || 1,
-      data_start_row: item.data_start_row || 2,
+      header_row:     item.has_structured_rows === false ? null : (item.header_row ?? null),
+      data_start_row: item.has_structured_rows === false ? null : (Number.isFinite(spinVal) && spinVal > 0 ? spinVal : (item.data_start_row ?? null)),
+      issue_rows:     item.issue_rows     || [],
       start_row:      1,
     };
 
@@ -321,7 +339,7 @@ const Scan = (() => {
       kind, columns, rows, total_count, truncated,
       source_file, sheet_name,
       header_row, data_start_row,
-      issue_rows,
+      issue_rows, row_marks,
     } = payload;
 
     _previewData[kind] = {
@@ -331,6 +349,10 @@ const Scan = (() => {
       header_row:     header_row     ?? null,
       data_start_row: data_start_row ?? null,
       issue_rows:     issue_rows     || [],
+      row_marks:      row_marks      || null,
+      actual_count:   payload.actual_count,
+      displayed_count:payload.displayed_count,
+      has_structured_rows: payload.has_structured_rows !== false,
     };
     if (_currentKind && _currentKind !== kind && !_previewData[_currentKind]) {
       // 다른 kind로 전환됐지만 캐시 없음 → 렌더 없이 대기
@@ -362,12 +384,16 @@ const Scan = (() => {
     const data = _previewData[kind];
     if (!data) return;
 
-    const headerInfo = data.header_row     != null ? ` | 헤더행: ${data.header_row}`     : '';
-    const startInfo  = data.data_start_row != null ? ` | 시작행: ${data.data_start_row}` : '';
+    const structured = data.has_structured_rows !== false;
+    const headerInfo = ` | 헤더행: ${structured && data.header_row != null ? data.header_row : '-'}`;
+    const startInfo  = ` | 시작행: ${structured && data.data_start_row != null ? data.data_start_row : '-'}`;
+    const actualCount = Number.isFinite(data.actual_count) ? data.actual_count : (data.rows || []).length;
+    const displayedCount = Number.isFinite(data.displayed_count) ? data.displayed_count : (data.rows || []).length;
     _el('preview-file-info').textContent =
       `파일: ${data.source_file || '-'} | 시트: ${data.sheet_name || '-'}` +
       headerInfo + startInfo +
-      (data.truncated ? ` | ${data.rows.length}행까지 표시` : '');
+      ` | 실제 ${actualCount}행` +
+      (data.truncated ? ` · ${displayedCount}행만 표시` : '');
 
     const previewWarn = _el('preview-warn');
     if (previewWarn) {
@@ -387,8 +413,9 @@ function _renderTable(data) {
   const columns = data.columns || [];
   const rawRows = data.rows || [];
   const previewStartRow = data.start_row ?? 1;
-  const dataStartRow = data.data_start_row ?? 1;
-  const issueSet = new Set(data.issue_rows || []); // excel row numbers
+  const structured = data.has_structured_rows !== false;
+  const dataStartRow = structured ? (data.data_start_row ?? 1) : null;
+  const issueSet = structured ? new Set((data.row_marks?.issue_rows || data.row_marks?.warn_rows || data.issue_rows || [])) : new Set(); // excel row numbers
 
   let lastVisibleIdx = -1;
   for (let i = rawRows.length - 1; i >= 0; i--) {
@@ -409,7 +436,7 @@ function _renderTable(data) {
     const cnt = {};
     rows.forEach((r, i) => {
       const excelRow = previewStartRow + i;
-      if (excelRow < dataStartRow) return;
+      if (structured && excelRow < dataStartRow) return;
       const nm    = (r[nameCol] || '').replace(/[A-Z]+$/, '').trim();
       const grade = gradeCol >= 0 ? (r[gradeCol] || '') : '';
       const key   = `${grade}||${nm}`;
@@ -428,16 +455,17 @@ function _renderTable(data) {
 
   rows.forEach((r, i) => {
     const excelRow = previewStartRow + i;
-    if (excelRow < dataStartRow) return;
-    if (issueSet.has(excelRow)) addIssue(excelRow, '필수값 확인');
+    if (structured && excelRow < dataStartRow) return;
+    if (issueSet.has(excelRow)) addIssue(excelRow, '값 확인');
   });
 
+  const mutedSet = new Set(data.row_marks?.muted_rows || []);
   const filtered = rows.reduce((acc, row, i) => {
     const excelRow = previewStartRow + i;
     const rowText = row.join(' ').toLowerCase();
     if (keyword && !rowText.includes(keyword)) return acc;
     const issues = rowIssueMap.get(excelRow) || [];
-    const isPrestart = excelRow < dataStartRow;
+    const isPrestart = structured ? (mutedSet.size ? mutedSet.has(excelRow) : (excelRow < dataStartRow)) : false;
     const isIssue = !isPrestart && issues.length > 0;
     const isDup = !isPrestart && dupSet.has(i);
     if (issueOnly && !isIssue) return acc;
@@ -451,13 +479,14 @@ function _renderTable(data) {
   const tbody = table.querySelector('tbody');
 
   const headers = [...columns, '비고'];
-  thead.innerHTML = '<tr><th style="width:40px;color:#94A3B8;font-weight:600;text-align:center">#</th>' +
+  const rowNoHeader = structured ? '#' : '';
+  thead.innerHTML = `<tr><th style="width:40px;color:#94A3B8;font-weight:600;text-align:center">${rowNoHeader}</th>` +
     headers.map(h => `<th>${_esc(h)}</th>`).join('') + '</tr>';
   tbody.innerHTML = filtered.map(({ row, excelRow, issues, isPrestart, isIssue, isDup }) => {
     const finalCls = isPrestart ? 'row-prestart' : isIssue ? 'row-warn' : isDup ? 'row-dup' : '';
     const remark = isPrestart ? '' : (issues.length ? _esc(issues.join(', ')) : '');
     const cells = row.map(v => `<td>${_esc(v)}</td>`).join('') + `<td>${remark}</td>`;
-    return `<tr class="${finalCls}"><td style="color:#94A3B8;font-size:11px;text-align:center;user-select:none">${excelRow}</td>${cells}</tr>`;
+    return `<tr class="${finalCls}"><td style="color:#94A3B8;font-size:11px;text-align:center;user-select:none">${structured ? excelRow : ''}</td>${cells}</tr>`;
   }).join('');
 
   const kindEntry = _scanWarnState.byKind[_currentKind] || { messages: [], issueRows: new Set(), suspectCount: 0, rowIssues: new Map() };
@@ -478,6 +507,13 @@ function _syncPreviewWarn(kind, meta = {}) {
   const previewWarn = _el('preview-warn');
   if (!previewWarn) return;
 
+  const data = _previewData[kind] || {};
+  if (data.has_structured_rows === false) {
+    previewWarn.innerHTML = `<div class="pw-inline">헤더를 찾지 못해 행번호를 표시하지 않습니다.</div>`;
+    previewWarn.style.color = '#92400E';
+    _refreshWarnUI();
+    return;
+  }
   const kindState = _scanWarnState.byKind[kind] || { messages: [], issueRows: new Set(), suspectCount: 0, rowIssues: new Map() };
   const rowIssueMap = meta.rowIssueMap || kindState.rowIssues || new Map();
   const count = typeof meta.issueCount === 'number' ? meta.issueCount : rowIssueMap.size;
@@ -505,7 +541,7 @@ function _refreshWarnUI() {
   const errLogs = (state.last_scan_logs || []).filter(l => l.level === 'error');
   if (errLogs.length) {
     _setBadge('err', '오류');
-    _showScanWarnCard(errLogs.map(l => String(l.message || '').trim()).filter(Boolean), 'error');
+    _showScanWarnCard(errLogs.map(l => String(l.message || '').trim()).filter(Boolean), 'error', _lastScanData?.status || null);
     _applyScanRowWarnStyles();
     return;
   }
@@ -516,7 +552,7 @@ function _refreshWarnUI() {
 
   if (_scanWarnState.hasWarn) {
     _setBadge('warn', '경고');
-    _showScanWarnCard(_scanWarnState.messages, 'warn');
+    _showScanWarnCard(_scanWarnState.messages, 'warn', _lastScanData?.status || null);
   } else {
     _setBadge('ok', '스캔 완료');
     _hideScanWarnCard();
@@ -605,7 +641,7 @@ function _normalizeScanCardMessage(msg, mode) {
   if (!s) return '';
   s = s.replace(/^\[(WARN|ERROR)\]\s*/, '');
   if (/헤더를 찾을 수 없습니다|구조를 읽을 수 없습니다/.test(s)) {
-    return '헤더를 찾을 수 없습니다. 파일 구조를 확인해 주세요.';
+    return '헤더를 찾을 수 없습니다.';
   }
   if (/시트가\s*\d+개 있습니다/.test(s) || /시트가 여러 개 있습니다/.test(s)) {
     return '시트가 여러 개 있습니다. 첫 번째 시트만 사용합니다.';
@@ -619,28 +655,20 @@ function _normalizeScanCardMessage(msg, mode) {
   return s;
 }
 
-function _showScanWarnCard(messages, mode = 'warn') {
+function _showScanWarnCard(messages, mode = 'warn', status = null) {
   const el = _el('scan-warn-card');
   if (!el) return;
-  const lines = Array.from(new Set((Array.isArray(messages) ? messages : []).map(msg => _normalizeScanCardMessage(msg, mode)).filter(Boolean)));
-  if (!lines.length) {
+  const html = (typeof StatusUI !== 'undefined' && StatusUI.normalizeStatusCard)
+    ? StatusUI.normalizeStatusCard(messages, mode, status)
+    : null;
+  if (!html) {
     el.style.display = 'none';
     el.innerHTML = '';
     el.classList.remove('error');
     return;
   }
   el.classList.toggle('error', mode === 'error');
-  const head = mode === 'error'
-    ? `<div class="warn-line">오류 ${lines.length}건이 있습니다. 파일 구조를 확인해 주세요.</div>`
-    : `<div class="warn-line">경고 ${lines.length}건이 있습니다. 선택 파일에서 확인해 주세요.</div>`;
-  if (mode === 'warn') {
-    el.innerHTML = head;
-    el.style.display = 'block';
-    return;
-  }
-  const body = lines.slice(0, 3).map(msg => `<div class="warn-line">• ${_esc(msg)}</div>`).join('');
-  const tail = lines.length > 3 ? `<div class="warn-line">외 ${lines.length - 3}건</div>` : '';
-  el.innerHTML = head + body + tail;
+  el.innerHTML = html;
   el.style.display = 'block';
 }
 
@@ -697,6 +725,12 @@ function toggleFilter(key) {
   // 학년도 아이디 규칙 갱신 (StatusPanel)
   // ──────────────────────────────────────────────
   function _updateGradeMap(data) {
+    const maxGrade = Number(data.grade_rule_max_grade);
+    if (typeof Panel !== 'undefined' && Panel.setGradeCount) {
+      if (Number.isFinite(maxGrade) && maxGrade > 0) Panel.setGradeCount(maxGrade);
+      else Panel.setGradeCount(state.selected_school || data.school_name || '');
+    }
+
     if (!data.need_roster) {
       Panel.updateGradeMap('not_needed');
       return;

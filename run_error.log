@@ -1,7 +1,7 @@
 Traceback (most recent call last):
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1638, in execute_pipeline
-    freshmen_rows = read_freshmen_rows(
-                    ^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 303, in read_freshmen_rows
-    raise ValueError("\n".join(issues[:20]))
-ValueError: [WARN] 신입생 파일 6행이 비어 있습니다. 중간 빈 행이 있으면 데이터가 잘릴 수 있습니다.
+  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1786, in execute_pipeline
+    fill_register(
+  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1142, in fill_register
+    school_profile = school_profile_from_name(school_name)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^
+NameError: name 'school_profile_from_name' is not defined

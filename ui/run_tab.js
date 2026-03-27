@@ -51,7 +51,7 @@ const Run = (() => {
     state.isRunning = true;
     _el('btn-run').disabled = true;
     _setBadge('running', '실행 중');
-    _el('run-info').textContent = '실행 중...';
+    _el('run-info').textContent = '작업을 실행하는 중입니다.';
     _el('run-hold-warn').style.display = 'none';
 
     const res = JSON.parse(await bridge.startRunMain(JSON.stringify(params)));
@@ -75,10 +75,16 @@ const Run = (() => {
 
     if (!data.ok) {
       const err = (data.logs || []).find(l => l.level === 'error');
+      const status = data.status || {
+        level: 'error',
+        summary_text: '오류가 있습니다.',
+        detail_messages: _collectStatusMessages(data, null),
+      };
       _setBadge('err', '실행 실패');
-      _el('run-info').textContent = err ? err.message : '실행 중 오류가 발생했습니다.';
+      _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
+      _renderRunStatusCard(status, data);
       App.setStepState(3, 'warn');
-      toast('작업 실행 중 오류 — 실행 로그 보기에서 확인하세요.', 'err');
+      toast(err ? err.message : '작업 실행 중 오류 — 실행 로그 보기에서 확인하세요.', 'err');
       return;
     }
 
@@ -87,40 +93,30 @@ const Run = (() => {
     App.setStepState(4, 'active');
 
     // 경고 / 완료 뱃지
-    const warnLogs = (data.logs || []).filter(l => l.level === 'warn');
-
-    // 실제 확인 필요 건수 (자동 제외는 경고에서 제외)
-    const realHold = (data.transfer_in_hold || 0) + (data.transfer_out_hold || 0)
-                   - (data.transfer_out_auto_skip || 0);
     const holdWarn = _el('run-hold-warn');
-    const hasRunWarn = warnLogs.length > 0;
-    const hasHoldWarn = realHold > 0;
+    const status = data.status || null;
+    const detailMessages = _collectStatusMessages(data, status);
+    const level = status?.level || 'ok';
 
-    if (hasRunWarn || hasHoldWarn) {
-      _setBadge('warn', '경고');
+    if (status?.badge) {
+      StatusUI.renderBadge('run-status-badge', status.badge, '완료');
+    }
 
-      let msg = '';
-      if (hasRunWarn && hasHoldWarn) {
-        msg = `실행 중 경고가 발생했고 확인 필요 건이 ${realHold}건 있습니다.`;
-      } else if (hasRunWarn) {
-        msg = '실행 중 경고가 발생했습니다. 실행 로그를 확인해 주세요.';
-      } else {
-        msg = `확인 필요 건이 ${realHold}건 있습니다.`;
-      }
-
-      _el('run-info').textContent = msg;
-      _renderHoldWarnCard({
-        warnLogs,
-        transferInHold: Number(data.transfer_in_hold || 0),
-        transferOutHold: Number(data.transfer_out_hold || 0),
-        transferOutAutoSkip: Number(data.transfer_out_auto_skip || 0),
-        realHold,
-      });
+    if (level === 'error') {
+      if (!status?.badge) _setBadge('err', '오류');
+      _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
+      _renderRunStatusCard({ ...status, detail_messages: detailMessages }, data);
+      App.setStepState(3, 'warn');
+    } else if (level === 'warn') {
+      if (!status?.badge) _setBadge('warn', '경고');
+      _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
+      _renderRunStatusCard({ ...status, detail_messages: detailMessages }, data);
       App.setStepState(3, 'warn');
     } else {
-      _setBadge('ok', '실행 완료');
-      _el('run-info').textContent = '실행 완료';
+      if (!status?.badge) _setBadge('ok', '완료');
+      _el('run-info').textContent = '작업이 완료되었습니다.';
       holdWarn.style.display = 'none';
+      holdWarn.innerHTML = '';
       App.setStepState(3, 'done');
     }
 
@@ -202,40 +198,55 @@ const Run = (() => {
     App.setFloatingNext(true, 'notice');
   }
 
+
+  function _collectStatusMessages(data, status) {
+    const fromStatus = Array.from(new Set((status?.detail_messages || []).map(v => String(v || '').trim()).filter(Boolean)));
+    if (fromStatus.length) return fromStatus;
+    const fromLogs = Array.from(new Set((data?.logs || [])
+      .filter(l => ['warn', 'error'].includes(String(l.level || '').toLowerCase()))
+      .map(l => String(l.message || '').trim())
+      .filter(Boolean)));
+    return fromLogs;
+  }
+
   function onFailed(error) {
     _el('btn-run').disabled = false;
     _setBadge('err', '실행 실패');
-    _el('run-info').textContent = '예기치 못한 오류가 발생했습니다.';
+    _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
+    _renderRunStatusCard({
+      level: 'error',
+      summary_text: '실행 중 오류가 발생했습니다.',
+      detail_messages: [String(error?.message || error || '예기치 못한 오류가 발생했습니다.')],
+    });
     App.setStepState(3, 'warn');
     toast('실행 오류 — 실행 로그 보기에서 자세한 내용을 확인하세요.', 'err');
   }
 
 
-  function _renderHoldWarnCard({ warnLogs = [], transferInHold = 0, transferOutHold = 0, transferOutAutoSkip = 0, realHold = 0 }) {
+  function _renderRunStatusCard(status, data=null) {
     const holdWarn = _el('run-hold-warn');
     if (!holdWarn) return;
 
-    const withdrawReview = Math.max(0, transferOutHold - transferOutAutoSkip);
-    const lines = [];
+    const level = status?.level === 'error' ? 'error' : 'warn';
+    const details = Array.from(new Set(((status?.detail_messages || []).length
+      ? (status?.detail_messages || [])
+      : _collectStatusMessages(data, status)).map(v => String(v || '').trim()).filter(Boolean)));
+    const summary = String(status?.summary_text || '').trim();
+    const action = String(status?.action_text || '').trim();
 
-    if (warnLogs.length > 0) {
-      lines.push('<div class="warn-line">실행 중 경고가 발생했습니다. 실행 로그를 확인해 주세요.</div>');
-    }
-    if (withdrawReview > 0) {
-      lines.push(`<div class="warn-line"><strong>퇴원 보류 ${withdrawReview}건</strong> — 동명이인 또는 명부 확인이 필요합니다.</div>`);
-    }
-    if (transferInHold > 0) {
-      lines.push(`<div class="warn-line">전입 보류 ${transferInHold}건이 있습니다.</div>`);
-    }
-    if (transferOutAutoSkip > 0) {
-      lines.push(`<div class="warn-line">자동 제외 ${transferOutAutoSkip}건은 보류 건수에서 제외했습니다.</div>`);
-    }
-    if (!lines.length && realHold > 0) {
-      lines.push(`<div class="warn-line">확인 필요 건이 ${realHold}건 있습니다.</div>`);
+    if (!summary && !details.length && !action) {
+      holdWarn.style.display = 'none';
+      holdWarn.innerHTML = '';
+      return;
     }
 
-    holdWarn.innerHTML = lines.join('');
-    holdWarn.style.display = lines.length ? '' : 'none';
+    holdWarn.classList.toggle('error', level === 'error');
+    const html = (typeof StatusUI !== 'undefined' && StatusUI.normalizeStatusCard)
+      ? StatusUI.normalizeStatusCard(details, level, { summary_text: summary, action_text: action })
+      : null;
+
+    holdWarn.innerHTML = html || '';
+    holdWarn.style.display = 'block';
   }
 
   // ──────────────────────────────────────────────

@@ -252,6 +252,11 @@ function _handleAction(action, el) {
         toast(scanCheck.msg, 'warn', 4000);
         return;
       }
+      const schoolKindCheck = _checkSchoolKindReady();
+      if (!schoolKindCheck.ok) {
+        toast(schoolKindCheck.msg, 'warn', 4000);
+        return;
+      }
       Run.start();
     },
     'run-log':        () => Run.showLog(),
@@ -359,7 +364,8 @@ function _connectSignals() {
   bridge.previewFailed.connect(payload => {
     const p = JSON.parse(payload);
     state.isPreviewLoading = false;
-    if (p.kind === 'compare' || p.kind === '재학생') Diff.onPreviewFailed?.(p.kind || '', p.error || '예기치 못한 오류');
+    if (p.kind === 'run_output') Run.onPreviewFailed?.(p.kind || '', p.error || '예기치 못한 오류');
+    else if (p.kind === 'compare' || p.kind === '재학생') Diff.onPreviewFailed?.(p.kind || '', p.error || '예기치 못한 오류');
     else Scan.onPreviewFailed(p.kind || '', p.error || '예기치 못한 오류');
   });
 }
@@ -517,13 +523,13 @@ const App = {
     } else if (idx === 1) {
       App.resetToSchoolSelect();
     } else if (idx === 2) {
-      // 스캔 탭: 학교가 선택돼 있어야 이동 가능
       if (!state.selected_school) {
         toast('먼저 학교를 선택하고 적용하세요.', 'warn');
         return;
       }
-      App.goTab('scan');
+      App.goTab(state.currentMode === 'diff' ? 'diff' : 'scan');
     } else if (idx === 3) {
+      if (state.currentMode === 'diff') return;
       // 실행 탭: 스캔 완료 + 체크박스 모두 확인 필요
       const scanCheck = _checkScanReady();
       if (!scanCheck.ok) {
@@ -532,7 +538,7 @@ const App = {
       }
       App.goTab('run');
     } else if (idx === 4) {
-      // 안내문 탭: 학교가 선택돼 있어야 이동 가능
+      if (state.currentMode === 'diff') return;
       if (!state.selected_school) {
         toast('먼저 학교를 선택하고 적용하세요.', 'warn');
         return;
@@ -639,6 +645,17 @@ const App = {
 // 파일이 있는 행(파일명 셀이 비어있지 않은 행)만 체크 확인
 // 반환: { ok: true } 또는 { ok: false, msg: string }
 // ──────────────────────────────────────────────
+function _checkSchoolKindReady() {
+  const scanData = (typeof Scan !== 'undefined' && Scan.getLastScanData) ? Scan.getLastScanData() : null;
+  if (!scanData?.school_kind_needs_choice) return { ok: true };
+  const row = _el('school-kind-row');
+  const select = _el('school-kind-select');
+  const value = (select?.value || '').trim();
+  if (!row || row.style.display === 'none') return { ok: false, msg: '학교 구분을 먼저 선택해 주세요.' };
+  if (!value) return { ok: false, msg: '학교 구분을 먼저 선택해 주세요.' };
+  return { ok: true };
+}
+
 function _checkScanReady() {
   const badge = _el('scan-status-badge');
   if (!badge || badge.classList.contains('badge-idle')) {
@@ -671,6 +688,7 @@ function _resetSharedState() {
   Panel.reset();
   Scan.reset();
   Run.reset();
+  if (typeof Diff !== 'undefined' && Diff.reset) Diff.reset();
   Notice.clear();
   App.setFloatingNext(false, null);
 

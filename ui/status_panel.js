@@ -363,7 +363,7 @@ const Panel = (() => {
     const container = _el('grade-rows');
     if (!container) return;
     container.innerHTML = '';
-    for (let g = 1; g <= 6; g++) {
+    for (let g = 1; g <= 9; g++) {
       const row = document.createElement('div');
       row.className = 'grade-row-item';
       row.id        = `grade-row-${g}`;
@@ -385,7 +385,7 @@ const Panel = (() => {
 
   // state: "default" | "not_needed" | "no_roster" | "ok"
   function updateGradeMap(s, mapping) {
-    for (let g = 1; g <= 6; g++) {
+    for (let g = 1; g <= 9; g++) {
       const inp = _el(`grade-year-${g}`);
       if (!inp) continue;
       if (s === 'default' || s === 'not_needed') {
@@ -402,11 +402,19 @@ const Panel = (() => {
     }
   }
 
-  // 학교명 기준 표시 학년 수 조정 (중/고 → 3, 나머지 → 6)
-  function setGradeCount(schoolName) {
-    const last = (schoolName || '').slice(-1);
-    _maxGrade   = (last === '중' || last === '고') ? 3 : 6;
-    for (let g = 1; g <= 6; g++) {
+  // 표시 학년 수 조정
+  // - 숫자 입력 시: 코어가 넘긴 최대 학년 수 우선 사용
+  // - 문자열 입력 시: 기존 학교명 말미 추정 fallback 유지
+  function setGradeCount(value) {
+    if (Number.isFinite(value)) {
+      _maxGrade = Math.max(1, Math.min(9, Number(value)));
+    } else {
+      const schoolName = String(value || '');
+      const last = schoolName.slice(-1);
+      _maxGrade = (last === '중' || last === '고') ? 3 : 6;
+    }
+
+    for (let g = 1; g <= 9; g++) {
       const row = _el(`grade-row-${g}`);
       if (row) row.style.display = g <= _maxGrade ? '' : 'none';
       if (g > _maxGrade) {
@@ -418,7 +426,7 @@ const Panel = (() => {
 
   function getGradeOverrides() {
     const result = {};
-    for (let g = 1; g <= 6; g++) {
+    for (let g = 1; g <= 9; g++) {
       const inp = _el(`grade-year-${g}`);
       if (!inp) continue;
       const v = parseInt(inp.value, 10);
@@ -509,4 +517,43 @@ const Panel = (() => {
     updateRosterMapBtn, openRosterMap,
   };
 
+})();
+
+
+const StatusUI = (() => {
+  function renderBadge(elOrId, badge, fallbackText='') {
+    const el = typeof elOrId === 'string' ? _el(elOrId) : elOrId;
+    if (!el) return;
+    const type = badge?.type || 'idle';
+    el.className = `status-badge badge-${type}`;
+    el.textContent = badge?.text || fallbackText || '';
+  }
+
+  function normalizeStatusCard(messages, mode='warn', status=null) {
+    const esc = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const rawLines = Array.from(new Set((messages || []).map(m => typeof m === 'string' ? m : String(m?.text || '').trim()).map(s => s.replace(/^\[(WARN|ERROR)\]\s*/i, '').trim()).filter(Boolean)));
+    const lines = rawLines.map(s => s.replace(/파일 구조를 확인해 주세요\.?/g, '').replace(/선택 파일에서 확인해 주세요\.?/g, '').replace(/\s{2,}/g,' ').trim()).filter(Boolean);
+    if (!lines.length && !status?.summary_text) return null;
+    const head = esc(status?.summary_text || `${mode === 'error' ? '오류' : '경고'} ${lines.length}건이 있습니다.`);
+    const body = lines.map(msg => `<div class="warn-line">• ${esc(msg.replace(/필수값/g, '값'))}</div>`).join('');
+    const action = status?.action_text ? `<div class="warn-line">${esc(status.action_text)}</div>` : '';
+    return head + body + action;
+  }
+
+  function renderWarnCard(elOrId, messages, mode='warn', status=null) {
+    const el = typeof elOrId === 'string' ? _el(elOrId) : elOrId;
+    if (!el) return;
+    const html = normalizeStatusCard(messages, mode, status);
+    if (!html) {
+      el.style.display = 'none';
+      el.innerHTML = '';
+      el.classList.remove('error');
+      return;
+    }
+    el.classList.toggle('error', mode === 'error');
+    el.innerHTML = html;
+    el.style.display = 'block';
+  }
+
+  return { renderBadge, renderWarnCard, normalizeStatusCard };
 })();

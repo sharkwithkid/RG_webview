@@ -397,8 +397,7 @@ def _detect_header_row_generic(
 
     if best_row is None or best_score < min_match_slots:
         raise ValueError(
-            "[ERROR] 파일에서 헤더를 찾을 수 없습니다. "
-            "학년/반/이름/NO 등의 열이 동시에 3개 이상 있는지 확인해 주세요."
+            "[ERROR] 파일에서 헤더를 찾을 수 없습니다."
         )
 
     return best_row
@@ -824,18 +823,96 @@ def extract_id_prefix4(uid: Any) -> Optional[int]:
 # Domain 헬퍼
 # =========================
 
-def school_kind_from_name(school_name: str) -> Tuple[str, str]:
+def school_profile_from_name(school_name: str) -> Dict[str, Any]:
     s = (school_name or "").strip()
     if not s:
-        return "", ""
+        return {"mode": "unknown", "default_kind": "", "default_prefix": "", "grade_rule_max_grade": 6, "grade_ranges": []}
+
+    if s.endswith("분교"):
+        return {
+            "mode": "needs_user_choice",
+            "default_kind": "",
+            "default_prefix": "",
+            "grade_rule_max_grade": 6,
+            "grade_ranges": [],
+        }
+
+    if s.endswith("초중"):
+        return {
+            "mode": "mixed",
+            "default_kind": "",
+            "default_prefix": "",
+            "grade_rule_max_grade": 9,
+            "grade_ranges": [
+                (1, 6, "초등부", "초"),
+                (7, 9, "중등부", "중"),
+            ],
+        }
+
     last = s[-1]
     if last == "초":
-        return "초등부", "초"
+        return {
+            "mode": "single",
+            "default_kind": "초등부",
+            "default_prefix": "초",
+            "grade_rule_max_grade": 6,
+            "grade_ranges": [(1, 6, "초등부", "초")],
+        }
     if last == "중":
-        return "중등부", "중"
+        return {
+            "mode": "single",
+            "default_kind": "중등부",
+            "default_prefix": "중",
+            "grade_rule_max_grade": 3,
+            "grade_ranges": [(1, 3, "중등부", "중")],
+        }
     if last == "고":
-        return "고등부", "고"
-    return "", ""
+        return {
+            "mode": "single",
+            "default_kind": "고등부",
+            "default_prefix": "고",
+            "grade_rule_max_grade": 3,
+            "grade_ranges": [(1, 3, "고등부", "고")],
+        }
+
+    return {"mode": "unknown", "default_kind": "", "default_prefix": "", "grade_rule_max_grade": 6, "grade_ranges": []}
+
+
+def apply_school_kind_override(profile: Dict[str, Any], school_kind_override: Optional[str]) -> Dict[str, Any]:
+    if not school_kind_override:
+        return dict(profile or {})
+    override_map = {
+        "초등부": ("초등부", "초", 6),
+        "중등부": ("중등부", "중", 3),
+        "고등부": ("고등부", "고", 3),
+        "기타(빈칸)": ("", "", 6),
+    }
+    kind_full, kind_prefix, max_grade = override_map.get(school_kind_override, ("", "", 6))
+    return {
+        "mode": "override",
+        "default_kind": kind_full,
+        "default_prefix": kind_prefix,
+        "grade_rule_max_grade": max_grade,
+        "grade_ranges": [(1, max_grade, kind_full, kind_prefix)] if kind_full or kind_prefix else [],
+    }
+
+
+def resolve_school_kind_by_grade(profile: Dict[str, Any], grade: Any) -> Tuple[str, str]:
+    try:
+        grade_i = int(grade)
+    except Exception:
+        grade_i = None
+
+    for start, end, kind_full, kind_prefix in list((profile or {}).get("grade_ranges", []) or []):
+        if grade_i is not None and start <= grade_i <= end:
+            return kind_full, kind_prefix
+
+    return (profile or {}).get("default_kind", ""), (profile or {}).get("default_prefix", "")
+
+
+def school_kind_from_name(school_name: str) -> Tuple[str, str]:
+    profile = school_profile_from_name(school_name)
+    return profile.get("default_kind", ""), profile.get("default_prefix", "")
 
 
 # =========================

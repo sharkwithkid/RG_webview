@@ -51,6 +51,7 @@ from core.common import (
     parse_class_str,
     extract_id_prefix4,
     school_kind_from_name,
+    school_profile_from_name,
     FRESHMEN_HEADER_SLOTS,
     TRANSFER_HEADER_SLOTS,
     WITHDRAW_HEADER_SLOTS,
@@ -99,6 +100,9 @@ class ScanResult:
     missing_fields: List[str] = field(default_factory=list)
     can_execute: bool = False
     can_execute_after_input: bool = False
+    school_profile_mode: str = "single"
+    school_kind_needs_choice: bool = False
+    grade_rule_max_grade: int = 6
 
     # UI용 스캔 메타 (파일별 미리보기 dict)
     freshmen: Optional[Dict[str, Any]] = None
@@ -967,6 +971,10 @@ def scan_pipeline(
         can_execute=False,
         can_execute_after_input=False,
     )
+    school_profile = school_profile_from_name(school_name)
+    sr.school_profile_mode = str(school_profile.get("mode", "single") or "single")
+    sr.school_kind_needs_choice = bool(school_profile.get("needs_user_choice", False))
+    sr.grade_rule_max_grade = int(school_profile.get("grade_rule_max_grade", 6) or 6)
 
     try:
         if not school_name:
@@ -1000,9 +1008,14 @@ def scan_pipeline(
             sr.roster_xlsx_path = None
         _tick("명단 파일 검증")
 
-        # 학교 구분 자동 판별 — 실패 시 경고 (app에서 선택 UI 노출 트리거)
+        # 학교 구분 / 예외 프로필 감지
         _kind_full, _ = school_kind_from_name(school_name)
-        if not _kind_full:
+        if sr.school_kind_needs_choice:
+            log("[WARN] 학교 구분을 자동으로 판별하지 못했습니다.")
+            log("[WARN] 학교 구분을 직접 선택한 뒤 다시 실행해 주세요.")
+        elif sr.school_profile_mode == "mixed":
+            log(f"[INFO] 초중 통합 학교로 감지되었습니다. 학년도 규칙은 1~{sr.grade_rule_max_grade}학년까지 표시합니다.")
+        elif not _kind_full:
             log("[WARN] 학교 구분을 자동으로 판별하지 못했습니다.")
             log("[WARN] 학교 구분을 직접 선택한 뒤 다시 실행해 주세요.")
 
@@ -1097,14 +1110,14 @@ def scan_pipeline(
                 wb = layout["_wb"]
                 ws = layout["_ws"]
             except Exception:
-                log(f"[ERROR] {kind_label} 파일에서 헤더를 찾을 수 없습니다. 파일 구조를 확인해 주세요.")
+                log(f"[ERROR] {kind_label} 파일에서 헤더를 찾을 수 없습니다.")
                 return {
                     "file_name": file_path.name,
                     "file_path": str(file_path),
                     "sheet_name": "",
                     "header_row": None,
                     "data_start_row": None,
-                    "warning": "헤더를 찾을 수 없습니다. 파일 구조를 확인해 주세요.",
+                    "warning": "헤더를 찾을 수 없습니다.",
                     "headers": [],
                     "rows": [],
                     "issue_rows": [],
@@ -1256,12 +1269,10 @@ def scan_pipeline(
                             f"{joined} 처리는 학생명부 파일 없이는 진행할 수 없습니다."
                         ) from roster_err
                     else:
-                        # 신입생 타학년만 있는 경우 → 수동 입력으로 대체 가능
-                        log("[WARN] 학생명부를 찾지 못했습니다. 학년도 아이디 규칙이 필요합니다. 학년별 값을 입력한 뒤 적용해 주세요.")
-                        sr.roster_path = None
-                        sr.roster_info = None
-                        roster_ws = None
-                        roster_path = None
+                        # 신입생 타학년 포함도 이제 학생명부를 필수로 본다.
+                        raise ValueError(
+                            "[ERROR] 학생명부 파일이 없습니다. 학년도 규칙이 필요한 경우에도 학생명부 파일이 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요."
+                        ) from roster_err
 
                 if roster_ws is not None and roster_path is not None:
                     try:
@@ -1375,11 +1386,11 @@ def scan_pipeline(
         ):
             missing_fields.append("입력 파일 헤더/구조 확인")
 
-        # 명부가 필요한 경우를 둘로 나눔
-        # - 전입/전출 포함: 학생명부 필수 (수동 입력으로 대체 불가)
-        # - 신입생 타학년만 포함: 수동 입력으로 대체 가능
-        roster_required_strict = bool(need_roster_by_transfer or need_roster_by_withdraw)
-        roster_can_be_replaced_by_manual = bool(need_roster_by_freshmen and not roster_required_strict)
+        # 명부가 필요한 경우는 모두 학생명부 필수로 본다.
+        # - 전입/전출 포함
+        # - 신입생 타학년 포함 (수동 학년도 규칙 입력으로 대체하지 않음)
+        roster_required_strict = bool(need_roster)
+        roster_can_be_replaced_by_manual = False
 
         roster_ok = (not sr.need_roster) or (sr.roster_info is not None)
         if not roster_ok:
@@ -1392,12 +1403,12 @@ def scan_pipeline(
                 else:
                     log("[ERROR] 전출생 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
             else:
-                log("[ERROR] 학년도 아이디 규칙이 필요합니다. 학년별 값을 입력한 뒤 적용해 주세요.")
+                log("[ERROR] 학년도 규칙이 필요한 경우에도 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
 
         sr.missing_fields = missing_fields
         sr.needs_open_date = bool(sr.withdraw_file)
 
-        sr.can_execute_after_input = roster_can_be_replaced_by_manual and (sr.roster_info is None)
+        sr.can_execute_after_input = False
         sr.can_execute = len(sr.missing_fields) == 0
 
         sr.ok = True

@@ -443,6 +443,7 @@ def read_compare_rows(
     xlsx_path: Path,
     header_row: Optional[int] = None,
     data_start_row: Optional[int] = None,
+    slot_cols: Optional[Dict[str, int]] = None,
 ) -> List[Dict[str, Any]]:
     """
     재학생 명렬표 비교용 입력 읽기.
@@ -458,8 +459,15 @@ def read_compare_rows(
             layout = detect_compare_input_layout(xlsx_path)
             header_row = layout["header_row"]
             data_start_row = layout["data_start_row"]
+            if slot_cols is None:
+                slot_cols = layout.get("slot_cols")
 
-        slot_cols = _build_header_slot_map(ws, header_row, COMPARE_HEADER_SLOTS)
+        # IMPORTANT:
+        # 실행 단계에서는 스캔에서 확정한 slot_cols를 그대로 재사용해야 한다.
+        # 여기서 다시 헤더 슬롯을 재감지하면, 스캔 때는 잡힌 '반' 열이
+        # 실행 때 누락되어 판정불가 시트의 '명단반'이 공백이 될 수 있다.
+        if slot_cols is None:
+            slot_cols = _build_header_slot_map(ws, header_row, COMPARE_HEADER_SLOTS)
         col_grade = slot_cols.get("grade")
         col_class = slot_cols.get("class")
         col_name  = slot_cols.get("name")
@@ -760,8 +768,13 @@ def build_diff_rows(
             if compare_count > roster_count:
                 for r in compare_group:
                     rec = {
-                        "grade": r["grade"], "class": r.get("class", ""),
-                        "name": r["name"], "hold_reason": "동학년 동명이인으로 자동 판정 불가",
+                        "grade": r["grade"],
+                        "class": r.get("class", ""),  # 기존 정렬/호환 유지용
+                        "name": r["name"],
+                        "source": "명단",
+                        "compare_class": r.get("class", ""),
+                        "roster_class": "",
+                        "hold_reason": "명단 중복 / 명부 단일로 자동 판정 불가",
                     }
                     transfer_in_hold.append(rec)
                     unresolved_rows.append(rec)
@@ -772,16 +785,26 @@ def build_diff_rows(
                     if is_excluded_misc_class(cls_raw):
                         continue
                     rec = {
-                        "grade": r["grade"], "class": r.get("class", ""),
-                        "name": r["name"], "hold_reason": "동학년 동명이인으로 자동 판정 불가",
+                        "grade": r["grade"],
+                        "class": r.get("class", ""),  # 기존 정렬/호환 유지용
+                        "name": r["name"],
+                        "source": "명부",
+                        "compare_class": "",
+                        "roster_class": r.get("class", ""),
+                        "hold_reason": "명단 단일 / 명부 중복으로 자동 판정 불가",
                     }
                     transfer_out_hold.append(rec)
                     unresolved_rows.append(rec)
             else:
                 for r in compare_group:
                     rec = {
-                        "grade": r["grade"], "class": r.get("class", ""),
-                        "name": r["name"], "hold_reason": "학년+이름 중복(양쪽 동수)으로 자동 판정 불가",
+                        "grade": r["grade"],
+                        "class": r.get("class", ""),  # 기존 정렬/호환 유지용
+                        "name": r["name"],
+                        "source": "명단",
+                        "compare_class": r.get("class", ""),
+                        "roster_class": "",
+                        "hold_reason": "학년+이름 중복(양쪽 동수)으로 자동 판정 불가",
                     }
                     transfer_in_hold.append(rec)
                     unresolved_rows.append(rec)
@@ -790,8 +813,13 @@ def build_diff_rows(
                     if is_excluded_misc_class(cls_raw):
                         continue
                     rec = {
-                        "grade": r["grade"], "class": r.get("class", ""),
-                        "name": r["name"], "hold_reason": "학년+이름 중복(양쪽 동수)으로 자동 판정 불가",
+                        "grade": r["grade"],
+                        "class": r.get("class", ""),  # 기존 정렬/호환 유지용
+                        "name": r["name"],
+                        "source": "명부",
+                        "compare_class": "",
+                        "roster_class": r.get("class", ""),
+                        "hold_reason": "학년+이름 중복(양쪽 동수)으로 자동 판정 불가",
                     }
                     transfer_out_hold.append(rec)
                     unresolved_rows.append(rec)
@@ -953,16 +981,14 @@ def scan_diff_pipeline(
             if detected_year is None:
                 detected_year = roster_year
 
-            if detected_year != target_year:
+            if detected_year is not None and detected_year != target_year:
                 log(
-                    f"[WARN] 학생명부 학년도가 비교 기준과 다릅니다. "
-                    f"(감지: {detected_year}학년도, 기준: {target_year}학년도)"
+                    f"[WARN] 학생명부 파일명에서 감지한 학년도와 현재 기준 학년도가 다릅니다. "
+                    f"(파일명 감지: {detected_year}학년도, 기준: {target_year}학년도)"
                 )
-                sr.year_int = int(detected_year)
-                sr.year_str = str(detected_year)
-            else:
-                sr.year_int = int(target_year)
-                sr.year_str = str(target_year)
+
+            sr.year_int = int(target_year)
+            sr.year_str = str(target_year)
 
             log(f"[OK] 올해 학생명부 감지: {roster_path.name}")
 

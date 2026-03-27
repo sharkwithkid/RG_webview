@@ -61,6 +61,9 @@ from core.common import (
     notice_name_key,
     parse_class_str,
     school_kind_from_name,
+    school_profile_from_name,
+    apply_school_kind_override,
+    resolve_school_kind_by_grade,
     resolve_transfer_name_conflicts,
     RosterInfo,
 )
@@ -131,7 +134,7 @@ def _parse_freshmen_grade_meta(raw_grade: Any, input_year: int, school_name: str
         if not re.search(r"\d", grade_label):
 
             # "유치원"처럼 나이 숫자 없는 경우 → 학교 종류 기반 1학년으로
-            from core.common import school_kind_from_name
+            from core.common import school_kind_from_name, school_profile_from_name, apply_school_kind_override, resolve_school_kind_by_grade
             _, kind_prefix = school_kind_from_name(school_name)
             prefix = kind_prefix if kind_prefix else "초"
             grade_label = f"{prefix}1"
@@ -1139,32 +1142,22 @@ def fill_register(
             for c in [col_no, col_name, col_id, col_kind, col_school, col_grade, col_class]:
                 ws_students.cell(row=r, column=c).value = None
 
-        kind_full, kind_prefix = school_kind_from_name(school_name)
-
-        # UI에서 학교 구분을 직접 선택한 경우 override 우선 적용
-        if school_kind_override:
-            _override_map = {
-                "초등부": ("초등부", "초"),
-                "중등부": ("중등부", "중"),
-                "고등부": ("고등부", "고"),
-                "기타(빈칸)": ("", ""),
-            }
-            kind_full, kind_prefix = _override_map.get(
-                school_kind_override, (kind_full, kind_prefix)
-            )
+        school_profile = school_profile_from_name(school_name)
+        school_profile = apply_school_kind_override(school_profile, school_kind_override)
 
         def write_student_row(r, no, name, uid, grade_i, cls_name, school_kind_text=None):
             write_text_cell(ws_students, r, col_no, no)
             write_text_cell(ws_students, r, col_name, name)
             write_text_cell(ws_students, r, col_id, uid)
+            resolved_kind_full, resolved_kind_prefix = resolve_school_kind_by_grade(school_profile, grade_i)
             write_text_cell(
                 ws_students,
                 r,
                 col_kind,
-                school_kind_text if school_kind_text is not None else (kind_full or ""),
+                school_kind_text if school_kind_text is not None else (resolved_kind_full or ""),
             )
             write_text_cell(ws_students, r, col_school, school_name)
-            grade_text = grade_i if isinstance(grade_i, str) else (f"{kind_prefix}{grade_i}" if kind_prefix else "")
+            grade_text = grade_i if isinstance(grade_i, str) else (f"{resolved_kind_prefix}{grade_i}" if resolved_kind_prefix else "")
             write_text_cell(ws_students, r, col_grade, grade_text)
             write_text_cell(ws_students, r, col_class, cls_name)
 
