@@ -9,7 +9,6 @@ const Diff = (() => {
   let _previewData = null;
   let _viewerOpen = false;
   let _bound = false;
-  let _warnState = _makeEmptyWarnState();
   function _bindOnce() {
     if (_bound) return;
     _bound = true;
@@ -114,45 +113,32 @@ const Diff = (() => {
     _lastScanData = data || null;
     _compareItem = (data.items || []).find(i => i.kind === COMPARE_KIND) || null;
     if (!data.ok || !_compareItem) {
+      const status = data.status || null;
+      const errMsg = (status?.messages || []).find(m => m.level === 'error')?.text
+        || '재학생 파일을 확인할 수 없습니다.';
       _setScanBadge('err', '오류');
-      const err = (data.logs || []).find(l => l.level === 'error');
       _setScanMessage('');
-      _showWarnCard('diff-scan-warn-card', [err ? err.message : '재학생 파일을 확인할 수 없습니다.'], 'error');
+      _showWarnCard('diff-scan-warn-card', [errMsg], 'error', status);
       _applyCompareWarnStyles('error');
       _el('btn-scan-diff').disabled = false;
       return;
     }
-    _warnState = _buildWarnState(data, _compareItem);
     _applyCompareRow(_compareItem);
+
+    // 뱃지 + 카드 — status 하나만 본다
     const status = data.status || null;
-    if (status?.badge) {
-      StatusUI.renderBadge('diff-scan-status-badge', status.badge, '스캔 완료');
-      _setScanMessage('');
-      const errMsgs = (status.messages || []).filter(m => m.level === 'error').map(m => m.text);
-      const warnMsgs = (status.messages || []).filter(m => m.level === 'warn').map(m => m.text);
-      if (errMsgs.length) {
-        _showWarnCard('diff-scan-warn-card', errMsgs, 'error', _lastScanData?.status || null);
-        _applyCompareWarnStyles('error');
-      } else if (warnMsgs.length) {
-        _showWarnCard('diff-scan-warn-card', warnMsgs, 'warn', _lastScanData?.status || null);
-        _applyCompareWarnStyles('warn');
-      } else {
-        _hideWarnCard('diff-scan-warn-card');
-        _applyCompareWarnStyles('ok');
-      }
-    } else if (_warnState.hasError) {
-      _setScanBadge('err', '오류');
-      _setScanMessage('');
-      _showWarnCard('diff-scan-warn-card', _warnState.errorMessages, 'error');
+    StatusUI.renderBadge('diff-scan-status-badge', status?.badge, '완료');
+    _setScanMessage('');
+    const errMsgs  = (status?.messages || []).filter(m => m.level === 'error').map(m => m.text);
+    const warnMsgs = (status?.messages || []).filter(m => m.level === 'warn').map(m => m.text);
+    const holdMsgs = (status?.messages || []).filter(m => m.level === 'hold').map(m => m.text);
+    if (errMsgs.length) {
+      _showWarnCard('diff-scan-warn-card', errMsgs, 'error', status);
       _applyCompareWarnStyles('error');
-    } else if (_warnState.hasWarn) {
-      _setScanBadge('warn', '경고');
-      _setScanMessage('');
-      _showWarnCard('diff-scan-warn-card', _warnState.messages, 'warn');
+    } else if (holdMsgs.length || warnMsgs.length) {
+      _showWarnCard('diff-scan-warn-card', [...holdMsgs, ...warnMsgs], 'warn', status);
       _applyCompareWarnStyles('warn');
     } else {
-      _setScanBadge('ok', '스캔 완료');
-      _setScanMessage('');
       _hideWarnCard('diff-scan-warn-card');
       _applyCompareWarnStyles('ok');
     }
@@ -205,10 +191,10 @@ const Diff = (() => {
     state.isDiffScanning = false;
     _el('btn-run-diff').disabled = false;
     if (!data.ok) {
+      const errMsg = (data.status?.messages || []).find(m => m.level === 'error')?.text || '실패';
       _setRunBadge('err', '오류');
-      const err = (data.logs || []).find(l => l.level === 'error');
       _setRunInfo('');
-      _showWarnCard('diff-run-warn-card', [err ? err.message : '실행 실패'], 'error');
+      _showWarnCard('diff-run-warn-card', [errMsg], 'error', data.status || null);
       return;
     }
     const rosterOnlyCount = Number(data.roster_only_count || 0);
@@ -219,17 +205,9 @@ const Diff = (() => {
     else _setRunBadge(unresolvedCount > 0 ? 'warn' : 'ok', unresolvedCount > 0 ? '경고' : '완료');
     _setRunInfo('명단 비교 결과를 아래에서 확인해 주세요.');
     
-    const statusWarns = (data.status?.messages || [])
-      .filter(m => m.level === 'warn')
-      .map(m => m.text);
-
-    const logWarns = (data.logs || [])
-      .filter(l => l.level === 'warn')
-      .map(l => l.message);
-
-    const runWarns = statusWarns.length ? statusWarns : logWarns;
-
-    if (runWarns.length) _showWarnCard('diff-run-warn-card', runWarns, 'warn', data?.status || null);
+    // 카드 — status 하나만 본다 (logs 파싱 없음)
+    const runMsgs = (data.status?.messages || []).filter(m => ['warn','hold'].includes(m.level)).map(m => m.text);
+    if (runMsgs.length) _showWarnCard('diff-run-warn-card', runMsgs, 'warn', data?.status || null);
     else _hideWarnCard('diff-run-warn-card');
 
     _setStats(
@@ -259,7 +237,7 @@ const Diff = (() => {
     _setRunBadge('err', '오류');
     _setRunInfo('');
     _showWarnCard('diff-run-warn-card', [`예기치 못한 오류: ${error}`], 'error');
-    toast('명단 비교 오류: ' + error, 'err');
+    // 토스트 제거 — 카드가 있어서 중복
   }
   function onPreviewLoaded(payload) {
     _previewData = payload;
@@ -375,9 +353,8 @@ const Diff = (() => {
     _el('diff-viewer-body').style.display = 'none';
     const btn = _el('btn-toggle-diff-viewer');
     if (btn) btn.textContent = '펼치기 ▾';
-    _warnState = _makeEmptyWarnState();
-    _setScanBadge('idle', '스캔 전');
-    _setRunBadge('idle', '실행 전');
+    _setScanBadge('idle', '대기');
+    _setRunBadge('idle', '대기');
     _setScanMessage('재학생 파일 구조를 먼저 확인해 주세요.');
     _setRunInfo('스캔을 통과한 후 명단 비교를 실행하고 결과를 확인합니다.');
     _hideWarnCard('diff-scan-warn-card');
@@ -429,31 +406,8 @@ const Diff = (() => {
     tbody.innerHTML = viewRows.map(r => `<tr><td>${_escHtml(r.grade)}</td><td>${_escHtml(r.class)}</td><td>${_escHtml(r.name)}</td><td>${_escHtml(r.hold_reason || r.reason || '')}</td></tr>`).join('');
   }
   function _makeEmptyWarnState() {
+    // 하위 호환용 — 실제 판정은 status 기반
     return { hasWarn: false, hasError: false, messages: [], errorMessages: [], issueRows: new Set() };
-  }
-  function _buildWarnState(data, item) {
-    const out = _makeEmptyWarnState();
-    (data.logs || []).forEach(l => {
-      const msg = String(l.message || '').trim();
-      if (!msg) return;
-      if (l.level === 'error') {
-        out.hasError = true;
-        if (!out.errorMessages.includes(msg)) out.errorMessages.push(msg);
-      } else if (l.level === 'warn') {
-        out.hasWarn = true;
-        if (!out.messages.includes(msg)) out.messages.push(msg);
-      }
-    });
-    const warningText = String(item?.warning || '').trim();
-    if (warningText) {
-      warningText.split(/\n+/).map(v => v.trim()).filter(Boolean).forEach(msg => {
-        out.hasWarn = true;
-        if (!out.messages.includes(msg)) out.messages.push(msg);
-      });
-    }
-    (item?.issue_rows || []).forEach(r => out.issueRows.add(r));
-    if (out.issueRows.size) out.hasWarn = true;
-    return out;
   }
   function _applyCompareWarnStyles(mode) {
     const row = _el('diff-compare-row');

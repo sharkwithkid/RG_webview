@@ -20,7 +20,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -41,6 +41,10 @@ from core.output_common import (
     reset_view_to_a1,
 )
 
+from core.events import (
+    CoreEvent, RowMark,
+    diff_transfer_in_hold, diff_transfer_out_hold, diff_unresolved,
+)
 from core.scan_diff import (
     DiffScanResult,
     scan_diff_pipeline,
@@ -77,6 +81,10 @@ class DiffPipelineResult:
     matched_rows: List[Dict[str, Any]] = None
     compare_only_rows: List[Dict[str, Any]] = None
     unresolved_rows: List[Dict[str, Any]] = None
+
+    # 구조화된 판정 결과 — bridge/UI는 이것만 참조
+    events:    List[Any] = field(default_factory=list)  # List[CoreEvent]
+    row_marks: List[Any] = field(default_factory=list)  # List[RowMark]
 
 
 # =========================
@@ -388,6 +396,23 @@ def execute_diff_pipeline(
             compare_only_rows=compare_only_rows,
             unresolved_rows=unresolved_rows,
         )
+
+        # hold / unresolved events
+        for row in (transfer_in_hold or []):
+            pr.events.append(diff_transfer_in_hold(
+                name=str(row.get("name", row.get("이름", ""))),
+                reason=str(row.get("hold_reason", row.get("remark", ""))),
+            ))
+        for row in (transfer_out_hold or []):
+            pr.events.append(diff_transfer_out_hold(
+                name=str(row.get("name", row.get("이름", ""))),
+                reason=str(row.get("hold_reason", row.get("remark", ""))),
+            ))
+        for row in (unresolved_rows or []):
+            pr.events.append(diff_unresolved(
+                name=str(row.get("name", row.get("이름", ""))),
+                reason=str(row.get("hold_reason", row.get("remark", ""))),
+            ))
 
         log("[DONE] 비교 실행 완료")
         return pr

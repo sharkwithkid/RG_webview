@@ -29,6 +29,15 @@ from typing import Dict, List, Optional, Tuple, Any, Sequence
 from collections import Counter, defaultdict
 
 from core.utils import normalize_text, text_contains
+from core.events import (
+    CoreEvent, RowMark,
+    roster_xls_format, school_not_in_roster,
+    school_folder_not_found, school_folder_ambiguous, no_input_files, input_xls_format,
+    missing_header, missing_data_start, empty_data, missing_required_col,
+    grade_format_warn, class_format_warn, empty_required_field, empty_row, merged_cell,
+    multiple_sheets, school_kind_unknown, roster_not_found, roster_date_mismatch,
+    open_date_missing, duplicate_input_file,
+)
 
 from core.xlsx_db import (
     search_schools_in_xlsx as _xlsx_search_schools,
@@ -111,6 +120,10 @@ class ScanResult:
     teachers: Optional[Dict[str, Any]] = None
     roster: Optional[Dict[str, Any]] = None
 
+    # 구조화된 판정 결과 — bridge/UI는 이것만 참조
+    events:    List[Any] = field(default_factory=list)  # List[CoreEvent]
+    row_marks: List[Any] = field(default_factory=list)  # List[RowMark]
+
 
 # =========================
 # Constants / keywords
@@ -165,6 +178,7 @@ def find_single_input_file(input_dir: Path, keywords: Sequence[str]) -> Optional
     if len(candidates) == 0:
         return None
     if len(candidates) > 1:
+        sr.events.append(duplicate_input_file(file_key or "global", kind_label or "입력"))
         raise ValueError(f"[ERROR] 입력 파일이 2개 이상 감지되었습니다: {[c.name for c in candidates]}")
     return candidates[0]
 
@@ -542,16 +556,19 @@ def validate_input_sheet_structure(
     data_start_row: int,
     required_cols: Dict[str, int],
     allow_blank_class_for_kindergarten: bool = False,
-) -> Tuple[List[str], List[int]]:
+    file_key: str = "global",
+) -> Tuple[List[str], List[int], List[CoreEvent], List[RowMark]]:
     """
     입력 시트 구조 검증:
     - 데이터 영역 병합 셀 있으면 경고
     - 데이터 중간 완전 빈 행 있으면 경고
     - 필수 컬럼 중간 빈칸 있으면 경고
-    반환: (issues, issue_row_nums)
+    반환: (issues, issue_row_nums, events, row_marks)
     """
     issues: List[str] = []
     issue_row_nums: List[int] = []
+    evts: List[CoreEvent] = []
+    marks: List[RowMark] = []
 
     merged_ranges = _collect_merged_ranges_in_data_area(ws, data_start_row)
     if merged_ranges:
@@ -560,6 +577,7 @@ def validate_input_sheet_structure(
             f"{', '.join(merged_ranges[:10])}"
             + (" ..." if len(merged_ranges) > 10 else "")
         )
+        evts.append(merged_cell(file_key, kind))
 
     # iter_rows로 한 번에 읽어 max_row 오염 및 랜덤접근 느림 방지
     # 연속 빈 행 MAX_BLANK_STREAK개 이상이면 데이터 끝으로 간주하고 조기 종료
@@ -589,7 +607,8 @@ def validate_input_sheet_structure(
 
     if last_data_row < data_start_row:
         issues.append(f"[ERROR] {kind} 파일에서 데이터 행을 찾을 수 없습니다.")
-        return issues, []
+        evts.append(empty_data(file_key, kind))
+        return issues, [], evts, marks
 
     for r, row_vals in collected_rows:
         if r > last_data_row:
@@ -601,6 +620,8 @@ def validate_input_sheet_structure(
                 "중간 빈 행이 있으면 데이터가 잘릴 수 있습니다."
             )
             issue_row_nums.append(r)
+            _e, _m = empty_row(file_key, kind, r)
+            evts.append(_e); marks.append(_m)
 
     for r, row_values in collected_rows:
         if r > last_data_row:
@@ -622,6 +643,9 @@ def validate_input_sheet_structure(
                 or (not grade_s and cls_norm in {"유치원", "유치원반"})
                 or cls_norm in {"유치원", "유치원반"}
             )
+            if is_kindergarten and not any(e.code == "KINDERGARTEN_IN_FILE" for e in evts):
+                from core.events import kindergarten_in_file as _kif
+                evts.append(_kif(file_key, kind))
 
             for key, v in row_values.items():
                 if is_kindergarten and key in ("grade", "class"):
@@ -629,11 +653,15 @@ def validate_input_sheet_structure(
                 if v is None or str(v).strip() == "":
                     issues.append(f"[WARN] {kind} 파일 {r}행 '{key}' 값이 비어 있습니다.")
                     issue_row_nums.append(r)
+                    _e, _m = empty_required_field(file_key, kind, r, key)
+                    evts.append(_e); marks.append(_m)
         else:
             for key, v in row_values.items():
                 if v is None or str(v).strip() == "":
                     issues.append(f"[WARN] {kind} 파일 {r}행 '{key}' 값이 비어 있습니다.")
                     issue_row_nums.append(r)
+                    _e, _m = empty_required_field(file_key, kind, r, key)
+                    evts.append(_e); marks.append(_m)
 
         # 학년/반 열 형식 검증
         KINDERGARTEN = {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
@@ -656,6 +684,8 @@ def validate_input_sheet_structure(
                 if warn_grade:
                     issues.append(f"[WARN] {kind} 파일 {r}행 '학년' 열 — {warn_grade}")
                     issue_row_nums.append(r)
+                    _e, _m = grade_format_warn(file_key, kind, r, warn_grade)
+                    evts.append(_e); marks.append(_m)
 
         class_v = row_values.get("class")
         if class_v is not None and str(class_v).strip():
@@ -669,8 +699,10 @@ def validate_input_sheet_structure(
             if warn_class:
                 issues.append(f"[WARN] {kind} 파일 {r}행 '반' 열 — {warn_class}")
                 issue_row_nums.append(r)
+                _e, _m = class_format_warn(file_key, kind, r, warn_class)
+                evts.append(_e); marks.append(_m)
 
-    return issues, sorted(set(issue_row_nums))
+    return issues, sorted(set(issue_row_nums)), evts, marks
 
 
 
@@ -991,12 +1023,14 @@ def scan_pipeline(
         if roster_xlsx:
             _roster_path = Path(roster_xlsx)
             if _roster_path.suffix.lower() == ".xls":
+                sr.events.append(roster_xls_format())
                 raise ValueError(
                     f"[ERROR] 명단 파일이 .xls 형식입니다: {_roster_path.name}\n"
                     ".xlsx 형식으로 변환한 뒤 다시 설정해 주세요."
                 )
             ensure_xlsx_only(_roster_path)
             if not _xlsx_school_exists(_roster_path, school_name, col_map):
+                sr.events.append(school_not_in_roster(school_name))
                 raise ValueError(
                     f"[ERROR] 명단 파일에서 '{school_name}' 학교를 찾을 수 없습니다. "
                     f"(파일: {_roster_path.name})"
@@ -1013,6 +1047,7 @@ def scan_pipeline(
         if sr.school_kind_needs_choice:
             log("[WARN] 학교 구분을 자동으로 판별하지 못했습니다.")
             log("[WARN] 학교 구분을 직접 선택한 뒤 다시 실행해 주세요.")
+            # school_kind_needs_choice 플래그로 UI 선택 컴포넌트 표시 — 카드 불필요
         elif sr.school_profile_mode == "mixed":
             log(f"[INFO] 초중 통합 학교로 감지되었습니다. 학년도 규칙은 1~{sr.grade_rule_max_grade}학년까지 표시합니다.")
         elif not _kind_full:
@@ -1032,11 +1067,13 @@ def scan_pipeline(
         ]
 
         if not matches:
+            sr.events.append(school_folder_not_found(school_name))
             raise ValueError(
                 f"[ERROR] '{school_name}' 학교 폴더를 찾을 수 없습니다."
             )
 
         if len(matches) > 1:
+            sr.events.append(school_folder_ambiguous(school_name, [p.name for p in matches]))
             raise ValueError(
                 f"[ERROR] '{school_name}' 학교 폴더 후보가 여러 개입니다: "
                 + ", ".join(p.name for p in matches)
@@ -1058,17 +1095,53 @@ def scan_pipeline(
         except Exception as e:
             log(f"[WARN] 학교 폴더 파일 목록 조회 중 오류: {e}")
 
-        freshmen_file = find_single_input_file(input_dir, FRESHMEN_KEYWORDS)
-        teacher_file  = find_single_input_file(input_dir, TEACHER_KEYWORDS)
-        transfer_file = find_single_input_file(input_dir, TRANSFER_KEYWORDS)
-        withdraw_file = find_single_input_file(input_dir, WITHDRAW_KEYWORDS)
+        try:
+            freshmen_file = find_single_input_file(input_dir, FRESHMEN_KEYWORDS)
+        except ValueError as _e:
+            if ".xls" in str(_e): sr.events.append(input_xls_format([]))
+            elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("freshmen", "신입생"))
+            raise
+        try:
+            teacher_file = find_single_input_file(input_dir, TEACHER_KEYWORDS)
+        except ValueError as _e:
+            if ".xls" in str(_e): sr.events.append(input_xls_format([]))
+            elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("teachers", "교직원"))
+            raise
+        try:
+            transfer_file = find_single_input_file(input_dir, TRANSFER_KEYWORDS)
+        except ValueError as _e:
+            if ".xls" in str(_e): sr.events.append(input_xls_format([]))
+            elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("transfer_in", "전입생"))
+            raise
+        try:
+            withdraw_file = find_single_input_file(input_dir, WITHDRAW_KEYWORDS)
+        except ValueError as _e:
+            if ".xls" in str(_e): sr.events.append(input_xls_format([]))
+            elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("transfer_out", "전출생"))
+            raise
 
         warn_if_multi_sheet(freshmen_file, logs, "신입생")
-        warn_if_multi_sheet(teacher_file, logs, "교사")
+        warn_if_multi_sheet(teacher_file,  logs, "교사")
         warn_if_multi_sheet(transfer_file, logs, "전입생")
         warn_if_multi_sheet(withdraw_file, logs, "전출생")
+        # 시트 수 직접 체크 — multiple_sheets 이벤트 생성
+        for _fpath, _fkey, _flabel in [
+            (freshmen_file, "freshmen",    "신입생"),
+            (teacher_file,  "teachers",    "교사"),
+            (transfer_file, "transfer_in", "전입생"),
+            (withdraw_file, "transfer_out","전출생"),
+        ]:
+            if _fpath:
+                try:
+                    _wb_tmp = safe_load_workbook(_fpath, data_only=True)
+                    if len(_wb_tmp.worksheets) > 1:
+                        sr.events.append(multiple_sheets(_fkey, _flabel))
+                    _wb_tmp.close()
+                except Exception:
+                    pass
 
         if not any([freshmen_file, teacher_file, transfer_file, withdraw_file]):
+            sr.events.append(no_input_files())
             raise ValueError(
                 "[ERROR] 신입생/전입생/전출생/교사 파일을 하나도 찾을 수 없습니다. "
                 "학교 폴더 안에 해당 키워드가 포함된 xlsx 파일이 있는지 확인해 주세요."
@@ -1111,6 +1184,7 @@ def scan_pipeline(
                 ws = layout["_ws"]
             except Exception:
                 log(f"[ERROR] {kind_label} 파일에서 헤더를 찾을 수 없습니다.")
+                sr.events.append(missing_header(kind_key, kind_label))
                 return {
                     "file_name": file_path.name,
                     "file_path": str(file_path),
@@ -1140,14 +1214,17 @@ def scan_pipeline(
                 }
 
                 log(f"[DEBUG] {kind_label} 구조 검증 시작 (max_row={ws.max_row})")
-                issues, issue_rows = validate_input_sheet_structure(
+                issues, issue_rows, _evts, _marks = validate_input_sheet_structure(
                     ws=ws,
                     kind=kind_label,
                     header_row=layout["header_row"],
                     data_start_row=layout["data_start_row"],
                     required_cols=required_cols,
                     allow_blank_class_for_kindergarten=allow_blank_class_for_kindergarten,
+                    file_key=kind_key,
                 )
+                sr.events.extend(_evts)
+                sr.row_marks.extend(_marks)
                 log(f"[DEBUG] {kind_label} 구조 검증 완료")
 
                 for msg in issues:
@@ -1264,12 +1341,14 @@ def scan_pipeline(
                         if need_roster_by_withdraw:
                             missing_for.append("전출")
                         joined = "/".join(missing_for)
+                        sr.events.append(roster_not_found())
                         raise ValueError(
                             "[ERROR] 학생명부 파일이 없습니다. "
                             f"{joined} 처리는 학생명부 파일 없이는 진행할 수 없습니다."
                         ) from roster_err
                     else:
                         # 신입생 타학년 포함도 이제 학생명부를 필수로 본다.
+                        sr.events.append(roster_not_found())
                         raise ValueError(
                             "[ERROR] 학생명부 파일이 없습니다. 학년도 규칙이 필요한 경우에도 학생명부 파일이 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요."
                         ) from roster_err
@@ -1315,6 +1394,7 @@ def scan_pipeline(
                                 "[DEBUG] 작업일과 명부 기준일이 다릅니다. "
                                 f"(작업일={work_date.isoformat()}, 명부 기준일={sr.roster_basis_date.isoformat()})"
                             )
+                            # roster_date_mismatch는 모달로만 처리 — events 카드에 표시 안 함
 
                     except Exception as e:
                         import traceback
@@ -1369,6 +1449,8 @@ def scan_pipeline(
         sr.needs_open_date = needs_open_date
         if needs_open_date:
             log("[INFO] 전출생 파일 감지 → 개학일(퇴원일자 계산용) 입력 필요")
+            if not school_start_date:
+                sr.events.append(open_date_missing())
         else:
             log("[INFO] 전출생 파일 없음 → 개학일 입력 불필요")
 

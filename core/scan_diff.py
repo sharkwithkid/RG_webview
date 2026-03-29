@@ -31,6 +31,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.utils import text_contains, normalize_text
+from core.events import (
+    CoreEvent, RowMark,
+    school_folder_not_found, school_folder_ambiguous,
+    school_not_in_roster, roster_not_found, roster_date_mismatch,
+    missing_header, missing_required_col,
+    compare_file_not_found, compare_file_format_warn,
+)
 from core.common import (
     get_project_dirs,
     ensure_xlsx_only,
@@ -82,6 +89,10 @@ class DiffScanResult:
     school_start_date: Optional[date] = None
     work_date: Optional[date] = None
     ref_grade_shift: int = 0
+
+    # 구조화된 판정 결과 — bridge/UI는 이것만 참조
+    events:    List[Any] = field(default_factory=list)  # List[CoreEvent]
+    row_marks: List[Any] = field(default_factory=list)  # List[RowMark]
 
 
 # =========================
@@ -241,14 +252,17 @@ def detect_compare_input_layout(xlsx_path: Path) -> Dict[str, Any]:
         wb.close()
 
 
-def validate_compare_input_rows(ws, header_row: int, data_start_row: int, slot_cols: Dict[str, int]) -> Tuple[List[str], List[int], int]:
+def validate_compare_input_rows(ws, header_row: int, data_start_row: int, slot_cols: Dict[str, int]) -> Tuple[List[str], List[int], int, List[CoreEvent], List[RowMark]]:
     """
     비교용 재학생 명단 시트 경고 검증.
     - 이름은 원문 기준으로 비교하고, 형식만 WARN 처리한다.
     - 메인 스캔 톤과 맞춰 [WARN] 문구를 누적한다.
+    반환: (issues, issue_row_nums, row_count, events, row_marks)
     """
     issues: List[str] = []
     issue_row_nums: List[int] = []
+    evts: List[CoreEvent] = []
+    marks: List[RowMark] = []
 
     col_grade = slot_cols.get("grade")
     col_class = slot_cols.get("class")
@@ -285,6 +299,8 @@ def validate_compare_input_rows(ws, header_row: int, data_start_row: int, slot_c
         if not grade_s or not name_s:
             issues.append(f"[WARN] 재학생 파일 {r}행 '학년/이름' 값을 확인해 주세요.")
             issue_row_nums.append(r)
+            _e, _m = compare_file_format_warn(r, "학년/이름", "값이 비어 있습니다.")
+            evts.append(_e); marks.append(_m)
             continue
 
         gs_norm = re.sub(r"\s+", "", grade_s)
@@ -301,12 +317,16 @@ def validate_compare_input_rows(ws, header_row: int, data_start_row: int, slot_c
         if warn_grade:
             issues.append(f"[WARN] 재학생 파일 {r}행 '학년' 열 — {warn_grade}")
             issue_row_nums.append(r)
+            _e, _m = compare_file_format_warn(r, "학년", warn_grade)
+            evts.append(_e); marks.append(_m)
 
         for msg in get_compare_name_warnings(name_v):
             issues.append(f"[WARN] 재학생 파일 {r}행 '{normalize_compare_name(name_v)}' — {msg}")
             issue_row_nums.append(r)
+            _e, _m = compare_file_format_warn(r, "이름", msg)
+            evts.append(_e); marks.append(_m)
 
-    return issues, sorted(set(issue_row_nums)), row_count
+    return issues, sorted(set(issue_row_nums)), row_count, evts, marks
 
 
 def find_diff_templates(template_dir: Path) -> Tuple[Optional[Path], Optional[Path], List[str]]:
@@ -933,8 +953,10 @@ def scan_diff_pipeline(
             if p.is_dir() and text_contains(p.name, school_name)
         ]
         if not school_dir_candidates:
+            sr.events.append(school_folder_not_found(school_name))
             raise ValueError(f"[ERROR] 학교 폴더를 찾을 수 없습니다. ({school_name})")
         if len(school_dir_candidates) > 1:
+            sr.events.append(school_folder_ambiguous(school_name, [p.name for p in school_dir_candidates]))
             raise ValueError(f"[ERROR] 학교 폴더 후보가 여러 개입니다: {[p.name for p in school_dir_candidates]}")
 
         school_dir = school_dir_candidates[0]
@@ -945,27 +967,22 @@ def scan_diff_pipeline(
 
         # 명단 xlsx 기반 학교 존재 확인
         if roster_xlsx:
+            _roster_path = Path(roster_xlsx)
+            ensure_xlsx_only(_roster_path)
             from core.xlsx_db import school_exists_in_xlsx as _chk
-            if not _chk(Path(roster_xlsx), school_name, col_map):
+            if not _chk(_roster_path, school_name, col_map):
+                sr.events.append(school_not_in_roster(school_name))
                 raise ValueError(
                     f"[ERROR] 명단 파일에서 '{school_name}' 학교를 찾을 수 없습니다. "
                     f"(파일: {Path(roster_xlsx).name})"
                 )
-            sr.roster_xlsx_path = Path(roster_xlsx)
-            log(f"[OK] 명단 파일 검증 통과: {Path(roster_xlsx).name}")
+            sr.roster_xlsx_path = _roster_path
+            log(f"[OK] 명단 파일 검증 통과: {_roster_path.name}")
         else:
             log("[WARN] 명단 파일이 지정되지 않았습니다. 학교 존재 확인을 건너뜁니다.")
             sr.roster_xlsx_path = None
 
-        # 템플릿 검증
-        tpl_in, tpl_out, tpl_errors = find_diff_templates(dirs["TEMPLATES"])
-        if tpl_errors:
-            raise ValueError(tpl_errors[0])
-
-        sr.template_transfer_in  = tpl_in
-        sr.template_transfer_out = tpl_out
-        log(f"[OK] 전입생 템플릿: {tpl_in.name}")
-        log(f"[OK] 전출생 템플릿: {tpl_out.name}")
+        # 템플릿 검증 제거 — diff는 비교 결과 엑셀 직접 출력, 양식 불필요
 
         # 올해 명부
         roster_wb = None
@@ -975,7 +992,8 @@ def scan_diff_pipeline(
             sr.roster_year = roster_year
 
             if roster_path is None:
-                raise ValueError("[ERROR] 비교 기준 학생명부를 찾을 수 없습니다.")
+                sr.events.append(roster_not_found())
+            raise ValueError("[ERROR] 비교 기준 학생명부를 찾을 수 없습니다.")
 
             detected_year = parse_roster_year_from_filename(roster_path)
             if detected_year is None:
@@ -1011,6 +1029,7 @@ def scan_diff_pipeline(
 
                 if sr.roster_basis_date != work_date:
                     sr.roster_date_mismatch = True
+                    # roster_date_mismatch는 모달로만 처리 — events 카드에 표시 안 함
                     log(
                         "[DEBUG] 작업일과 명부 기준일이 다릅니다. "
                         f"(작업일={work_date.isoformat()}, 명부 기준일={sr.roster_basis_date.isoformat()})"
@@ -1039,6 +1058,7 @@ def scan_diff_pipeline(
         sr.compare_file = compare_file
 
         if compare_file is None:
+            sr.events.append(compare_file_not_found())
             raise ValueError("[ERROR] 비교용 재학생 명렬표 파일을 찾을 수 없습니다.")
 
         compare_layout = detect_compare_input_layout(compare_file)
@@ -1054,7 +1074,7 @@ def scan_diff_pipeline(
         try:
             ws_cmp = wb_cmp.worksheets[0]
             slot_cols = compare_layout.get("slot_cols") or _build_header_slot_map(ws_cmp, compare_layout["header_row"], COMPARE_HEADER_SLOTS)
-            issues, issue_rows, row_count = validate_compare_input_rows(
+            issues, issue_rows, row_count, _evts, _marks = validate_compare_input_rows(
                 ws_cmp,
                 header_row=compare_layout["header_row"],
                 data_start_row=compare_layout["data_start_row"],
@@ -1066,6 +1086,8 @@ def scan_diff_pipeline(
             compare_layout["warning"] = issues[0][7:].strip() if issues else ""
             for msg in issues:
                 log(msg)
+            sr.events.extend(_evts)
+            sr.row_marks.extend(_marks)
         finally:
             wb_cmp.close()
 
@@ -1080,8 +1102,7 @@ def scan_diff_pipeline(
         missing_fields: List[str] = []
         if sr.roster_path       is None: missing_fields.append("올해 학생명부")
         if sr.compare_file      is None: missing_fields.append("재학생 명렬표")
-        if sr.template_transfer_in  is None: missing_fields.append("전입생 템플릿")
-        if sr.template_transfer_out is None: missing_fields.append("전출생 템플릿")
+        # 템플릿 체크 제거
 
         sr.missing_fields = missing_fields
         sr.can_execute    = len(missing_fields) == 0

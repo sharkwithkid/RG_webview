@@ -31,6 +31,14 @@ from collections import Counter
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Border, Font, Alignment
 
+from core.events import (
+    CoreEvent, RowMark,
+    transfer_in_hold, transfer_out_hold, freshmen_transfer_dup,
+    roster_duplicate_transfer, duplicate_name,
+    roster_not_found_at_run, open_date_required,
+    template_register_not_found, template_notice_not_found, db_file_error,
+    missing_required_col,
+)
 from core.scan_main import (
     ScanResult,
     scan_pipeline,
@@ -94,6 +102,10 @@ class PipelineResult:
     notice_teacher_dup_rows: List[int] = field(default_factory=list)
 
     audit_summary: Dict[str, Any] = field(default_factory=dict)
+
+    # 구조화된 판정 결과 — bridge/UI는 이것만 참조
+    events:    List[Any] = field(default_factory=list)  # List[CoreEvent]
+    row_marks: List[Any] = field(default_factory=list)  # List[RowMark]
 
 # =========================
 # L1. Input readers
@@ -294,7 +306,7 @@ def read_freshmen_rows(
                 ws, header_row=header_row, name_col=col_name
             )
 
-        issues, _ = validate_input_sheet_structure(
+        issues, _, _, _ = validate_input_sheet_structure(
             ws=ws,
             kind="신입생",
             header_row=header_row,
@@ -429,7 +441,7 @@ def read_transfer_rows(
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
-        issues, _ = validate_input_sheet_structure(
+        issues, _, _, _ = validate_input_sheet_structure(
             ws=ws,
             kind="전입생",
             header_row=header_row,
@@ -524,7 +536,7 @@ def read_teacher_rows(
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
-        issues, _ = validate_input_sheet_structure(
+        issues, _, _, _ = validate_input_sheet_structure(
             ws=ws,
             kind="교사",
             header_row=header_row,
@@ -600,7 +612,7 @@ def read_withdraw_rows(
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
-        issues, _ = validate_input_sheet_structure(
+        issues, _, _, _ = validate_input_sheet_structure(
             ws=ws,
             kind="전출생",
             header_row=header_row,
@@ -1722,6 +1734,8 @@ def execute_pipeline(
         transfer_hold_rows: List[Dict] = []
         if transfer_rows:
             if not scan.roster_info:
+                pr_err = PipelineResult(ok=False, outputs=[], logs=logs)
+                pr_err.events.append(roster_not_found_at_run())
                 raise ValueError("[ERROR] 전입생 처리를 위해 학생명부가 필요합니다. 학생명부를 준비해 주세요.")
             transfer_done_rows, transfer_hold_rows, _ = build_transfer_ids(
                 transfer_rows=transfer_rows, roster_info=scan.roster_info,
@@ -1741,6 +1755,10 @@ def execute_pipeline(
                 log(
                     f"[WARN] 신입생 명단과 학년/반/이름이 동일한 전입생 {transfer_dedup_skipped}명은 자동 제외했습니다."
                 )
+                # hold로 전환 — 자동 제외 대신 사용자 확인 필요
+                # (실제 학생 정보는 transfer_done_rows에서 제외된 것들이라 이름 특정 불가 → 건수만 이벤트로)
+                for _ in range(transfer_dedup_skipped):
+                    pass  # 개별 학생 정보 접근 불가 — pr 생성 후 아래서 일괄 추가
 
         # 전출 퇴원 리스트
         withdraw_done_rows: List[Dict] = []
@@ -1749,10 +1767,16 @@ def execute_pipeline(
 
         if withdraw_rows:
             if not scan.roster_path:
+                pr_err = PipelineResult(ok=False, outputs=[], logs=logs)
+                pr_err.events.append(roster_not_found_at_run())
                 raise ValueError("[ERROR] 전출생 처리에는 학생명부 파일이 필요합니다. 학생명부를 준비해 주세요.")
             if not scan.roster_info:
+                pr_err = PipelineResult(ok=False, outputs=[], logs=logs)
+                pr_err.events.append(roster_not_found_at_run())
                 raise ValueError("[ERROR] 전출생 처리에 필요한 학생명부 정보를 읽지 못했습니다.")
             if school_start_date is None:
+                pr_err = PipelineResult(ok=False, outputs=[], logs=logs)
+                pr_err.events.append(open_date_required())
                 raise ValueError("[ERROR] 전출 처리에 필요한 개학일이 입력되지 않았습니다.")
 
             roster_wb2 = safe_load_workbook(scan.roster_path, data_only=True)
@@ -1783,6 +1807,8 @@ def execute_pipeline(
 
         # 등록작업파일
         if not scan.template_register:
+            pr_err = PipelineResult(ok=False, outputs=[], logs=logs)
+            pr_err.events.append(template_register_not_found())
             raise ValueError("[ERROR] 등록 템플릿 파일을 찾을 수 없습니다.")
 
         out_register_path = scan.output_dir / f"★{school_name}_등록작업파일(작업용).xlsx"
@@ -1802,6 +1828,8 @@ def execute_pipeline(
 
         # 안내파일
         if not scan.template_notice:
+            pr_err = PipelineResult(ok=False, outputs=[], logs=logs)
+            pr_err.events.append(template_notice_not_found())
             raise ValueError("[ERROR] 안내 템플릿 파일을 찾을 수 없습니다.")
 
         notice_kinds = (
@@ -1831,6 +1859,35 @@ def execute_pipeline(
         pr.transfer_out_done  = len(withdraw_done_rows)
         pr.transfer_out_hold  = len(withdraw_hold_rows)
         pr.transfer_out_auto_skip = transfer_out_auto_skip
+
+        # hold events — 보류 학생별 CoreEvent 생성 (보류사유로 분기)
+        for row in transfer_hold_rows:
+            name   = str(row.get("성명", ""))
+            reason = str(row.get("보류사유", ""))
+            if "동명이인" in reason:
+                pr.events.append(roster_duplicate_transfer(name, reason))
+            elif "명부" in reason and ("중복" in reason or "존재" in reason):
+                pr.events.append(roster_duplicate_transfer(name, reason))
+            else:
+                pr.events.append(transfer_in_hold(name, reason))
+        for row in withdraw_hold_rows:
+            reason = str(row.get("보류사유", ""))
+            if reason.startswith("자동 제외"):
+                continue  # 자동제외는 사용자 확인 불필요 — 카드 표시 안 함
+            pr.events.append(transfer_out_hold(
+                name=str(row.get("성명", "")),
+                reason=reason,
+            ))
+
+        # 신입생-전입생 중복 hold
+        if transfer_dedup_skipped:
+            pr.events.append(freshmen_transfer_dup(
+                name=f"{transfer_dedup_skipped}명",
+                grade=0, class_="",
+            ))
+
+        # 동명이인 — 요약 그리드로만 표시, 카드 불필요
+        # total_dup은 pr.notice_dup_rows / pr.notice_teacher_dup_rows 건수로 UI가 직접 계산
 
                 # ===== 검수 요약 추가 =====
         transfer_input_count = len(transfer_rows)

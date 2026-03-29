@@ -1,7 +1,11 @@
 Traceback (most recent call last):
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1786, in execute_pipeline
-    fill_register(
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1142, in fill_register
-    school_profile = school_profile_from_name(school_name)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^
-NameError: name 'school_profile_from_name' is not defined
+  File "/Users/gana/RG_webview/core/run_main.py", line 1685, in execute_pipeline
+    freshmen_rows = read_freshmen_rows(
+    freshmen_path,
+    ...<5 lines>...
+        manual_grade_year_map=grade_year_map,
+    )
+  File "/Users/gana/RG_webview/core/run_main.py", line 309, in read_freshmen_rows
+    issues, _ = validate_input_sheet_structure(
+    ^^^^^^^^^
+ValueError: too many values to unpack (expected 2)

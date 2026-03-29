@@ -1,10 +1,10 @@
 {
-  "work_root": "C:/Users/Readinggate/Desktop/2026반편성",
-  "roster_log_path": "//192.168.0.230/자료실/영업/★학교반이동/###### 2026반이동_학교전체명단(2026.03) ###### - 복사본.xlsx",
+  "work_root": "/Users/gana/Downloads/2026반편성_test",
+  "roster_log_path": "/Users/gana/Downloads/2026반편성_test/###### 2026반이동_학교전체명단(2026.03) ######.xlsx",
   "worker_name": "임지윤",
   "school_start_date": "2026-03-03",
-  "work_date": "2026-03-27",
-  "arrived_date": "2026-03-23",
+  "work_date": "2026-03-29",
+  "arrived_date": "2026-03-28",
   "last_school": "",
   "roster_col_map": {
     "sheet": "학교명단",

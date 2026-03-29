@@ -421,6 +421,11 @@ const App = {
   },
 
   async onSchoolSelected(schoolName) {
+    // 이전 학교 스캔/실행 결과 초기화
+    if (typeof Scan !== 'undefined' && Scan.reset) Scan.reset();
+    if (typeof Run  !== 'undefined' && Run.reset)  Run.reset();
+    if (typeof Diff !== 'undefined' && Diff.reset) Diff.reset();
+
     state.selected_school = schoolName;
     state.current_seq_no  = null;
 
@@ -694,9 +699,9 @@ function _resetSharedState() {
 
   // 뱃지 강제 리셋 (reset() 호출이 중간에 실패해도 UI가 남지 않도록)
   const scanBadge = _el('scan-status-badge');
-  if (scanBadge) { scanBadge.className = 'status-badge badge-idle'; scanBadge.textContent = '스캔 전'; }
+  if (scanBadge) { scanBadge.className = 'status-badge badge-idle'; scanBadge.textContent = '대기'; }
   const runBadge = _el('run-status-badge');
-  if (runBadge)  { runBadge.className  = 'status-badge badge-idle'; runBadge.textContent  = '실행 전'; }
+  if (runBadge)  { runBadge.className  = 'status-badge badge-idle'; runBadge.textContent  = '대기'; }
   const btnGotoRun = _el('btn-goto-run');
   if (btnGotoRun) btnGotoRun.style.display = 'none';
   const btnGotoNotice = _el('btn-goto-notice');

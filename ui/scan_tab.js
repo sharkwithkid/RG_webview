@@ -74,7 +74,7 @@ const Scan = (() => {
       // 동기 검증 실패 (파라미터 오류 등)
       state.isScanning = false;
       _el('btn-scan').disabled = false;
-      _setBadge('err', '스캔 실패');
+      _setBadge('err', '실패');
       _setMessage(res.error || '스캔 시작 실패');
     }
     // 비동기 완료는 main.js → bridge.scanFinished → onFinished / onFailed
@@ -88,56 +88,38 @@ const Scan = (() => {
     _lastScanData = data;
 
     if (!data.ok) {
-      const errLog = (data.logs || []).find(l => l.level === 'error');
-      const errMsg = errLog ? errLog.message : '스캔 중 오류가 발생했습니다.';
-      const kindWarnOnError = !!data.school_kind_needs_choice || (data.logs || []).some(l =>
-        l.level === 'warn' && l.message.includes('학교 구분을 자동으로 판별하지 못했습니다')
-      );
-      _setBadge('err', '스캔 실패');
+      const status = data.status || null;
+      const errMsg = (status?.messages || []).find(m => m.level === 'error')?.text
+        || '스캔 중 오류가 발생했습니다.';
+      _setBadge('err', '실패');
       _setMessage('');
-      _setSchoolKindWarn(kindWarnOnError);
-      _showScanWarnCard([errMsg], 'error', data.status || null);
+      _setSchoolKindWarn(!!data.school_kind_needs_choice);
+      _showScanWarnCard([errMsg], 'error', status);
       App.setStepState(2, 'warn');
-      toast(errMsg, 'err', 6000);
+      // 토스트 제거 — 카드가 남아있어서 중복
       return;
     }
 
     // 스텝 상태
     App.setStepState(2, 'done');
 
-    // 학교 구분 선택 필요 여부
-    const kindWarn = !!data.school_kind_needs_choice || (data.logs || []).some(l =>
-      l.level === 'warn' && l.message.includes('학교 구분을 자동으로 판별하지 못했습니다')
-    );
-    _setSchoolKindWarn(kindWarn);
+    // 학교 구분 선택 필요 여부 — school_kind_needs_choice 플래그만 사용
+    _setSchoolKindWarn(!!data.school_kind_needs_choice);
 
-    // 경고 상태 정규화
-    const errLogs  = (data.logs || []).filter(l => l.level === 'error');
-    _scanWarnState = _buildWarnState(data);
+    // 뱃지 + 카드 — status 하나만 본다 (logs 파싱 없음)
     const status = data.status || null;
+    StatusUI.renderBadge('scan-status-badge', status?.badge, '완료');
+    _setMessage('');
+    const errMsgs  = (status?.messages || []).filter(m => m.level === 'error');
+    const warnMsgs = (status?.messages || []).filter(m => m.level === 'warn');
+    const holdMsgs = (status?.messages || []).filter(m => m.level === 'hold');
+    if (errMsgs.length)       _showScanWarnCard(errMsgs.map(m => m.text),  'error', status);
+    else if (holdMsgs.length) _showScanWarnCard(holdMsgs.map(m => m.text), 'warn',  status);
+    else if (warnMsgs.length) _showScanWarnCard(warnMsgs.map(m => m.text), 'warn',  status);
+    else                      _hideScanWarnCard();
 
-    if (status?.badge) {
-      StatusUI.renderBadge('scan-status-badge', status.badge, '스캔 완료');
-      _setMessage('');
-      const errMsgs = (status.messages || []).filter(m => m.level === 'error');
-      const warnMsgs = (status.messages || []).filter(m => m.level === 'warn');
-      if (errMsgs.length) _showScanWarnCard(errMsgs.map(m => m.text), 'error');
-      else if (warnMsgs.length) _showScanWarnCard(warnMsgs.map(m => m.text), 'warn');
-      else _hideScanWarnCard();
-    } else if (errLogs.length) {
-      _setBadge('err', '오류');
-      _setMessage('');
-      _showScanWarnCard(errLogs.map(l => String(l.message || '').trim()).filter(Boolean), 'error', _lastScanData?.status || null);
-    } else if (_scanWarnState.hasWarn) {
-      _setBadge('warn', '경고');
-      _setMessage('');
-      _showScanWarnCard(_scanWarnState.messages, 'warn', _lastScanData?.status || null);
-    } else {
-      _setBadge('ok', '스캔 완료');
-      _setMessage('');
-      _hideScanWarnCard();
-    }
-    _applyScanRowWarnStyles();
+    // 행 색칠 — data.row_marks 하나만 본다
+    _applyRowMarkStyles(data.row_marks || []);
 
     // 학년도 아이디 규칙 갱신 + 명부 버튼 상태
     _updateGradeMap(data);
@@ -177,7 +159,7 @@ const Scan = (() => {
 
   function onFailed(error) {
     _el('btn-scan').disabled = false;
-    _setBadge('err', '스캔 실패');
+    _setBadge('err', '실패');
     _setMessage('예기치 못한 오류가 발생했습니다.');
     App.setStepState(2, 'warn');
     toast('스캔 오류 — 스캔 로그 보기에서 자세한 내용을 확인하세요.', 'err');
@@ -194,9 +176,12 @@ const Scan = (() => {
       if (!tr) return;
 
       const cells = tr.querySelectorAll('td');
-      const kindWarn = !!_scanWarnState.byKind[item.kind]?.messages?.length;
+      // severity가 error/warn이면 행 강조 — _scanWarnState 불필요
+      const kindWarn  = item.severity === 'warn';
+      const kindError = item.severity === 'error';
 
-      tr.classList.toggle('scan-row-warn', kindWarn);
+      tr.classList.toggle('scan-row-warn',  kindWarn && !kindError);
+      tr.classList.toggle('scan-row-error', kindError);
 
       if (cells[1]) {
         cells[1].className = kindWarn ? 'file-link file-link-warn' : 'file-link';
@@ -415,7 +400,7 @@ function _renderTable(data) {
   const previewStartRow = data.start_row ?? 1;
   const structured = data.has_structured_rows !== false;
   const dataStartRow = structured ? (data.data_start_row ?? 1) : null;
-  const issueSet = structured ? new Set((data.row_marks?.issue_rows || data.row_marks?.warn_rows || data.issue_rows || [])) : new Set(); // excel row numbers
+  const issueSet = structured ? new Set((data.row_marks?.warn_rows || data.row_marks?.issue_rows || [])) : new Set(); // row_marks 기반 — issue_rows fallback
 
   let lastVisibleIdx = -1;
   for (let i = rawRows.length - 1; i >= 0; i--) {
@@ -514,8 +499,7 @@ function _syncPreviewWarn(kind, meta = {}) {
     _refreshWarnUI();
     return;
   }
-  const kindState = _scanWarnState.byKind[kind] || { messages: [], issueRows: new Set(), suspectCount: 0, rowIssues: new Map() };
-  const rowIssueMap = meta.rowIssueMap || kindState.rowIssues || new Map();
+  const rowIssueMap = meta.rowIssueMap || new Map();
   const count = typeof meta.issueCount === 'number' ? meta.issueCount : rowIssueMap.size;
 
   if (!count) {
@@ -538,102 +522,57 @@ function _syncPreviewWarn(kind, meta = {}) {
 }
 
 function _refreshWarnUI() {
-  const errLogs = (state.last_scan_logs || []).filter(l => l.level === 'error');
-  if (errLogs.length) {
-    _setBadge('err', '오류');
-    _showScanWarnCard(errLogs.map(l => String(l.message || '').trim()).filter(Boolean), 'error', _lastScanData?.status || null);
-    _applyScanRowWarnStyles();
-    return;
-  }
-
-  _scanWarnState.hasWarn = (_scanWarnState.messages || []).length > 0 || Object.values(_scanWarnState.byKind || {}).some(v =>
-    (v.messages && v.messages.length) || (v.issueRows && v.issueRows.size) || (v.suspectCount || 0) > 0
-  );
-
-  if (_scanWarnState.hasWarn) {
-    _setBadge('warn', '경고');
-    _showScanWarnCard(_scanWarnState.messages, 'warn', _lastScanData?.status || null);
-  } else {
-    _setBadge('ok', '스캔 완료');
-    _hideScanWarnCard();
-  }
-  _applyScanRowWarnStyles();
+  // status 하나만 본다 — logs 파싱 없음
+  const status = _lastScanData?.status || null;
+  StatusUI.renderBadge('scan-status-badge', status?.badge, '완료');
+  const errMsgs  = (status?.messages || []).filter(m => m.level === 'error');
+  const warnMsgs = (status?.messages || []).filter(m => m.level === 'warn');
+  if (errMsgs.length)       _showScanWarnCard(errMsgs.map(m => m.text),  'error', status);
+  else if (warnMsgs.length) _showScanWarnCard(warnMsgs.map(m => m.text), 'warn',  status);
+  else                      _hideScanWarnCard();
+  _applyRowMarkStyles(_lastScanData?.row_marks || []);
 }
 
-  function _applyScanRowWarnStyles() {
-    const errorKinds = new Set(
-      (state.last_scan_logs || [])
-        .filter(l => l.level === 'error')
-        .map(l => _kindFromWarnMessage(String(l.message || '').trim()))
-        .filter(Boolean)
-    );
+  function _applyRowMarkStyles(rowMarks) {
+    // row_marks 기반으로 파일별 error/warn 여부 계산 — logs 파싱 없음
+    const kindError = new Set();
+    const kindWarn  = new Set();
+    const FILE_KEY_TO_KIND = {
+      freshmen: '신입생', transfer_in: '전입생',
+      transfer_out: '전출생', teachers: '교직원',
+    };
+    (rowMarks || []).forEach(m => {
+      const kind = FILE_KEY_TO_KIND[m.file_key];
+      if (!kind) return;
+      if (m.level === 'error') kindError.add(kind);
+      else if (m.level === 'warn') kindWarn.add(kind);
+    });
+    // events 기반으로 파일별 blocking error 보완
+    (_lastScanData?.events || []).forEach(e => {
+      const kind = FILE_KEY_TO_KIND[e.file_key];
+      if (!kind) return;
+      if (e.level === 'error') kindError.add(kind);
+      else if (e.level === 'warn') kindWarn.add(kind);
+    });
 
     Object.keys(KIND_ROW).forEach(kind => {
       const tr = document.querySelector(`#scan-tbody tr[data-kind="${kind}"]`);
       if (!tr) return;
-      const hasKindWarn = !!(_scanWarnState.byKind[kind]?.messages?.length || _scanWarnState.byKind[kind]?.issueRows?.size || _scanWarnState.byKind[kind]?.suspectCount);
-      const hasKindError = errorKinds.has(kind);
-      tr.classList.toggle('scan-row-warn', hasKindWarn && !hasKindError);
-      tr.classList.toggle('scan-row-error', hasKindError);
+      const isError = kindError.has(kind);
+      const isWarn  = kindWarn.has(kind) && !isError;
+      tr.classList.toggle('scan-row-warn',  isWarn);
+      tr.classList.toggle('scan-row-error', isError);
       const fileCell = tr.querySelectorAll('td')[1];
       if (fileCell && fileCell.textContent) {
-        fileCell.classList.toggle('file-link-warn', hasKindWarn && !hasKindError);
-        fileCell.classList.toggle('file-link-error', hasKindError);
+        fileCell.classList.toggle('file-link-warn',  isWarn);
+        fileCell.classList.toggle('file-link-error', isError);
       }
     });
   }
 
   function _makeEmptyWarnState() {
-    return {
-      hasWarn: false,
-      messages: [],
-      byKind: {},
-    };
-  }
-
-  function _buildWarnState(data) {
-    const stateObj = _makeEmptyWarnState();
-    const items = data.items || [];
-    items.forEach(item => {
-      const kind = item.kind;
-      const entry = stateObj.byKind[kind] || { messages: [], issueRows: new Set(), suspectCount: 0, rowIssues: new Map() };
-      const warningText = String(item.warning || '').trim();
-      if (warningText) {
-        warningText.split(/\n+/).map(s => s.trim()).filter(Boolean).forEach(msg => _pushWarnMessage(stateObj, kind, msg));
-      }
-      (item.issue_rows || []).forEach(r => entry.issueRows.add(r));
-      stateObj.byKind[kind] = entry;
-    });
-
-    (data.logs || [])
-      .filter(l => l.level === 'warn')
-      .forEach(l => {
-        const msg = String(l.message || '').trim();
-        const kind = _kindFromWarnMessage(msg);
-        _pushWarnMessage(stateObj, kind, msg);
-      });
-
-    stateObj.hasWarn = stateObj.messages.length > 0 || Object.values(stateObj.byKind).some(v => (v.issueRows && v.issueRows.size) || v.suspectCount);
-    return stateObj;
-  }
-
-  function _pushWarnMessage(stateObj, kind, msg) {
-    if (!msg) return;
-    if (!stateObj.messages.includes(msg)) stateObj.messages.push(msg);
-    if (kind) {
-      const entry = stateObj.byKind[kind] || { messages: [], issueRows: new Set(), suspectCount: 0, rowIssues: new Map() };
-      if (!entry.messages.includes(msg)) entry.messages.push(msg);
-      stateObj.byKind[kind] = entry;
-    }
-  }
-
-  function _kindFromWarnMessage(msg) {
-    if (!msg) return null;
-    if (msg.includes('신입생')) return '신입생';
-    if (msg.includes('전입생')) return '전입생';
-    if (msg.includes('전출생')) return '전출생';
-    if (msg.includes('교직원') || msg.includes('교사')) return '교직원';
-    return null;
+    // 하위 호환용 — _scanWarnState 참조 코드 잔존 시 오류 방지
+    return { hasWarn: false, messages: [], byKind: {} };
   }
 
 function _normalizeScanCardMessage(msg, mode) {
@@ -808,7 +747,7 @@ function toggleFilter(key) {
     if (state.isScanning) return;
     state.isScanning = true;
     _el('btn-scan').disabled = true;
-    _setBadge('running', '재스캔 중');
+    _setBadge('running', '스캔 중');
 
     // 이전 스캔 결과 초기화
     _previewData = {};
@@ -839,7 +778,7 @@ function toggleFilter(key) {
     if (!res.ok) {
       state.isScanning = false;
       _el('btn-scan').disabled = false;
-      _setBadge('err', '스캔 실패');
+      _setBadge('err', '실패');
       _setMessage(res.error || '재스캔 시작 실패');
     }
   }
@@ -865,7 +804,7 @@ function toggleFilter(key) {
     };
     _lastScanData.can_execute = true;
 
-    _setBadge(_scanWarnState.hasWarn ? 'warn' : 'ok', _scanWarnState.hasWarn ? '경고' : '스캔 완료');
+    _setBadge(_scanWarnState.hasWarn ? 'warn' : 'ok', _scanWarnState.hasWarn ? '경고' : '완료');
     _setMessage('학년도 아이디 규칙이 적용되었습니다. 바로 실행할 수 있습니다.');
     _el('btn-run').disabled = false;
     App.setFloatingNext(true, 'run');
@@ -888,7 +827,7 @@ function toggleFilter(key) {
     if (typeof Panel !== 'undefined' && Panel.updateRosterMapBtn) Panel.updateRosterMapBtn(null);
     _filterState   = { issue: false, dup: false };
 
-    _setBadge('idle', '스캔 전');
+    _setBadge('idle', '대기');
     _setMessage('');
     _hideSchoolKindWarn();
     _scanWarnState = _makeEmptyWarnState();

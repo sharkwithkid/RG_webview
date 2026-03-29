@@ -43,6 +43,7 @@ from engine import (
     load_notice_templates,
 )
 from core.roster_log import write_work_result, write_email_sent
+from core.events import CoreEvent, RowMark
 
 from core.common import derive_grade_year_map
 
@@ -159,6 +160,41 @@ def _parse_log_entry(raw: str) -> dict:
 
 def _logs_from_result(result) -> list:
     return [_parse_log_entry(l) for l in (getattr(result, "logs", None) or [])]
+
+
+def _status_from_events(events: list) -> dict:
+    errs  = [e for e in events if e.level == "error"]
+    holds = [e for e in events if e.level == "hold"]
+    warns = [e for e in events if e.level == "warn"]
+    if errs:    level, badge = "error", {"type": "err",  "text": "오류"}
+    elif holds: level, badge = "hold",  {"type": "hold", "text": "보류"}
+    elif warns: level, badge = "warn",  {"type": "warn", "text": "경고"}
+    else:       level, badge = "ok",    {"type": "ok",   "text": "완료"}
+    all_msgs = errs + holds + warns
+    if errs:    summary = f"오류 {len(errs)}건이 있습니다."
+    elif holds: summary = f"보류 {len(holds)}건이 있습니다."
+    elif warns: summary = f"경고 {len(warns)}건이 있습니다."
+    else:       summary = "완료"
+    return {
+        "level": level, "badge": badge,
+        "messages": [{"level": e.level, "text": e.message} for e in all_msgs],
+        "summary_text": summary,
+        "detail_messages": [e.message for e in all_msgs],
+        "action_text": "",
+        "row_marks": {"warn_rows": [], "error_rows": [], "issue_rows": []},
+    }
+
+
+def _serialize_event(e: CoreEvent) -> dict:
+    return {
+        "code": e.code, "level": e.level, "message": e.message,
+        "detail": e.detail, "file_key": e.file_key,
+        "row": e.row, "field_name": e.field_name, "blocking": e.blocking,
+    }
+
+
+def _serialize_row_mark(m: RowMark) -> dict:
+    return {"file_key": m.file_key, "row": m.row, "level": m.level, "code": m.code}
 
 
 def _meta_get(meta, key, default=None):
@@ -298,8 +334,10 @@ def _normalize_compare_item(compare_file, compare_layout):
 
 def to_scan_payload(result) -> dict:
     """ScanResult / DiffScanResult -> JS 전달용 요약 dict"""
-    logs = _logs_from_result(result)
-    warnings = [l for l in logs if l["level"] in ("warn", "error")]
+    logs      = _logs_from_result(result)
+    events    = list(getattr(result, "events",    None) or [])
+    row_marks = list(getattr(result, "row_marks", None) or [])
+    warnings  = [l for l in logs if l["level"] in ("warn", "error")]
 
     items = [
         i for i in [
@@ -348,7 +386,13 @@ def to_scan_payload(result) -> dict:
         for r in item.get('issue_rows', []) or []:
             if r not in overall_issue_rows:
                 overall_issue_rows.append(r)
-    status = _build_status_bundle(logs=logs, issue_rows=overall_issue_rows, ok=bool(getattr(result, 'ok', False)), default_ok_text='스캔 완료')
+    if events:
+        status = _status_from_events(events)
+        _warn_rows  = [m.row for m in row_marks if m.level in ("warn", "dup")]
+        _error_rows = [m.row for m in row_marks if m.level == "error"]
+        status["row_marks"] = {"warn_rows": _warn_rows, "error_rows": _error_rows, "issue_rows": _warn_rows + _error_rows}
+    else:
+        status = _build_status_bundle(logs=logs, issue_rows=overall_issue_rows, ok=bool(getattr(result, 'ok', False)), default_ok_text='스캔 완료')
 
     return {
         "ok":                     bool(getattr(result, "ok", False)),
@@ -366,16 +410,20 @@ def to_scan_payload(result) -> dict:
         "has_school_kind_warn":   False,
         "grade_year_map":         grade_year_map,
         "items":    items,
-        "warnings": warnings,
-        "logs":     logs,
-        "status":   status,
+        "warnings":  warnings,
+        "logs":      logs,
+        "status":    status,
+        "events":    [_serialize_event(e)    for e in events],
+        "row_marks": [_serialize_row_mark(m) for m in row_marks],
     }
 
 
 def to_run_payload(result) -> dict:
     """PipelineResult -> JS 전달용 요약 dict (Path -> str 전수 변환)"""
-    logs = _logs_from_result(result)
-    warnings = [l for l in logs if l["level"] in ("warn", "error")]
+    logs      = _logs_from_result(result)
+    events    = list(getattr(result, "events",    None) or [])
+    row_marks = list(getattr(result, "row_marks", None) or [])
+    warnings  = [l for l in logs if l["level"] in ("warn", "error")]
     audit = getattr(result, "audit_summary", {}) or {}
     in_cnt = audit.get("input_counts", {})
     transfer_in_hold = int(getattr(result, 'transfer_in_hold', 0) or 0)
@@ -389,13 +437,16 @@ def to_run_payload(result) -> dict:
     status_logs = list(logs)
     if real_hold > 0:
         status_logs.append({'level':'warn','message':f'확인 필요 건이 {real_hold}건 있습니다.'})
-    status = _build_status_bundle(
-        logs=status_logs,
-        issue_rows=issue_rows,
-        ok=bool(getattr(result, 'ok', False)),
-        default_ok_text='완료',
-        action_text=action_text,
-    )
+    if events:
+        status = _status_from_events(events)
+    else:
+        status = _build_status_bundle(
+            logs=status_logs,
+            issue_rows=issue_rows,
+            ok=bool(getattr(result, 'ok', False)),
+            default_ok_text='완료',
+            action_text=action_text,
+        )
     return {
         "ok": bool(getattr(result, "ok", False)),
         "output_files": [{"name": p.name, "path": str(p)} for p in (getattr(result, "outputs", None) or [])],
@@ -408,24 +459,29 @@ def to_run_payload(result) -> dict:
         "transfer_out_auto_skip":  int(getattr(result, "transfer_out_auto_skip", 0)),
         "notice_dup_rows":          list(getattr(result, "notice_dup_rows", []) or []),
         "notice_teacher_dup_rows":  list(getattr(result, "notice_teacher_dup_rows", []) or []),
-        "warnings": warnings,
-        "logs":     logs,
-        "status":   status,
+        "warnings":  warnings,
+        "logs":      logs,
+        "status":    status,
+        "events":    [_serialize_event(e)    for e in events],
+        "row_marks": [_serialize_row_mark(m) for m in row_marks],
     }
 
 
 def to_diff_run_payload(result) -> dict:
     """DiffPipelineResult -> JS 전달용 요약 dict"""
-    logs = _logs_from_result(result)
-    warnings = [l for l in logs if l["level"] in ("warn", "error")]
-    issue_rows = []
+    logs      = _logs_from_result(result)
+    events    = list(getattr(result, "events",    None) or [])
+    row_marks = list(getattr(result, "row_marks", None) or [])
+    warnings  = [l for l in logs if l["level"] in ("warn", "error")]
 
-    status = _build_status_bundle(
-    logs=logs,
-    issue_rows=issue_rows,
-    ok=bool(getattr(result, 'ok', False)),
-    default_ok_text='완료'
-    )
+    if events:
+        status = _status_from_events(events)
+    else:
+        status = _build_status_bundle(
+            logs=logs, issue_rows=[],
+            ok=bool(getattr(result, 'ok', False)),
+            default_ok_text='완료',
+        )
 
     return {
         "ok": bool(getattr(result, "ok", False)),
@@ -442,9 +498,11 @@ def to_diff_run_payload(result) -> dict:
         "matched_rows":       list(getattr(result, "matched_rows", []) or []),
         "compare_only_rows":  list(getattr(result, "compare_only_rows", []) or []),
         "unresolved_rows":    list(getattr(result, "unresolved_rows", []) or []),
-        "warnings": warnings,
-        "logs":     logs,
-        "status":   status,
+        "warnings":  warnings,
+        "logs":      logs,
+        "status":    status,
+        "events":    [_serialize_event(e)    for e in events],
+        "row_marks": [_serialize_row_mark(m) for m in row_marks],
     }
 
 
@@ -618,18 +676,39 @@ class PreviewWorker(QObject):
 
                 max_cols = len(header_values)
                 rows = []
-                sheet_max_row = int(getattr(ws, 'max_row', 0) or 0)
-                actual_count = max(0, sheet_max_row - start_row + 1)
                 displayed_count = 0
-                max_row = sheet_max_row
+                last_data_row = start_row - 1
+                blank_streak = 0
+                MAX_BLANK_STREAK = 10
+                # 출력 파일(run_output)은 하나라도 값 있으면 데이터 행
+                # 입력 파일은 헤더 열 과반수 기준 (no 열 등 자동번호만 있는 행 제외)
+                header_col_count = max(len(header_values), 1)
+                is_output = (kind == "run_output")
                 for row_idx, row in enumerate(ws.iter_rows(min_row=start_row, values_only=True), start=start_row):
                     vals = ["" if v is None else str(v) for v in row]
                     max_cols = max(max_cols, len(vals))
+                    if is_output:
+                        has_data = any(v.strip() for v in vals)
+                    else:
+                        header_vals = vals[:header_col_count]
+                        filled = sum(1 for v in header_vals if v.strip())
+                        has_data = filled > (header_col_count / 2)
+                    if has_data:
+                        last_data_row = row_idx
+                        blank_streak = 0
+                    else:
+                        blank_streak += 1
+                        if blank_streak >= MAX_BLANK_STREAK:
+                            break
                     if displayed_count < self.MAX_PREVIEW_ROWS:
                         rows.append(vals)
                         displayed_count += 1
-                    else:
-                        break
+                # 실제 데이터 행 기준으로 자르기 — 뒤쪽 빈/반빈 행 제거
+                if last_data_row >= start_row:
+                    rows = rows[:last_data_row - start_row + 1]
+                    displayed_count = len(rows)
+                actual_count = max(0, last_data_row - start_row + 1)
+                max_row = last_data_row
 
                 columns = header_values if header_values else [""] * max_cols
                 if len(columns) < max_cols:
