@@ -276,13 +276,13 @@
     "master_recorded": false
   },
   "양평초": {
-    "last_date": "2026-03-26",
+    "last_date": "2026-03-30",
     "worker": "임지윤",
     "counts": {
-      "신입생": 78,
-      "전입생": 0,
-      "전출생": 8,
-      "교직원": 37
+      "신입생": 0,
+      "전입생": 11,
+      "전출생": 0,
+      "교직원": 0
     },
     "run_completed": true,
     "master_recorded": false
@@ -378,6 +378,30 @@
       "신입생": 5,
       "전입생": 0,
       "전출생": 1,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "포천내촌중": {
+    "last_date": "2026-03-30",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 10,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 22
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "인천장서초": {
+    "last_date": "2026-03-30",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 121,
+      "전입생": 0,
+      "전출생": 0,
       "교직원": 0
     },
     "run_completed": true,

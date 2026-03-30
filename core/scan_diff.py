@@ -49,6 +49,7 @@ from core.common import (
     normalize_compare_name,
     normalize_compare_name_key,
     get_compare_name_warnings,
+    split_korean_name_suffix,
     load_roster_sheet,
     parse_roster_year_from_filename,
     parse_class_str,
@@ -437,6 +438,7 @@ def normalize_class_value(raw: Any) -> str:
     """
     비교용 파일/명부 공통 반 표기 정규화.
     - 없으면 ""
+    - 미편성 포함 텍스트는 숫자 추출 안 하고 원문 반환
     - 숫자 추출 가능하면 숫자만 반환
     - 아니면 공백만 정리한 원문 반환
     """
@@ -448,6 +450,13 @@ def normalize_class_value(raw: Any) -> str:
 
     s = s.replace("\u3000", " ").replace("\u00A0", " ")
     s = re.sub(r"\s+", "", s)
+
+    # 미편성/특수반 등 텍스트가 포함된 경우 숫자 추출 금지
+    NON_NUMERIC_CLASSES = {"미편성", "테스트반", "유치원", "유치원반"}
+    if any(kw in s for kw in NON_NUMERIC_CLASSES):
+        # "5-미편성반" → "미편성반" (앞의 학년-접두 제거)
+        s = re.sub(r"^\d+-", "", s)
+        return s
 
     nums = re.findall(r"\d+", s)
     if nums:
@@ -596,13 +605,10 @@ def _get_roster_slot_cols(roster_ws) -> Tuple[int, Optional[int], Optional[int],
 
 
 def _pick_roster_class_values(now_v: Any, prev_v: Any) -> Tuple[Any, str, str, str]:
+    """현재반만 사용. 이전반은 무시 — 올해 명부 vs 올해 명단 비교이므로."""
     now_raw = "" if now_v is None else str(now_v).strip()
-    prev_raw = "" if prev_v is None else str(prev_v).strip()
-
-    class_source = now_v if now_raw else prev_v
-    class_raw = now_raw or prev_raw
-    class_s = normalize_class_value(class_source)
-    return class_source, class_raw, class_s, now_raw
+    class_s = normalize_class_value(now_v)
+    return now_v, now_raw, class_s, now_raw
 
 
 def _parse_roster_compare_grade(class_value: Any, ref_grade_shift: int) -> Optional[int]:
@@ -764,6 +770,16 @@ def build_diff_rows(
     roster_map  = _group_by_key(roster_rows)
     compare_map = _group_by_key(compare_rows)
 
+    # 명부 base name 인덱스 — suffix 제거 후 기본 이름 → 해당 명부 행들
+    # 예: 농담곰이A, 농담곰이B → base "농담곰이" → [행A, 행B]
+    roster_base_index: Dict[Tuple[int, str], List[Dict]] = {}
+    for r in roster_rows:
+        base_name, suffix_n = split_korean_name_suffix(r["name"])
+        if suffix_n > 0:  # suffix 있는 경우만 인덱싱
+            base_key_str = re.sub(r"\s+", "", base_name).casefold()
+            base_key = (r["grade"], base_key_str)
+            roster_base_index.setdefault(base_key, []).append(r)
+
     all_keys = sorted(set(roster_map.keys()) | set(compare_map.keys()))
 
     matched_rows:      List[Dict[str, Any]] = []
@@ -794,27 +810,41 @@ def build_diff_rows(
                         "source": "명단",
                         "compare_class": r.get("class", ""),
                         "roster_class": "",
-                        "hold_reason": "명단 중복 / 명부 단일로 자동 판정 불가",
+                        "hold_reason": "재학생 명단에 동명이인이 있습니다 — 수동 확인이 필요합니다.",
                     }
                     transfer_in_hold.append(rec)
                     unresolved_rows.append(rec)
 
             elif roster_count > compare_count:
-                for r in roster_group:
-                    cls_raw = r.get("class_raw", r.get("class", ""))
-                    if is_excluded_misc_class(cls_raw):
-                        continue
-                    rec = {
-                        "grade": r["grade"],
-                        "class": r.get("class", ""),  # 기존 정렬/호환 유지용
-                        "name": r["name"],
-                        "source": "명부",
-                        "compare_class": "",
-                        "roster_class": r.get("class", ""),
-                        "hold_reason": "명단 단일 / 명부 중복으로 자동 판정 불가",
-                    }
-                    transfer_out_hold.append(rec)
-                    unresolved_rows.append(rec)
+                if compare_count == 0:
+                    # 명단에 아예 없음 → roster_only (전출 후보)
+                    for r in roster_group:
+                        cls_raw = r.get("class_raw", r.get("class", ""))
+                        if is_excluded_misc_class(cls_raw):
+                            continue
+                        roster_only_rows.append({
+                            "grade": r["grade"],
+                            "class": r.get("class", ""),
+                            "name": r["name"],
+                        })
+                else:
+                    # 명단에 일부 있음 → 판정불가
+                    for r in roster_group:
+                        cls_raw = r.get("class_raw", r.get("class", ""))
+                        if is_excluded_misc_class(cls_raw):
+                            continue
+                        rec = {
+                            "grade": r["grade"],
+                            "class": r.get("class", ""),
+                            "name": r["name"],
+                            "source": "명부",
+                            "compare_class": "",
+                            "roster_class": r.get("class", ""),
+                            "hold_reason": "명부에 동명이인이 있습니다 — 수동 확인이 필요합니다.",
+                            "candidate_ids": [r.get("student_id", "")] if r.get("student_id", "") else [],
+                        }
+                        transfer_out_hold.append(rec)
+                        unresolved_rows.append(rec)
             else:
                 for r in compare_group:
                     rec = {
@@ -824,7 +854,7 @@ def build_diff_rows(
                         "source": "명단",
                         "compare_class": r.get("class", ""),
                         "roster_class": "",
-                        "hold_reason": "학년+이름 중복(양쪽 동수)으로 자동 판정 불가",
+                        "hold_reason": "재학생 명단과 명부 양쪽에 동명이인이 있습니다 — 수동 확인이 필요합니다.",
                     }
                     transfer_in_hold.append(rec)
                     unresolved_rows.append(rec)
@@ -839,7 +869,8 @@ def build_diff_rows(
                         "source": "명부",
                         "compare_class": "",
                         "roster_class": r.get("class", ""),
-                        "hold_reason": "학년+이름 중복(양쪽 동수)으로 자동 판정 불가",
+                        "hold_reason": "재학생 명단과 명부 양쪽에 동명이인이 있습니다 — 수동 확인이 필요합니다.",
+                        "candidate_ids": [r.get("student_id", "")] if r.get("student_id", "") else [],
                     }
                     transfer_out_hold.append(rec)
                     unresolved_rows.append(rec)
@@ -848,6 +879,29 @@ def build_diff_rows(
         # compare에만 있으면 전입 후보
         if compare_count == 1 and roster_count == 0:
             r = compare_group[0]
+            # 명부에 suffix 붙은 동명이인이 있는지 확인
+            base_name, _ = split_korean_name_suffix(r["name"])
+            base_key_str = re.sub(r"\s+", "", base_name).casefold()
+            base_key = (r["grade"], base_key_str)
+            roster_suffixed = roster_base_index.get(base_key, [])
+            if len(roster_suffixed) >= 1:
+                # 명부에 suffix 붙은 동명이인 후보 존재 → 판정불가
+                if len(roster_suffixed) >= 2:
+                    reason = "명부에 동명이인(A,B,C 등)으로 구분된 이름이 있습니다 — 수동 확인이 필요합니다."
+                else:
+                    reason = "명부에 동일 학생으로 의심되는 후보가 있습니다 — 수동 확인이 필요합니다."
+                rec = {
+                    "grade": r["grade"],
+                    "class": r.get("class", ""),
+                    "name": r["name"],
+                    "source": "명단",
+                    "compare_class": r.get("class", ""),
+                    "roster_class": roster_suffixed[0].get("class", "") if len(roster_suffixed) == 1 else "",
+                    "hold_reason": reason,
+                    "candidate_ids": [s.get("student_id", "") for s in roster_suffixed if s.get("student_id", "")],
+                }
+                unresolved_rows.append(rec)
+                continue
             base = {"grade": r["grade"], "class": r.get("class", ""), "name": r["name"]}
             compare_only_rows.append(base)
             if r.get("class", ""):
@@ -993,7 +1047,7 @@ def scan_diff_pipeline(
 
             if roster_path is None:
                 sr.events.append(roster_not_found())
-            raise ValueError("[ERROR] 비교 기준 학생명부를 찾을 수 없습니다.")
+                raise ValueError("[ERROR] 비교 기준 학생명부를 찾을 수 없습니다.")
 
             detected_year = parse_roster_year_from_filename(roster_path)
             if detected_year is None:

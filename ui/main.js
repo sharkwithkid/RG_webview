@@ -303,26 +303,26 @@ function _connectSignals() {
     state.isScanning     = false;
     state.last_scan_logs = p.data?.logs || [];
     if (p.ok) Scan.onFinished(p.data);
-    else      Scan.onFailed(p.error || '스캔 실패');
+    else      Scan.onFailed('예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.');
   });
   bridge.scanFailed.connect(payload => {
     const p = JSON.parse(payload);
     state.isScanning     = false;
     state.last_scan_logs = [{ level: 'error', message: p.error || '' }];
-    Scan.onFailed(p.error || '예기치 못한 오류');
+    Scan.onFailed('예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.');
   });
   bridge.runFinished.connect(payload => {
     const p = JSON.parse(payload);
     state.isRunning     = false;
     state.last_run_logs = p.data?.logs || [];
     if (p.ok) Run.onFinished(p.data);
-    else      Run.onFailed(p.error || '실행 실패');
+    else      Run.onFailed('예기치 못한 오류가 발생했습니다. 실행 로그를 확인해 주세요.');
   });
   bridge.runFailed.connect(payload => {
     const p = JSON.parse(payload);
     state.isRunning     = false;
     state.last_run_logs = [{ level: 'error', message: p.error || '' }];
-    Run.onFailed(p.error || '예기치 못한 오류');
+    Run.onFailed('예기치 못한 오류가 발생했습니다. 실행 로그를 확인해 주세요.');
   });
   bridge.diffScanFinished.connect(payload => {
     const p = JSON.parse(payload);
@@ -346,7 +346,7 @@ function _connectSignals() {
     const p = JSON.parse(payload);
     state.isDiffRunning  = false;
     state.last_diff_logs = [{ level: 'error', message: p.error || '' }];
-    Diff.onFailed(p.error || '예기치 못한 오류');
+    Diff.onFailed('예기치 못한 오류가 발생했습니다. 로그를 확인해 주세요.');
   });
   bridge.previewLoaded.connect(payload => {
     const p = JSON.parse(payload);

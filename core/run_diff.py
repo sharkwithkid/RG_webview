@@ -132,20 +132,43 @@ def build_compare_result_workbook(
 
         def add_unresolved_sheet(title: str, rows: List[Dict[str, Any]]):
             ws = wb.create_sheet(title)
-            # NOTE:
-            # 판정불가 시트는 단일 '반' 컬럼으로는 출처/판단 근거가 뭉개져서,
-            # 명단반 / 명부반 / 출처를 분리해 기록한다.
-            # 나중에 프론트 뷰어도 이 컬럼들까지 함께 노출하도록 맞춰야 한다.
-            ws.append(["학년", "이름", "출처", "명단반", "명부반", "보류사유"])
-            for rec in rows or []:
+            # 최대 후보 아이디 수 계산 (동적 열 수)
+            all_rows = rows or []
+            max_ids = max((len(r.get("candidate_ids", [])) for r in all_rows), default=0)
+            id_headers = [f"후보ID{i+1}" for i in range(max_ids)]
+            ws.append(["이름", "명단반", "명부반", "보류사유"] + id_headers)
+            sorted_rows = sorted(
+                all_rows,
+                key=lambda r: (
+                    str(r.get("hold_reason", r.get("remark", ""))),
+                    int(r.get("grade", 0)) if str(r.get("grade", 0)).isdigit() else 0,
+                    str(r.get("name", "")),
+                )
+            )
+            def _fmt_class(grade, cls):
+                g = str(grade) if grade else ""
+                c = str(cls).strip() if cls else ""
+                if not c:
+                    return f"{g}-?" if g else ""
+                # cls가 이미 "5-미편성반" 같이 학년 포함된 형태면 그대로 반환
+                import re as _re
+                if _re.match(r"^\d+-", c):
+                    return c
+                if g and c:
+                    return f"{g}-{c}"
+                return c or ""
+            for rec in sorted_rows:
+                g = rec.get("grade", "")
+                ids = rec.get("candidate_ids", [])
+                # 빈 문자열 제거 후 max_ids 길이에 맞춰 패딩
+                ids_clean = [i for i in ids if i]
+                ids_padded = ids_clean + [""] * (max_ids - len(ids_clean))
                 ws.append([
-                    rec.get("grade", ""),
                     rec.get("name", ""),
-                    rec.get("source", ""),
-                    rec.get("compare_class", ""),
-                    rec.get("roster_class", ""),
+                    _fmt_class(g, rec.get("compare_class", "")),
+                    _fmt_class(g, rec.get("roster_class", "")),
                     rec.get("hold_reason", rec.get("remark", "")),
-                ])
+                ] + ids_padded)
             return ws
 
         add_simple_sheet("명부에만 있음", roster_only_rows)

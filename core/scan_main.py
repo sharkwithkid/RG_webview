@@ -1260,32 +1260,6 @@ def scan_pipeline(
             allow_blank_class_for_kindergarten=True,
         )
 
-        sr.transfer_in = run_structure_check(
-            file_path=transfer_file,
-            kind_key="transfer",
-            kind_label="전입생",
-            header_slots=TRANSFER_HEADER_SLOTS,
-            required_keys=["grade", "class", "name"],
-            allow_blank_class_for_kindergarten=True,
-        )
-
-        sr.transfer_out = run_structure_check(
-            file_path=withdraw_file,
-            kind_key="withdraw",
-            kind_label="전출생",
-            header_slots=WITHDRAW_HEADER_SLOTS,
-            required_keys=["grade", "class", "name"],
-            allow_blank_class_for_kindergarten=True,
-        )
-
-        sr.teachers = run_structure_check(
-            file_path=teacher_file,
-            kind_key="teacher",
-            kind_label="교사",
-            header_slots=TEACHER_HEADER_SLOTS,
-            required_keys=["name"],  # position(직위)은 필수 아님
-        )
-
         need_roster_by_transfer = bool(transfer_file)
         need_roster_by_withdraw = bool(withdraw_file)
         need_roster_by_freshmen = False
@@ -1308,6 +1282,9 @@ def scan_pipeline(
             or need_roster_by_freshmen
         )
         sr.need_roster = need_roster
+
+        # 명부 필요 여부 확인 후 먼저 체크 — 이후 파일 구조 검사
+        # (명부 없음이 더 우선순위 높은 오류이므로 파일 구조 검사보다 먼저)
 
         if need_roster_by_freshmen:
             extra = freshmen_extra_grades(freshmen_file, year_int, school_name)
@@ -1334,23 +1311,21 @@ def scan_pipeline(
                     _tick("명부 파일 로드")
                 except ValueError as roster_err:
                     if need_roster_by_transfer or need_roster_by_withdraw:
-                        # 전입/전출 처리는 명부 파일 없이 진행 불가
                         missing_for = []
                         if need_roster_by_transfer:
                             missing_for.append("전입")
                         if need_roster_by_withdraw:
                             missing_for.append("전출")
                         joined = "/".join(missing_for)
-                        sr.events.append(roster_not_found())
+                        sr.events.append(roster_not_found(reason=joined))
                         raise ValueError(
                             "[ERROR] 학생명부 파일이 없습니다. "
                             f"{joined} 처리는 학생명부 파일 없이는 진행할 수 없습니다."
                         ) from roster_err
                     else:
-                        # 신입생 타학년 포함도 이제 학생명부를 필수로 본다.
-                        sr.events.append(roster_not_found())
+                        sr.events.append(roster_not_found(reason="신입생 타학년"))
                         raise ValueError(
-                            "[ERROR] 학생명부 파일이 없습니다. 학년도 규칙이 필요한 경우에도 학생명부 파일이 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요."
+                            "[ERROR] 학생명부 파일이 없습니다. 학생명부를 추가한 뒤 다시 스캔해 주세요."
                         ) from roster_err
 
                 if roster_ws is not None and roster_path is not None:
@@ -1471,6 +1446,33 @@ def scan_pipeline(
         # 명부가 필요한 경우는 모두 학생명부 필수로 본다.
         # - 전입/전출 포함
         # - 신입생 타학년 포함 (수동 학년도 규칙 입력으로 대체하지 않음)
+        # 명부 체크 완료 후 파일 구조 검사 실행
+        sr.transfer_in = run_structure_check(
+            file_path=transfer_file,
+            kind_key="transfer",
+            kind_label="전입생",
+            header_slots=TRANSFER_HEADER_SLOTS,
+            required_keys=["grade", "class", "name"],
+            allow_blank_class_for_kindergarten=True,
+        )
+
+        sr.transfer_out = run_structure_check(
+            file_path=withdraw_file,
+            kind_key="withdraw",
+            kind_label="전출생",
+            header_slots=WITHDRAW_HEADER_SLOTS,
+            required_keys=["grade", "class", "name"],
+            allow_blank_class_for_kindergarten=True,
+        )
+
+        sr.teachers = run_structure_check(
+            file_path=teacher_file,
+            kind_key="teacher",
+            kind_label="교사",
+            header_slots=TEACHER_HEADER_SLOTS,
+            required_keys=["name"],
+        )
+
         roster_required_strict = bool(need_roster)
         roster_can_be_replaced_by_manual = False
 

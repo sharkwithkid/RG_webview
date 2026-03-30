@@ -681,15 +681,25 @@ class PreviewWorker(QObject):
                 blank_streak = 0
                 MAX_BLANK_STREAK = 10
                 # 출력 파일(run_output)은 하나라도 값 있으면 데이터 행
-                # 입력 파일은 헤더 열 과반수 기준 (no 열 등 자동번호만 있는 행 제외)
-                header_col_count = max(len(header_values), 1)
+                # 입력 파일은 핵심 열(이름/학년/반) 기준으로 판정
                 is_output = (kind == "run_output")
+                # 핵심 열 인덱스 추출 — 이름/학년/반 관련 헤더 위치
+                KEY_KEYWORDS = {"이름", "성명", "학생이름", "학년", "반", "학급"}
+                key_col_indices = [
+                    i for i, h in enumerate(header_values)
+                    if any(kw in str(h) for kw in KEY_KEYWORDS)
+                ]
+                header_col_count = max(len(header_values), 1)
                 for row_idx, row in enumerate(ws.iter_rows(min_row=start_row, values_only=True), start=start_row):
                     vals = ["" if v is None else str(v) for v in row]
                     max_cols = max(max_cols, len(vals))
                     if is_output:
                         has_data = any(v.strip() for v in vals)
+                    elif key_col_indices:
+                        # 핵심 열 중 하나라도 값 있으면 데이터 행
+                        has_data = any(vals[i].strip() for i in key_col_indices if i < len(vals))
                     else:
+                        # 핵심 열 못 찾으면 과반수 기준 fallback
                         header_vals = vals[:header_col_count]
                         filled = sum(1 for v in header_vals if v.strip())
                         has_data = filled > (header_col_count / 2)

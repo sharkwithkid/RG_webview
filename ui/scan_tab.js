@@ -89,14 +89,24 @@ const Scan = (() => {
 
     if (!data.ok) {
       const status = data.status || null;
-      const errMsg = (status?.messages || []).find(m => m.level === 'error')?.text
-        || '스캔 중 오류가 발생했습니다.';
+      const events = data.events || [];
       _setBadge('err', '실패');
       _setMessage('');
       _setSchoolKindWarn(!!data.school_kind_needs_choice);
-      _showScanWarnCard([errMsg], 'error', status);
       App.setStepState(2, 'warn');
-      // 토스트 제거 — 카드가 남아있어서 중복
+      // blocking event가 하나라도 있으면 → 토스트만, 카드 없음
+      const blockingEvt = events.find(e => e.blocking && e.level === 'error');
+      if (blockingEvt) {
+        toast(blockingEvt.message, 'err', 6000);
+        _hideScanWarnCard();
+      } else {
+        // non-blocking error만 → 카드
+        const nonBlockingMsgs = events
+          .filter(e => !e.blocking && e.level === 'error')
+          .map(e => e.message);
+        if (nonBlockingMsgs.length) _showScanWarnCard(nonBlockingMsgs, 'error', status);
+        else _hideScanWarnCard();
+      }
       return;
     }
 
@@ -106,17 +116,25 @@ const Scan = (() => {
     // 학교 구분 선택 필요 여부 — school_kind_needs_choice 플래그만 사용
     _setSchoolKindWarn(!!data.school_kind_needs_choice);
 
-    // 뱃지 + 카드 — status 하나만 본다 (logs 파싱 없음)
+    // 뱃지 + 카드 — events 직접 사용
     const status = data.status || null;
+    const events = data.events || [];
     StatusUI.renderBadge('scan-status-badge', status?.badge, '완료');
     _setMessage('');
-    const errMsgs  = (status?.messages || []).filter(m => m.level === 'error');
-    const warnMsgs = (status?.messages || []).filter(m => m.level === 'warn');
-    const holdMsgs = (status?.messages || []).filter(m => m.level === 'hold');
-    if (errMsgs.length)       _showScanWarnCard(errMsgs.map(m => m.text),  'error', status);
-    else if (holdMsgs.length) _showScanWarnCard(holdMsgs.map(m => m.text), 'warn',  status);
-    else if (warnMsgs.length) _showScanWarnCard(warnMsgs.map(m => m.text), 'warn',  status);
-    else                      _hideScanWarnCard();
+    const blockingEvt2 = events.find(e => e.blocking && e.level === 'error');
+    if (blockingEvt2) {
+      // blocking → 토스트만
+      toast(blockingEvt2.message, 'err', 6000);
+      _hideScanWarnCard();
+    } else {
+      const errMsgs  = events.filter(e => e.level === 'error').map(e => e.message);
+      const holdMsgs = events.filter(e => e.level === 'hold').map(e => e.message);
+      const warnMsgs = events.filter(e => e.level === 'warn').map(e => e.message);
+      if (errMsgs.length)       _showScanWarnCard(errMsgs,  'error', status);
+      else if (holdMsgs.length) _showScanWarnCard(holdMsgs, 'warn',  status);
+      else if (warnMsgs.length) _showScanWarnCard(warnMsgs, 'warn',  status);
+      else                      _hideScanWarnCard();
+    }
 
     // 행 색칠 — data.row_marks 하나만 본다
     _applyRowMarkStyles(data.row_marks || []);
@@ -160,9 +178,9 @@ const Scan = (() => {
   function onFailed(error) {
     _el('btn-scan').disabled = false;
     _setBadge('err', '실패');
-    _setMessage('예기치 못한 오류가 발생했습니다.');
+    _setMessage('예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.');
     App.setStepState(2, 'warn');
-    toast('스캔 오류 — 스캔 로그 보기에서 자세한 내용을 확인하세요.', 'err');
+    // 토스트 제거 — _setMessage에 내용 표시
   }
 
   // ──────────────────────────────────────────────

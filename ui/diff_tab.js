@@ -191,10 +191,20 @@ const Diff = (() => {
     state.isDiffScanning = false;
     _el('btn-run-diff').disabled = false;
     if (!data.ok) {
-      const errMsg = (data.status?.messages || []).find(m => m.level === 'error')?.text || '실패';
+      const status = data.status || null;
+      const events = data.events || [];
+      const blockingEvt = events.find(e => e.blocking && e.level === 'error');
       _setRunBadge('err', '오류');
       _setRunInfo('');
-      _showWarnCard('diff-run-warn-card', [errMsg], 'error', data.status || null);
+      if (blockingEvt) {
+        toast(blockingEvt.message, 'err', 6000);
+        const nonBlocking = (status?.messages || []).filter(m => m.message !== blockingEvt.message);
+        if (nonBlocking.length) _showWarnCard('diff-run-warn-card', nonBlocking.map(m => m.text), 'error', status);
+        else _hideWarnCard('diff-run-warn-card');
+      } else {
+        const errMsg = (status?.messages || []).find(m => m.level === 'error')?.text || '실행 중 오류가 발생했습니다.';
+        _showWarnCard('diff-run-warn-card', [errMsg], 'error', status);
+      }
       return;
     }
     const rosterOnlyCount = Number(data.roster_only_count || 0);
@@ -224,10 +234,25 @@ const Diff = (() => {
     _setSummary('명단 비교 결과를 아래에서 확인해 주세요.');
     const filesEl = _el('diff-output-files');
     if (filesEl) {
-      const first = (data.output_files || [])[0];
-      filesEl.innerHTML = first
-        ? `<div class="diff-output-link"><span class="lbl">비교 결과 파일</span><span class="lnk" onclick="Run.openFile('${_escJs(first.path)}')">${_escHtml(first.name)}</span></div>`
-        : '<span class="muted">생성된 파일이 없습니다.</span>';
+      filesEl.textContent = '';
+      const outputFiles = data.output_files || [];
+      if (!outputFiles.length) {
+        const empty = document.createElement('span');
+        empty.className = 'muted';
+        empty.textContent = '생성된 파일 없음';
+        filesEl.appendChild(empty);
+      } else {
+        outputFiles.forEach(f => {
+          const row = document.createElement('div');
+          row.className = 'output-file-item';
+          const link = document.createElement('span');
+          link.className = 'output-file-name';
+          link.textContent = f.name;
+          link.addEventListener('click', () => bridge.openFile(f.path));
+          row.appendChild(link);
+          filesEl.appendChild(row);
+        });
+      }
     }
   }
   function onFailed(error) {

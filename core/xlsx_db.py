@@ -2,10 +2,6 @@
 """
 학교 전체 명단 xlsx 파일 기반 학교 검색 모듈.
 
-주의:
-- 이 모듈의 대상 파일은 작업 이력/발송일 등을 다시 써야 하는 전체 명단이다.
-- 따라서 읽기 단계부터 .xlsx만 허용한다.
-
 기존 db.py(pyxlsb/.xlsb 의존)를 대체한다.
 열 위치는 col_map(roster_log.py와 동일 구조)으로 받으며,
 resources/DB/ 폴더나 pyxlsb 패키지가 없어도 동작한다.
@@ -35,8 +31,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from openpyxl import load_workbook
-
-from core.common import ensure_xlsx_only
 
 # =========================
 # 기본 col_map (roster_log._DEFAULT_COL_MAP 과 동기화)
@@ -88,8 +82,6 @@ def _is_header_like(val: str) -> bool:
 
 
 def _open_wb(xlsx_path: Path):
-    xlsx_path = Path(xlsx_path)
-    ensure_xlsx_only(xlsx_path)
     try:
         return load_workbook(str(xlsx_path), data_only=True, read_only=True)
     except Exception as e:
@@ -108,7 +100,6 @@ def load_school_names_from_xlsx(
     빈 값·헤더·구분선은 제외.
     """
     xlsx_path = Path(xlsx_path)
-    ensure_xlsx_only(xlsx_path)
     if not xlsx_path.exists():
         raise FileNotFoundError(f"명단 파일을 찾을 수 없습니다: {xlsx_path}")
 
@@ -222,7 +213,6 @@ def get_school_domain_from_xlsx(
     col_school  = int(cm["col_school"])
 
     xlsx_path = Path(xlsx_path)
-    ensure_xlsx_only(xlsx_path)
     if not xlsx_path.exists():
         return None
 

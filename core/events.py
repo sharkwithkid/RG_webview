@@ -155,7 +155,7 @@ def missing_header(file_key: FileKey, kind_label: str) -> CoreEvent:
         level    = "error",
         message  = f"{kind_label} 파일에서 헤더를 찾을 수 없습니다.",
         file_key = file_key,
-        blocking = True,
+        blocking = False,
     )
 
 
@@ -166,7 +166,7 @@ def missing_data_start(file_key: FileKey, kind_label: str) -> CoreEvent:
         message  = f"{kind_label} 데이터 시작 행을 찾을 수 없습니다.",
         detail   = "헤더 행 아래에 실제 데이터가 있는지 확인해 주세요.",
         file_key = file_key,
-        blocking = True,
+        blocking = False,
     )
 
 
@@ -176,7 +176,7 @@ def empty_data(file_key: FileKey, kind_label: str) -> CoreEvent:
         level    = "error",
         message  = f"{kind_label} 파일에서 데이터 행을 찾을 수 없습니다.",
         file_key = file_key,
-        blocking = True,
+        blocking = False,
     )
 
 
@@ -315,7 +315,7 @@ def school_kind_unknown() -> CoreEvent:
         code     = "SCHOOL_KIND_UNKNOWN",
         level    = "warn",
         message  = "자동으로 학교를 판정할 수 없습니다. 학교 구분을 직접 선택해 주세요.",
-        blocking = True,
+        blocking = False,
     )
 
 
@@ -332,7 +332,7 @@ def roster_not_found(reason: str = "") -> CoreEvent:
         level    = "error",
         message  = message,
         file_key = "roster",
-        blocking = True,
+        blocking = False,
     )
 
 

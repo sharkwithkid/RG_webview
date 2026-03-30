@@ -58,7 +58,7 @@ const Run = (() => {
     if (!res.ok) {
       state.isRunning = false;
       _el('btn-run').disabled = false;
-      _setBadge('err', '실패');
+      _setBadge('err', '실행 실패');
       _el('run-info').textContent = res.error || '실행 시작 실패';
     }
     // 비동기 완료 → main.js → bridge.runFinished → onFinished / onFailed
@@ -74,14 +74,17 @@ const Run = (() => {
     _noticeTeacherDupRows = new Set(data.notice_teacher_dup_rows || []);
 
     if (!data.ok) {
-      const status = data.status || null;
-      const errMsg = (status?.messages || []).find(m => m.level === 'error')?.text
-        || '작업 실행 중 오류가 발생했습니다.';
-      _setBadge('err', '실패');
+      const err = (data.logs || []).find(l => l.level === 'error');
+      const status = data.status || {
+        level: 'error',
+        summary_text: '오류가 있습니다.',
+        detail_messages: _collectStatusMessages(data, null),
+      };
+      _setBadge('err', '실행 실패');
       _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
-      _renderRunStatusCard(status || { level: 'error', summary_text: errMsg, detail_messages: [errMsg] }, data);
+      _renderRunStatusCard(status, data);
       App.setStepState(3, 'warn');
-      // 토스트 제거 — 카드가 남아있어서 중복
+      toast(err ? err.message : '작업 실행 중 오류 — 실행 로그 보기에서 확인하세요.', 'err');
       return;
     }
 
@@ -89,22 +92,28 @@ const Run = (() => {
     App.setStepState(3, 'done');
     App.setStepState(4, 'active');
 
-    // 뱃지 + 카드 — status 하나만 본다 (logs 파싱 없음)
+    // 경고 / 완료 뱃지
     const holdWarn = _el('run-hold-warn');
     const status = data.status || null;
-    const level  = status?.level || 'ok';
+    const detailMessages = _collectStatusMessages(data, status);
+    const level = status?.level || 'ok';
 
-    StatusUI.renderBadge('run-status-badge', status?.badge, '완료');
+    if (status?.badge) {
+      StatusUI.renderBadge('run-status-badge', status.badge, '완료');
+    }
 
     if (level === 'error') {
+      if (!status?.badge) _setBadge('err', '오류');
       _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
-      _renderRunStatusCard(status, data);
+      _renderRunStatusCard({ ...status, detail_messages: detailMessages }, data);
       App.setStepState(3, 'warn');
-    } else if (level === 'warn' || level === 'hold') {
+    } else if (level === 'warn') {
+      if (!status?.badge) _setBadge('warn', '경고');
       _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
-      _renderRunStatusCard(status, data);
+      _renderRunStatusCard({ ...status, detail_messages: detailMessages }, data);
       App.setStepState(3, 'warn');
     } else {
+      if (!status?.badge) _setBadge('ok', '완료');
       _el('run-info').textContent = '작업이 완료되었습니다.';
       holdWarn.style.display = 'none';
       holdWarn.innerHTML = '';
@@ -190,11 +199,19 @@ const Run = (() => {
   }
 
 
-  // _collectStatusMessages 제거 — status.messages 직접 사용
+  function _collectStatusMessages(data, status) {
+    const fromStatus = Array.from(new Set((status?.detail_messages || []).map(v => String(v || '').trim()).filter(Boolean)));
+    if (fromStatus.length) return fromStatus;
+    const fromLogs = Array.from(new Set((data?.logs || [])
+      .filter(l => ['warn', 'error'].includes(String(l.level || '').toLowerCase()))
+      .map(l => String(l.message || '').trim())
+      .filter(Boolean)));
+    return fromLogs;
+  }
 
   function onFailed(error) {
     _el('btn-run').disabled = false;
-    _setBadge('err', '실패');
+    _setBadge('err', '실행 실패');
     _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
     _renderRunStatusCard({
       level: 'error',
@@ -202,7 +219,7 @@ const Run = (() => {
       detail_messages: [String(error?.message || error || '예기치 못한 오류가 발생했습니다.')],
     });
     App.setStepState(3, 'warn');
-    // 토스트 제거 — 카드가 있어서 중복
+    toast('실행 오류 — 실행 로그 보기에서 자세한 내용을 확인하세요.', 'err');
   }
 
 
@@ -211,11 +228,9 @@ const Run = (() => {
     if (!holdWarn) return;
 
     const level = status?.level === 'error' ? 'error' : 'warn';
-    const details = Array.from(new Set(
-      (status?.messages || status?.detail_messages || [])
-        .map(m => String(m?.text || m || '').trim())
-        .filter(Boolean)
-    ));
+    const details = Array.from(new Set(((status?.detail_messages || []).length
+      ? (status?.detail_messages || [])
+      : _collectStatusMessages(data, status)).map(v => String(v || '').trim()).filter(Boolean)));
     const summary = String(status?.summary_text || '').trim();
     const action = String(status?.action_text || '').trim();
 
@@ -494,7 +509,7 @@ const Run = (() => {
     _noticeDupRows        = new Set();
     _noticeTeacherDupRows = new Set();
 
-    _setBadge('idle', '대기');
+    _setBadge('idle', '실행 전');
     _el('run-info').textContent = '스캔을 통과한 후 작업을 실행하고 결과 파일을 확인합니다.';
     _el('run-hold-warn').style.display = 'none';
     _el('btn-goto-notice').style.display = 'none';

@@ -215,7 +215,6 @@ const Panel = (() => {
     _el('chk-sent').checked    = false;
     _el('btn-record-roster').disabled = true;
     _el('btn-open-roster').disabled   = true;
-    updateRosterMapBtn(null);
   }
 
   // ──────────────────────────────────────────────
