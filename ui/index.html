@@ -3,8 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>리딩게이트 반이동 자동화</title>
 <style>
+/* ── Pretendard 로컬 폰트 ──────────────────────────────── */
+@font-face {
+  font-family: 'Pretendard';
+  src: url('fonts/Pretendard-Regular.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Pretendard';
+  src: url('fonts/Pretendard-Medium.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Pretendard';
+  src: url('fonts/Pretendard-SemiBold.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Pretendard';
+  src: url('fonts/Pretendard-Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: block;
+}
+
 /* ── 토큰 ─────────────────────────────────────────────── */
 :root {
   --bg:          #FFFFFF;
@@ -32,12 +55,14 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {
-  font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard', 'Pretendard Variable', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
   font-size: 13px;
   color: var(--text);
   background: var(--bg);
   overflow: hidden;
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: subpixel-antialiased;
+  text-rendering: geometricPrecision;
+  font-feature-settings: "kern" 1;
 }
 
 /* ── 공통 컴포넌트 ─────────────────────────────────────── */
@@ -491,19 +516,20 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .dp-year-btn, .dp-nav-label { cursor: pointer; }
 
 /* ── 플로팅 다음 버튼 ───────────────────────────────────── */
-.floating-next {
-  position: fixed; bottom: 24px; right: 24px; z-index: 8000;
+.floating-next, .floating-back {
+  position: fixed; bottom: 24px; z-index: 8000;
   width: 44px; height: 44px; border-radius: 50%;
-  background: var(--primary); color: #fff;
   border: none; font-size: 18px; font-weight: 700;
-  box-shadow: 0 4px 16px rgba(37,99,235,.35);
-  display: none; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   transition: background .15s, transform .15s, opacity .2s;
   opacity: .2; cursor: default; pointer-events: none;
 }
-.floating-next.shown { display: flex; }
+.floating-next { right: 24px; background: var(--primary); color: #fff; box-shadow: 0 4px 16px rgba(37,99,235,.35); }
+.floating-back { right: 76px; background: var(--surface-2); color: var(--text-2); box-shadow: 0 2px 8px rgba(0,0,0,.1); }
 .floating-next.active { opacity: 1; cursor: pointer; pointer-events: auto; }
+.floating-back.active { opacity: 1; cursor: pointer; pointer-events: auto; }
 .floating-next.active:hover { background: var(--primary-h); transform: scale(1.08); }
+.floating-back.active:hover { background: var(--surface-hover); transform: scale(1.08); }
 
 /* ── 콘텐츠 영역 ─────────────────────────────────────── */
 .content-area {
@@ -705,23 +731,20 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 /* ── 커스텀 확인 모달 ──────────────────────────────────── */
 .confirm-modal-backdrop {
   position: fixed;
-  top: 0; bottom: 0;
-  left: calc(var(--sidebar-w) + 200px);
-  right: 0;
+  inset: 0;
   z-index: 5000;
-  background: rgba(255,255,255,.55);
-  backdrop-filter: none;
+  background: rgba(0,0,0,.18);
   display: flex; align-items: center; justify-content: center;
 }
 .confirm-modal {
   background: #fff; border-radius: 12px;
   border: 1px solid var(--border);
   box-shadow: 0 8px 40px rgba(0,0,0,.14), 0 2px 8px rgba(0,0,0,.06);
-  padding: 24px; width: 360px; max-width: 90%;
-  display: flex; flex-direction: column; gap: 14px;
+  padding: 20px; width: 400px; max-width: 92%;
+  display: flex; flex-direction: column; gap: 12px;
 }
-.confirm-modal-title { font-size: 14px; font-weight: 600; color: var(--text); }
-.confirm-modal-body  { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.confirm-modal-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.confirm-modal-body  { font-size: 12px; color: var(--text-2); line-height: 1.55; word-break: keep-all; }
 .confirm-modal-options { display: flex; flex-direction: column; gap: 6px; }
 .confirm-modal-option {
   display: flex; align-items: flex-start; gap: 10px;
@@ -984,6 +1007,16 @@ button:not(:disabled), a, [data-action]:not(:disabled),
         <div class="step-badge" id="badge-4">5</div>
         <span class="step-label">안내문</span>
       </div>
+      <div style="margin-top:auto; border-top:1px solid var(--border); display:flex; flex-direction:column;">
+        <div style="padding:8px 8px 4px;">
+          <button class="btn-new-school" data-action="new-school"
+                  style="font-size:11px;height:28px;color:var(--muted)">+ 새 학교 시작</button>
+        </div>
+        <div style="padding:4px 8px 10px;">
+          <button class="btn-new-school" data-action="back-to-setup"
+                  style="font-size:11px;height:28px;color:var(--muted)">← 기본 설정으로</button>
+        </div>
+      </div>
     </div>
 
     <!-- 사이드바 (학교 정보) -->
@@ -1078,10 +1111,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           </div>
         </div>
 
-        <!-- 섹션: 새 학교 -->
-        <div class="sb-section">
-          <button class="btn-new-school" data-action="new-school">새 학교 시작</button>
-        </div>
+
 
       </div>
     </div><!-- /sidebar -->
@@ -1334,25 +1364,29 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           </div>
           <div class="card" style="padding:0;border:none;">
             <div class="card-title" style="margin-bottom:8px">상태 요약</div>
-            <div class="diff-set-overview">
-              <div class="diff-set-node">
-                <div class="diff-set-label">전출 후보</div>
-                <div class="diff-set-value" id="diff-stat-roster-only">-</div>
-                <div class="diff-set-desc">명부에는 있으나 재학생 명단에는 없는 대상</div>
+            <div class="diff-set-overview" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+              <div class="diff-set-node" style="min-height:72px;padding:10px 12px">
+                <div class="diff-set-label" style="font-size:11px">전출 후보</div>
+                <div class="diff-set-value" id="diff-stat-roster-only" style="font-size:22px">-</div>
+                <div class="diff-set-desc" style="font-size:10px">명부 있음 · 명단 없음</div>
               </div>
-              <div class="diff-set-node center">
-                <div class="diff-set-label">명부·명단 중복</div>
-                <div class="diff-set-value" id="diff-stat-matched">-</div>
-                <div class="diff-set-desc">양쪽에 모두 있는 대상</div>
+              <div class="diff-set-node center" style="min-height:72px;padding:10px 12px">
+                <div class="diff-set-label" style="font-size:11px">명부·명단 중복</div>
+                <div class="diff-set-value" id="diff-stat-matched" style="font-size:22px">-</div>
+                <div class="diff-set-desc" style="font-size:10px">양쪽 모두 있음</div>
               </div>
-              <div class="diff-set-node">
-                <div class="diff-set-label">전입 후보</div>
-                <div class="diff-set-value" id="diff-stat-compare-only">-</div>
-                <div class="diff-set-desc">재학생 명단에는 있으나 명부에는 없는 대상</div>
+              <div class="diff-set-node" style="min-height:72px;padding:10px 12px">
+                <div class="diff-set-label" style="font-size:11px">전입 후보</div>
+                <div class="diff-set-value" id="diff-stat-compare-only" style="font-size:22px">-</div>
+                <div class="diff-set-desc" style="font-size:10px">명단 있음 · 명부 없음</div>
+              </div>
+              <div class="diff-set-node" style="min-height:72px;padding:10px 12px;background:var(--warn-bg);border-color:var(--warn-bd)">
+                <div class="diff-set-label" style="font-size:11px;color:var(--warn-tx)">판정 불가</div>
+                <div class="diff-set-value" id="diff-stat-unresolved" style="font-size:22px;color:var(--warn-tx)">-</div>
+                <div class="diff-set-desc" style="font-size:10px">수동 확인 필요</div>
               </div>
             </div>
             <div style="display:none">
-              <span id="diff-stat-unresolved">-</span>
               <span id="diff-stat-transfer-in">-</span>
               <span id="diff-stat-transfer-out">-</span>
             </div>
@@ -1362,6 +1396,9 @@ button:not(:disabled), a, [data-action]:not(:disabled),
         <div class="card" style="display:flex;flex-direction:column;gap:10px">
           <div style="display:flex;align-items:center;gap:8px">
             <span class="card-title" style="flex:1">출력 파일</span>
+            <button class="btn-ghost" id="btn-diff-open-folder" disabled
+                    style="height:28px;font-size:12px"
+                    onclick="if(this._path) bridge.openFolder(this._path)">폴더 열기</button>
           </div>
           <div id="diff-output-files"><span class="muted">실행 전</span></div>
         </div>
@@ -1414,6 +1451,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
   </div><!-- /main-body -->
 
   <!-- 플로팅 다음 버튼 (fixed라 page-main 내 어디든 OK) -->
+  <button class="floating-back" id="btn-floating-back" data-action="floating-back">←</button>
   <button class="floating-next" id="btn-floating-next" data-action="floating-next">→</button>
 
 </div><!-- /page-main -->

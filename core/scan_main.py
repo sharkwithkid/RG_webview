@@ -639,7 +639,7 @@ def validate_input_sheet_structure(
             cls_norm = re.sub(r"\s+", "", cls_s)
             grade_norm = re.sub(r"\s+", "", grade_s)
             is_kindergarten = (
-                grade_norm in {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+                grade_norm in {"유치원", "유치원반", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
                 or (not grade_s and cls_norm in {"유치원", "유치원반"})
                 or cls_norm in {"유치원", "유치원반"}
             )
@@ -664,7 +664,7 @@ def validate_input_sheet_structure(
                     evts.append(_e); marks.append(_m)
 
         # 학년/반 열 형식 검증
-        KINDERGARTEN = {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+        KINDERGARTEN = {"유치원", "유치원반", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
 
         grade_v = row_values.get("grade")
         if grade_v is not None and str(grade_v).strip():
@@ -700,6 +700,22 @@ def validate_input_sheet_structure(
                 issues.append(f"[WARN] {kind} 파일 {r}행 '반' 열 — {warn_class}")
                 issue_row_nums.append(r)
                 _e, _m = class_format_warn(file_key, kind, r, warn_class)
+                evts.append(_e); marks.append(_m)
+
+        name_v = row_values.get("name")
+        if name_v is not None and str(name_v).strip():
+            ns = str(name_v).strip()
+            warn_name = None
+            if re.fullmatch(r"[0-9]+", ns):
+                warn_name = f"이름 열에 숫자만 있습니다: '{ns}'"
+            elif len(re.sub(r"\s+", "", ns)) <= 1:
+                warn_name = f"이름이 너무 짧습니다(1자 이하): '{ns}'"
+            elif re.search(r"[0-9]{3,}", ns):
+                warn_name = f"이름 열에 숫자가 3자리 이상 포함되어 있습니다: '{ns}'"
+            if warn_name:
+                issues.append(f"[WARN] {kind} 파일 {r}행 '이름' 열 — {warn_name}")
+                issue_row_nums.append(r)
+                _e, _m = name_format_warn(file_key, kind, r, warn_name)
                 evts.append(_e); marks.append(_m)
 
     return issues, sorted(set(issue_row_nums)), evts, marks
@@ -843,7 +859,7 @@ def freshmen_extra_grades(
             name_col=name_col,
         )
 
-        KINDERGARTEN = {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+        KINDERGARTEN = {"유치원", "유치원반", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
         extra = set()
 
         # iter_rows + 연속 빈 행 조기종료 (max_row 오염 대응)
@@ -962,6 +978,7 @@ def scan_pipeline(
     roster_basis_date: Optional[date] = None,
     roster_xlsx: Optional[Path] = None,
     col_map: Optional[Dict[str, Any]] = None,
+    school_kind_override: Optional[str] = None,
 ) -> ScanResult:
     logs: List[str] = []
 
@@ -1005,7 +1022,7 @@ def scan_pipeline(
     )
     school_profile = school_profile_from_name(school_name)
     sr.school_profile_mode = str(school_profile.get("mode", "single") or "single")
-    sr.school_kind_needs_choice = bool(school_profile.get("needs_user_choice", False))
+    sr.school_kind_needs_choice = bool(school_profile.get("needs_user_choice", False)) or school_profile.get("mode") == "needs_user_choice"
     sr.grade_rule_max_grade = int(school_profile.get("grade_rule_max_grade", 6) or 6)
 
     try:
@@ -1043,11 +1060,19 @@ def scan_pipeline(
         _tick("명단 파일 검증")
 
         # 학교 구분 / 예외 프로필 감지
+        # school_kind_needs_choice가 True면 이후 모든 검사를 건너뜀 —
+        # 학교 구분 선택 전까지는 명부/파일 구조 판단 자체가 불가능하기 때문.
         _kind_full, _ = school_kind_from_name(school_name)
         if sr.school_kind_needs_choice:
-            log("[WARN] 학교 구분을 자동으로 판별하지 못했습니다.")
-            log("[WARN] 학교 구분을 직접 선택한 뒤 다시 실행해 주세요.")
-            # school_kind_needs_choice 플래그로 UI 선택 컴포넌트 표시 — 카드 불필요
+            if school_kind_override:
+                log(f"[INFO] 학교 구분 수동 선택: {school_kind_override}")
+                sr.school_kind_needs_choice = False
+            else:
+                log("[WARN] 학교 구분을 자동으로 판별하지 못했습니다.")
+                log("[WARN] 학교 구분을 직접 선택한 뒤 다시 실행해 주세요.")
+                sr.events.append(school_kind_unknown())
+                sr.ok = False
+                return sr
         elif sr.school_profile_mode == "mixed":
             log(f"[INFO] 초중 통합 학교로 감지되었습니다. 학년도 규칙은 1~{sr.grade_rule_max_grade}학년까지 표시합니다.")
         elif not _kind_full:
@@ -1182,16 +1207,23 @@ def scan_pipeline(
                 layout = detect_input_layout(file_path, kind_key)
                 wb = layout["_wb"]
                 ws = layout["_ws"]
-            except Exception:
-                log(f"[ERROR] {kind_label} 파일에서 헤더를 찾을 수 없습니다.")
-                sr.events.append(missing_header(kind_key, kind_label))
+            except Exception as _layout_err:
+                _err_msg = str(_layout_err)
+                if "데이터 시작 행" in _err_msg:
+                    log(f"[ERROR] {kind_label} 데이터 시작 행을 찾을 수 없습니다.")
+                    sr.events.append(missing_data_start(kind_key, kind_label))
+                    _warn_text = "데이터 시작 행을 찾을 수 없습니다."
+                else:
+                    log(f"[ERROR] {kind_label} 파일에서 헤더를 찾을 수 없습니다.")
+                    sr.events.append(missing_header(kind_key, kind_label))
+                    _warn_text = "헤더를 찾을 수 없습니다."
                 return {
                     "file_name": file_path.name,
                     "file_path": str(file_path),
                     "sheet_name": "",
                     "header_row": None,
                     "data_start_row": None,
-                    "warning": "헤더를 찾을 수 없습니다.",
+                    "warning": _warn_text,
                     "headers": [],
                     "rows": [],
                     "issue_rows": [],
@@ -1212,6 +1244,11 @@ def scan_pipeline(
                     for key in required_keys
                     if slot_cols.get(key) is not None
                 }
+                # 필수열 중 매핑 못 찾은 것 → missing_required_col 이벤트
+                for _rk in required_keys:
+                    if slot_cols.get(_rk) is None:
+                        _col_label = {"grade": "학년", "class": "반", "name": "이름"}.get(_rk, _rk)
+                        sr.events.append(missing_required_col(kind_key, kind_label, _col_label))
 
                 log(f"[DEBUG] {kind_label} 구조 검증 시작 (max_row={ws.max_row})")
                 issues, issue_rows, _evts, _marks = validate_input_sheet_structure(
@@ -1251,15 +1288,8 @@ def scan_pipeline(
             finally:
                 wb.close()
 
-        sr.freshmen = run_structure_check(
-            file_path=freshmen_file,
-            kind_key="freshmen",
-            kind_label="신입생",
-            header_slots=FRESHMEN_HEADER_SLOTS,
-            required_keys=["grade", "class", "name"],
-            allow_blank_class_for_kindergarten=True,
-        )
-
+        # 명부 필요 여부를 먼저 판단 — 명부 없음이 파일 구조 오류보다 우선순위가 높으므로
+        # 파일 구조 검사(run_structure_check)는 명부 확인 완료 후에 실행한다.
         need_roster_by_transfer = bool(transfer_file)
         need_roster_by_withdraw = bool(withdraw_file)
         need_roster_by_freshmen = False
@@ -1269,7 +1299,7 @@ def scan_pipeline(
                 need_roster_by_freshmen = freshmen_need_roster(
                     xlsx_path=freshmen_file,
                     input_year=year_int,
-                    school_name=school_name, 
+                    school_name=school_name,
                 )
             except Exception as e:
                 import traceback
@@ -1283,17 +1313,16 @@ def scan_pipeline(
         )
         sr.need_roster = need_roster
 
-        # 명부 필요 여부 확인 후 먼저 체크 — 이후 파일 구조 검사
-        # (명부 없음이 더 우선순위 높은 오류이므로 파일 구조 검사보다 먼저)
-
         if need_roster_by_freshmen:
             extra = freshmen_extra_grades(freshmen_file, year_int, school_name)
             grade_str = ", ".join(f"{g}학년" for g in extra) if extra else "1학년 외"
-            log(f"[INFO] 신입생 파일에 {grade_str}이(가) 포함되어 있습니다.")
+            log(f"[DEBUG] 신입생 파일에 {grade_str}이(가) 포함되어 있습니다.")
+            from core.events import freshmen_extra_grades_info as _feg_info
+            sr.events.append(_feg_info(extra))
         elif need_roster_by_transfer or need_roster_by_withdraw:
-            log("[INFO] 전입/전출 파일이 있어 학생명부가 필요합니다.")
+            log("[DEBUG] 전입/전출 파일이 있어 학생명부가 필요합니다.")
         else:
-            log("[INFO] 학생명부가 필요하지 않아 로드를 스킵합니다.")
+            log("[DEBUG] 학생명부가 필요하지 않아 로드를 스킵합니다.")
 
 
         if need_roster:
@@ -1418,7 +1447,7 @@ def scan_pipeline(
                 if roster_wb is not None:
                     roster_wb.close()
         else:
-            log("[INFO] 전입/전출/1학년 외 신입생 케이스가 없어 학생명부 로드를 건너뜁니다.")
+            log("[DEBUG] 전입/전출/1학년 외 신입생 케이스가 없어 학생명부 로드를 건너뜁니다.")
 
         needs_open_date = bool(withdraw_file)
         sr.needs_open_date = needs_open_date
@@ -1436,17 +1465,18 @@ def scan_pipeline(
         if sr.template_notice is None:
             missing_fields.append("안내 템플릿")
 
-        if any(
-            (meta or {}).get("severity") == "error"
-            for meta in [sr.freshmen, sr.transfer_in, sr.transfer_out, sr.teachers]
-            if meta is not None
-        ):
-            missing_fields.append("입력 파일 헤더/구조 확인")
+        # 명부 확인 완료 후 파일 구조 검사 실행
+        # 우선순위: 학교구분 판별불가 > 명부 없음 > 파일 구조 오류
+        # 명부 없음이면 이미 raise로 빠져나왔으므로 여기까지 온 경우만 구조 검사함
+        sr.freshmen = run_structure_check(
+            file_path=freshmen_file,
+            kind_key="freshmen",
+            kind_label="신입생",
+            header_slots=FRESHMEN_HEADER_SLOTS,
+            required_keys=["grade", "class", "name"],
+            allow_blank_class_for_kindergarten=True,
+        )
 
-        # 명부가 필요한 경우는 모두 학생명부 필수로 본다.
-        # - 전입/전출 포함
-        # - 신입생 타학년 포함 (수동 학년도 규칙 입력으로 대체하지 않음)
-        # 명부 체크 완료 후 파일 구조 검사 실행
         sr.transfer_in = run_structure_check(
             file_path=transfer_file,
             kind_key="transfer",
@@ -1472,6 +1502,13 @@ def scan_pipeline(
             header_slots=TEACHER_HEADER_SLOTS,
             required_keys=["name"],
         )
+
+        if any(
+            (meta or {}).get("severity") == "error"
+            for meta in [sr.freshmen, sr.transfer_in, sr.transfer_out, sr.teachers]
+            if meta is not None
+        ):
+            missing_fields.append("입력 파일 헤더/구조 확인")
 
         roster_required_strict = bool(need_roster)
         roster_can_be_replaced_by_manual = False

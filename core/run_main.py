@@ -25,6 +25,17 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from core.events import (
+    transfer_in_hold as _evt_transfer_in_hold,
+    transfer_out_hold as _evt_transfer_out_hold,
+    freshmen_transfer_dup as _evt_freshmen_transfer_dup,
+    roster_duplicate_transfer as _evt_roster_duplicate_transfer,
+    roster_not_found_at_run as _evt_roster_not_found_at_run,
+    template_register_not_found as _evt_template_register_not_found,
+    template_notice_not_found as _evt_template_notice_not_found,
+    db_file_error as _evt_db_file_error,
+    open_date_required as _evt_open_date_required,
+)
 from typing import Dict, List, Optional, Tuple, Any
 from collections import Counter
 
@@ -95,6 +106,10 @@ class PipelineResult:
 
     audit_summary: Dict[str, Any] = field(default_factory=dict)
 
+    # 구조화된 판정 결과 — bridge/UI는 이것만 참조
+    events:    List[Any] = field(default_factory=list)  # List[CoreEvent]
+    row_marks: List[Any] = field(default_factory=list)  # List[RowMark]
+
 # =========================
 # L1. Input readers
 # =========================
@@ -129,7 +144,7 @@ def _parse_freshmen_grade_meta(raw_grade: Any, input_year: int, school_name: str
     s = "" if raw_grade is None else str(raw_grade).strip()
     s_norm = re.sub(r"\s+", "", s)
 
-    if s_norm in {"유치원", "7세", "6세", "5세", "7세반", "6세반", "5세반"}:
+    if s_norm in {"유치원", "유치원반", "7세", "6세", "5세", "7세반", "6세반", "5세반"}:
         grade_label = s_norm.replace("반", "")
         if not re.search(r"\d", grade_label):
 
@@ -326,7 +341,7 @@ def read_freshmen_rows(
             cls_norm   = re.sub(r"\s+", "", cls_s)
 
             is_kindergarten = (
-                grade_norm in {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+                grade_norm in {"유치원", "유치원반", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
                 or (not grade_s and cls_norm in {"유치원", "유치원반"})
                 or cls_norm in {"유치원", "유치원반"}
             )
@@ -460,7 +475,7 @@ def read_transfer_rows(
             cls_norm = re.sub(r"\s+", "", cls_s_raw)
             KINDER = {"유치원", "유치원반"}
             is_kindergarten = (
-                grade_norm in {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+                grade_norm in {"유치원", "유치원반", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
                 or (not grade_s and cls_norm in KINDER)
                 or cls_norm in KINDER
             )
@@ -628,7 +643,7 @@ def read_withdraw_rows(
 
             KINDER = {"유치원", "유치원반"}
             is_kindergarten = (
-                grade_norm in {"유치원", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
+                grade_norm in {"유치원", "유치원반", "5세", "6세", "7세", "5세반", "6세반", "7세반"}
                 or (not grade_s and cls_norm in KINDER)
                 or cls_norm in KINDER
             )
@@ -770,16 +785,17 @@ def build_transfer_ids(
     return done, hold, final_prefix_by_current_grade
 
 
-def dedup_transfer_rows_against_freshmen(
+def split_transfer_dup_against_freshmen(
     freshmen_rows: List[Dict],
     transfer_done_rows: List[Dict],
-) -> Tuple[List[Dict], int]:
+) -> Tuple[List[Dict], List[Dict]]:
     """
     신입생 명단과 전입 완료 명단을 교차 비교해
-    학년/반/이름이 완전히 동일한 전입생을 자동 제외한다.
+    학년/반/이름이 동일한 전입생을 보류(hold) 목록으로 분리한다.
+    엑셀 스펙: 신입생-전입생 중복 → hold (자동 제외 아님)
     """
     if not freshmen_rows or not transfer_done_rows:
-        return transfer_done_rows, 0
+        return transfer_done_rows, []
 
     def _norm_class(v: Any) -> str:
         if v is None:
@@ -797,7 +813,7 @@ def dedup_transfer_rows_against_freshmen(
     }
 
     kept: List[Dict] = []
-    skipped = 0
+    dup_hold: List[Dict] = []
     for row in transfer_done_rows:
         key = (
             int(row.get("grade", 0) or 0),
@@ -805,11 +821,11 @@ def dedup_transfer_rows_against_freshmen(
             normalize_name_key(row.get("name", "")),
         )
         if key in freshmen_keys:
-            skipped += 1
-            continue
-        kept.append(row)
+            dup_hold.append({**row, "보류사유": "신입생 명단과 학년/반/이름이 동일합니다."})
+        else:
+            kept.append(row)
 
-    return kept, skipped
+    return kept, dup_hold
 
 
 # =========================
@@ -1696,8 +1712,12 @@ def execute_pipeline(
             log(f"[DEBUG] 교사 layout: header_row={h}, data_start_row={s or 'auto'}")
             teacher_rows = read_teacher_rows(teacher_path, header_row=h, data_start_row=s)
             log(f"[OK] 교사 신청 {len(teacher_rows)}건 로드")
+            _teacher_no_id_warn = teacher_rows and not any(
+                r.get("id_request") or r.get("아이디신청") for r in teacher_rows
+            )
         else:
             teacher_rows = []; log("[INFO] 교사 파일 없음 → 교사 관련 처리는 스킵")
+            _teacher_no_id_warn = False
 
         # 전입
         if transfer_path:
@@ -1727,20 +1747,24 @@ def execute_pipeline(
                 transfer_rows=transfer_rows, roster_info=scan.roster_info,
                 input_year=year_int, freshmen_rows=freshmen_rows,
             )
+            # 명부에 이미 존재하는 전입생 → hold로 분리 (엑셀 스펙: 완전일치/학년+이름 일치 둘 다 hold)
+            _roster_dup_rows = [r for r in transfer_done_rows if r.get("dup_with_roster")]
+            transfer_done_rows = [r for r in transfer_done_rows if not r.get("dup_with_roster")]
+            for _rd in _roster_dup_rows:
+                _rd["보류사유"] = "학생명부에 이미 존재하는 학생입니다."
+            transfer_hold_rows = transfer_hold_rows + _roster_dup_rows
             log(f"[OK] 전입 ID 매칭 완료 | 완료 {len(transfer_done_rows)}명, 보류 {len(transfer_hold_rows)}명")
         else:
             log("[INFO] 전입생 없음 → 전입 ID 생성 스킵")
 
-        transfer_dedup_skipped = 0
+        transfer_freshmen_dup_rows: List[Dict] = []
         if freshmen_rows and transfer_done_rows:
-            transfer_done_rows, transfer_dedup_skipped = dedup_transfer_rows_against_freshmen(
+            transfer_done_rows, transfer_freshmen_dup_rows = split_transfer_dup_against_freshmen(
                 freshmen_rows=freshmen_rows,
                 transfer_done_rows=transfer_done_rows,
             )
-            if transfer_dedup_skipped:
-                log(
-                    f"[WARN] 신입생 명단과 학년/반/이름이 동일한 전입생 {transfer_dedup_skipped}명은 자동 제외했습니다."
-                )
+            if transfer_freshmen_dup_rows:
+                log(f"[INFO] 신입생 명단과 학년/반/이름이 동일한 전입생 {len(transfer_freshmen_dup_rows)}명 → 보류 처리")
 
         # 전출 퇴원 리스트
         withdraw_done_rows: List[Dict] = []
@@ -1826,6 +1850,7 @@ def execute_pipeline(
         pr = PipelineResult(ok=True, outputs=[out_register_path, out_notice_path], logs=logs)
         pr.notice_dup_rows         = notice_dup_rows
         pr.notice_teacher_dup_rows = notice_teacher_dup_rows
+        transfer_hold_rows = transfer_hold_rows + transfer_freshmen_dup_rows
         pr.transfer_in_done   = len(transfer_done_rows)
         pr.transfer_in_hold   = len(transfer_hold_rows)
         pr.transfer_out_done  = len(withdraw_done_rows)
@@ -1873,6 +1898,41 @@ def execute_pipeline(
             },
         }
 
+        # ===== events 생성 (hold/dup → CoreEvent) =====
+        # bridge/UI는 events만 참조하므로 여기서 모두 생성
+        # 신입생-전입생 중복 보류 이벤트 (hold)
+        for row in transfer_freshmen_dup_rows:
+            name  = str(row.get("name", ""))
+            grade = int(row.get("grade", 0) or 0)
+            cls   = str(row.get("class", ""))
+            pr.events.append(_evt_freshmen_transfer_dup(name, grade, cls))
+
+        # 명부 매칭 실패 / 명부 존재 전입생 보류 이벤트
+        for row in transfer_hold_rows:
+            if row in transfer_freshmen_dup_rows:
+                continue  # freshmen_transfer_dup으로 이미 추가됨
+            name   = str(row.get("name", ""))
+            reason = str(row.get("보류사유", ""))
+            if "학생명부에 이미 존재" in reason:
+                pr.events.append(_evt_roster_duplicate_transfer(name, reason))
+            else:
+                pr.events.append(_evt_transfer_in_hold(name, reason))
+
+        for row in withdraw_hold_rows:
+            name = str(row.get("성명", ""))
+            reason = str(row.get("보류사유", ""))
+            if not reason.startswith("자동 제외"):
+                pr.events.append(_evt_transfer_out_hold(name, reason))
+
+        dup_count = len(notice_dup_rows)
+        if dup_count > 0:
+            from core.events import duplicate_name as _evt_dup
+            pr.events.append(_evt_dup(dup_count))
+
+        if _teacher_no_id_warn:
+            from core.events import no_teacher_id_request as _evt_no_tid
+            pr.events.append(_evt_no_tid())
+
         log("[DONE] 실행 완료")
         return pr
 
@@ -1886,7 +1946,17 @@ def execute_pipeline(
             _dump.write_text(_tb_str, encoding="utf-8")
         except Exception:
             pass
-        return PipelineResult(ok=False, outputs=[], logs=logs)
+        _err_str = str(e)
+        _pr_fail = PipelineResult(ok=False, outputs=[], logs=logs)
+        if "등록 템플릿" in _err_str:
+            _pr_fail.events.append(_evt_template_register_not_found())
+        elif "안내 템플릿" in _err_str:
+            _pr_fail.events.append(_evt_template_notice_not_found())
+        elif "학생명부" in _err_str:
+            _pr_fail.events.append(_evt_roster_not_found_at_run())
+        elif "개학일" in _err_str:
+            _pr_fail.events.append(_evt_open_date_required())
+        return _pr_fail
 
 
 # =========================

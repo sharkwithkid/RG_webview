@@ -406,5 +406,41 @@
     },
     "run_completed": true,
     "master_recorded": false
+  },
+  "부산중앙중": {
+    "last_date": "2026-03-31",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 215,
+      "전입생": 5,
+      "전출생": 1,
+      "교직원": 43
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남동광중": {
+    "last_date": "2026-03-31",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 65,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "용인신봉초": {
+    "last_date": "2026-03-31",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 44,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
   }
 }

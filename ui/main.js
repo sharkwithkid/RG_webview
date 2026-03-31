@@ -41,12 +41,10 @@ const state = {
 
   currentPage:        'setup',
   currentTab:         'scan',
-
-  currentPage:        'setup',
-  currentTab:         'scan',
   currentMode:        'main',
 
-  pending_roster_log: false,
+  pending_roster_log:   false,
+  school_kind_override: null,
 };
 
 // ──────────────────────────────────────────────
@@ -74,7 +72,7 @@ function toast(msg, type = 'info', duration = 3000) {
     info: 'background:#DBEAFE;border:1px solid #BFDBFE;color:#1D4ED8',
   };
   el.style.cssText += ';' + (styles[type] || styles.info);
-  el.textContent = msg;
+  el.innerHTML = String(msg ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
   container.appendChild(el);
   setTimeout(() => {
     el.style.opacity = '0';
@@ -229,6 +227,7 @@ function _handleAction(action, el) {
     'goto-run':       () => Scan.goToRun(),
     'goto-notice':    () => App.goStep(4),
     'floating-next':  () => App.floatingNext(),
+    'floating-back':  () => App.floatingBack(),
 
     // Panel
     'apply-school':   () => Panel.apply(),
@@ -238,6 +237,7 @@ function _handleAction(action, el) {
     'open-roster':    () => Panel.openRoster(),
     'open-roster-map': () => Panel.openRosterMap(),
     'new-school':     () => Panel.newSchool(),
+    'back-to-setup':  () => App.goBackToSetup(),
 
     // Scan
     'scan-start':     () => Scan.start(),
@@ -517,8 +517,11 @@ const App = {
       ? { diff: state.selected_school ? 2 : 1 }
       : { scan: 2, run: 3, notice: 4 };
     if (tabToStep[tab] !== undefined) _highlightStep(tabToStep[tab]);
+    // diff 모드에서 next 버튼 비활성
     const floating = _el('btn-floating-next');
-    if (floating) floating.style.display = (state.currentMode === 'diff' || tab === 'diff') ? 'none' : '';
+    if (floating) floating.classList.toggle('active',
+      !!(floating.classList.contains('active')) && !(state.currentMode === 'diff' || tab === 'diff'));
+    App._updateFloatingBack?.();
   },
 
   goStep(idx) {
@@ -577,7 +580,7 @@ const App = {
     );
   },
 
-  // 플로팅 다음 버튼 상태 제어
+  // 플로팅 버튼 상태 제어
   setFloatingNext(active, action) {
     const btn = _el('btn-floating-next');
     if (!btn) return;
@@ -592,6 +595,21 @@ const App = {
     else if (action === 'notice') App.goStep(4);
   },
 
+  // 플로팅 뒤로가기 — 현재 탭 기준 이전 스텝으로
+  floatingBack() {
+    const tab = state.currentTab;
+    if (tab === 'run')    App.goStep(2);  // 스캔으로
+    else if (tab === 'notice') App.goStep(3);  // 실행으로
+    else if (tab === 'scan')   App.goStep(1);  // 학교 선택으로
+  },
+
+  // 뒤로가기 버튼 상태 — 스텝 1(학교선택) 이상에서만 활성
+  _updateFloatingBack() {
+    const btn = _el('btn-floating-back');
+    if (!btn) return;
+    btn.classList.toggle('active', state.currentMode === 'main');
+  },
+
   setStepState(idx, s) {
     const badge = _el(`badge-${idx}`);
     const item  = document.querySelector(`[data-step="${idx}"]`);
@@ -600,45 +618,57 @@ const App = {
     item.classList.toggle('active', s === 'active');
   },
 
+  // confirm() 대체 — PyQt WebView에서 window.confirm이 정상 동작 안 함
+  _confirm(msg, onOk) {
+    const esc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    const bd = document.createElement('div');
+    bd.className = 'confirm-modal-backdrop';
+    bd.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center';
+    bd.innerHTML = `
+      <div class="confirm-modal" style="max-width:340px">
+        <div class="confirm-modal-body" style="font-size:13px;line-height:1.65;color:var(--text)">${esc(msg)}</div>
+        <div class="confirm-modal-footer" style="margin-top:4px">
+          <button class="btn-ghost" id="_conf-cancel">취소</button>
+          <button class="btn-primary" id="_conf-ok">확인</button>
+        </div>
+      </div>`;
+    document.body.appendChild(bd);
+    bd.querySelector('#_conf-cancel').onclick = () => bd.remove();
+    bd.querySelector('#_conf-ok').onclick = () => { bd.remove(); onOk(); };
+  },
+
   goBackToSetup() {
     const msg = state.pending_roster_log
-      ? '전체 명단에 아직 반영하지 않았습니다. 초기 설정으로 돌아가시겠습니까?\n현재 작업 내용이 모두 초기화됩니다.'
-      : '초기 설정으로 돌아가시겠습니까? 현재 작업 내용이 모두 초기화됩니다.';
-    if (!confirm(msg)) return;
-
-    _resetSharedState();
-
-    // setup으로 돌아갈 때: 스텝 전체 초기 상태로
-    App.setStepState(0, 'active');
-    for (let i = 1; i <= 4; i++) App.setStepState(i, 'idle');
-
-    _showPage('setup');
+      ? '전체 명단에 아직 반영하지 않았습니다.\n초기 설정으로 돌아가시겠습니까?\n현재 작업 내용이 모두 초기화됩니다.'
+      : '초기 설정으로 돌아가시겠습니까?\n현재 작업 내용이 모두 초기화됩니다.';
+    App._confirm(msg, () => {
+      _resetSharedState();
+      App.setStepState(0, 'active');
+      for (let i = 1; i <= 4; i++) App.setStepState(i, 'idle');
+      _showPage('setup');
+    });
   },
 
   resetToSchoolSelect() {
-    // 학교를 아직 선택하지 않은 상태면 이미 학교 선택 단계 → confirm 없이 통과
-    if (!state.selected_school) {
+    const _doReset = () => {
       _resetSharedState();
+      App.setStepState(0, 'done');
+      App.setStepState(1, 'active');
+      for (let i = 2; i <= 4; i++) App.setStepState(i, 'idle');
+      state.currentTab = state.currentMode === 'diff' ? 'diff' : 'scan';
+      document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+      _el(state.currentMode === 'diff' ? 'tab-diff' : 'tab-scan')?.classList.add('active');
+      _highlightStep(1);
+      _setSchoolInputHighlight(true);
+    };
+    if (!state.selected_school) {
+      _doReset();
     } else {
       const msg = state.pending_roster_log
-        ? '전체 명단에 아직 반영하지 않았습니다. 새 학교 작업을 시작하시겠습니까?\n현재 스캔/실행 결과가 초기화됩니다.'
-        : '새 학교 작업을 시작하시겠습니까? 현재 스캔/실행 결과가 초기화됩니다.';
-      if (!confirm(msg)) return;
-      _resetSharedState();
+        ? '전체 명단에 아직 반영하지 않았습니다.\n새 학교 작업을 시작하시겠습니까?\n현재 스캔/실행 결과가 초기화됩니다.'
+        : '새 학교 작업을 시작하시겠습니까?\n현재 스캔/실행 결과가 초기화됩니다.';
+      App._confirm(msg, _doReset);
     }
-
-    // 학교 선택 단계로: 스텝 0 done, 스텝 1 active
-    App.setStepState(0, 'done');
-    App.setStepState(1, 'active');
-    for (let i = 2; i <= 4; i++) App.setStepState(i, 'idle');
-
-    // 현재 모드 기준 첫 화면 유지
-    state.currentTab = state.currentMode === 'diff' ? 'diff' : 'scan';
-    document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
-    _el(state.currentMode === 'diff' ? 'tab-diff' : 'tab-scan')?.classList.add('active');
-    _highlightStep(1);
-
-    _setSchoolInputHighlight(true);
   },
 };
 
@@ -682,10 +712,11 @@ function _checkScanReady() {
 }
 
 function _resetSharedState() {
-  state.selected_school    = '';
-  state.selected_domain    = '';
-  state.current_seq_no     = null;
-  state.pending_roster_log = false;
+  state.selected_school     = '';
+  state.selected_domain     = '';
+  state.current_seq_no      = null;
+  state.pending_roster_log  = false;
+  state.school_kind_override = null;
   state.last_scan_logs     = [];
   state.last_run_logs      = [];
   state.last_diff_logs     = [];
@@ -760,7 +791,12 @@ function _showPage(page) {
   state.currentPage = page;
   _el('page-setup').style.display = page === 'setup' ? 'flex' : 'none';
   _el('page-main').style.display  = page === 'main'  ? 'flex' : 'none';
-  _el('btn-floating-next')?.classList.toggle('shown', page === 'main');
+  // 플로팅 버튼은 항상 표시 — setup 페이지에서만 숨김
+  const _fbNext = _el('btn-floating-next');
+  const _fbBack = _el('btn-floating-back');
+  if (_fbNext) _fbNext.style.display = page === 'main' ? '' : 'none';
+  if (_fbBack) _fbBack.style.display = page === 'main' ? '' : 'none';
+  if (page === 'main') App._updateFloatingBack?.();
 }
 
 // ──────────────────────────────────────────────

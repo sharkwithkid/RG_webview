@@ -252,24 +252,38 @@ const Diff = (() => {
           row.appendChild(link);
           filesEl.appendChild(row);
         });
+        // 첫 파일 자동으로 열기
+        if (outputFiles[0]?.path) bridge.openFile(outputFiles[0].path);
       }
+    }
+    // 폴더 열기 버튼 활성화
+    const btnFolder = _el('btn-diff-open-folder');
+    if (btnFolder && (data.output_files || []).length) {
+      btnFolder.disabled = false;
+      btnFolder._path = data.output_files[0].path;
     }
   }
   function onFailed(error) {
+    const wasScanning = state.isDiffScanning;
     state.isDiffRunning = false;
     state.isDiffScanning = false;
+    _el('btn-scan-diff').disabled = false;
     _el('btn-run-diff').disabled = false;
-    _setRunBadge('err', '오류');
-    _setRunInfo('');
-    _showWarnCard('diff-run-warn-card', [`예기치 못한 오류: ${error}`], 'error');
-    // 토스트 제거 — 카드가 있어서 중복
+    if (wasScanning) {
+      StatusUI.renderBadge('diff-scan-status-badge', {type:'err', text:'오류'}, '오류');
+      _showWarnCard('diff-scan-warn-card', [`예기치 못한 오류: ${error}`], 'error');
+    } else {
+      _setRunBadge('err', '오류');
+      _setRunInfo('');
+      _showWarnCard('diff-run-warn-card', [`예기치 못한 오류: ${error}`], 'error');
+    }
   }
   function onPreviewLoaded(payload) {
     _previewData = payload;
     const actualCount = Number.isFinite(payload.actual_count) ? payload.actual_count : (payload.rows || []).length;
     const displayedCount = Number.isFinite(payload.displayed_count) ? payload.displayed_count : (payload.rows || []).length;
     const structured = payload.has_structured_rows !== false;
-    const info = `파일: ${payload.source_file || '-'} | 시트: ${payload.sheet_name || '-'} | 헤더행: ${structured && payload.header_row != null ? payload.header_row : '-'} | 시작행: ${structured && payload.data_start_row != null ? payload.data_start_row : '-'} | 실제 ${actualCount}행`;
+    const info = `파일: ${payload.source_file || '-'} | 시트: ${payload.sheet_name || '-'} | 헤더행: ${structured && payload.header_row != null ? payload.header_row : '-'} | 시작행: ${structured && payload.data_start_row != null ? payload.data_start_row : '-'} | 실제 데이터 ${actualCount}행`;
     _el('diff-preview-file-info').textContent = info;
     if (payload.has_structured_rows === false) _el('diff-preview-warn').textContent = '헤더를 찾지 못해 행번호를 표시하지 않습니다.';
     else _el('diff-preview-warn').textContent = payload.truncated ? `${displayedCount}행만 표시합니다.` : '';
@@ -474,7 +488,7 @@ const Diff = (() => {
     _renderSimpleRows('diff-tbody-compare-only', [], 3);
     _renderUnresolvedRows('diff-tbody-unresolved', []);
   }
-  function _clearFiles() { const filesEl = _el('diff-output-files'); if (filesEl) filesEl.innerHTML = '<span class="muted">실행 전</span>'; }
+  function _clearFiles() { const filesEl = _el('diff-output-files'); if (filesEl) filesEl.innerHTML = '<span class="muted">실행 전</span>'; const btnF = _el('btn-diff-open-folder'); if (btnF) { btnF.disabled = true; btnF._path = null; } }
   function _escHtml(v) { return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function _escJs(v) { return String(v ?? '').replace(/\\/g,'\\\\').replace(/'/g, "\\'"); }
   return { scan, run, onScanFinished, onScanFailed, onFinished, onFailed, onPreviewLoaded, onPreviewFailed, showLog, reset, toggleViewer };

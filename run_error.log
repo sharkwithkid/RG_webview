@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 1673, in execute_pipeline
-    freshmen_rows = read_freshmen_rows(
-                    ^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Readinggate\Desktop\RG_webview\core\run_main.py", line 297, in read_freshmen_rows
-    issues, _ = validate_input_sheet_structure(
-    ^^^^^^^^^
-ValueError: too many values to unpack (expected 2)

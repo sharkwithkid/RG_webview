@@ -426,11 +426,10 @@ def roster_duplicate_transfer(name: str, reason: str) -> CoreEvent:
 
 
 def duplicate_name(count: int) -> CoreEvent:
-    # 현재 미사용 — 동명이인은 요약 그리드로만 표시
     return CoreEvent(
         code    = "DUPLICATE_NAME",
-        level   = "info",
-        message = f"동명이인 {count}건이 있습니다.",
+        level   = "warn",
+        message = f"동명이인 {count}건 — 실행 결과 탭 필터에서 확인해 주세요.",
     )
 
 

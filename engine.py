@@ -59,6 +59,7 @@ def scan_main_engine(
     roster_basis_date: Optional[DateLike] = None,
     roster_xlsx: Optional[Union[str, Path]] = None,
     col_map: Optional[Dict[str, Any]] = None,
+    school_kind_override: Optional[str] = None,
 ) -> ScanResult:
     """
     메인 반이동 작업의 사전 스캔만 수행.
@@ -81,6 +82,7 @@ def scan_main_engine(
             roster_basis_date=roster_basis_date_d,
             roster_xlsx=roster_xlsx,
             col_map=col_map,
+            school_kind_override=school_kind_override,
         )
 
     except Exception as e:

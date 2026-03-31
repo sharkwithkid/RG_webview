@@ -61,12 +61,13 @@ const Scan = (() => {
     _updateGradeMap({ need_roster: false });
 
     const params = {
-      work_root:          state.work_root,
-      school_name:        state.selected_school,
-      school_start_date:  state.school_start_date,
-      work_date:          state.work_date,
-      roster_xlsx:        state.roster_log_path || '',
-      col_map:            state.roster_col_map  || {},
+      work_root:            state.work_root,
+      school_name:          state.selected_school,
+      school_start_date:    state.school_start_date,
+      work_date:            state.work_date,
+      roster_xlsx:          state.roster_log_path || '',
+      col_map:              state.roster_col_map  || {},
+      school_kind_override: state.school_kind_override || null,
     };
 
     const res = JSON.parse(await bridge.startScanMain(JSON.stringify(params)));
@@ -90,31 +91,49 @@ const Scan = (() => {
     if (!data.ok) {
       const status = data.status || null;
       const events = data.events || [];
+
+      // 학교 구분 판별 불가 → 모달로 선택 유도 (스캔 재시작 필요)
+      if (data.school_kind_needs_choice) {
+        state.isScanning = false;
+        _el('btn-scan').disabled = false;
+        _showSchoolKindModal();
+        return;
+      }
+
       _setBadge('err', '실패');
       _setMessage('');
-      _setSchoolKindWarn(!!data.school_kind_needs_choice);
+      _setSchoolKindWarn(false);
       App.setStepState(2, 'warn');
-      // blocking event가 하나라도 있으면 → 토스트만, 카드 없음
       const blockingEvt = events.find(e => e.blocking && e.level === 'error');
       if (blockingEvt) {
         toast(blockingEvt.message, 'err', 6000);
         _hideScanWarnCard();
       } else {
-        // non-blocking error만 → 카드
         const nonBlockingMsgs = events
           .filter(e => !e.blocking && e.level === 'error')
           .map(e => e.message);
-        if (nonBlockingMsgs.length) _showScanWarnCard(nonBlockingMsgs, 'error', status);
-        else _hideScanWarnCard();
+        if (nonBlockingMsgs.length) {
+          _showScanWarnCard(nonBlockingMsgs, 'error', status);
+        } else {
+          // events 비어있을 때 — logs에서 ERROR 메시지 추출해서 표시
+          const logErrs = (data.logs || [])
+            .filter(l => l.level === 'error')
+            .map(l => l.message)
+            .filter(Boolean);
+          if (logErrs.length) _showScanWarnCard(logErrs, 'error', status);
+          else _showScanWarnCard(['예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.'], 'error', status);
+        }
       }
       return;
     }
 
     // 스텝 상태
     App.setStepState(2, 'done');
+    state.school_kind_override = null;  // 스캔 성공 시 override 초기화
 
-    // 학교 구분 선택 필요 여부 — school_kind_needs_choice 플래그만 사용
-    _setSchoolKindWarn(!!data.school_kind_needs_choice);
+    // 학교 구분 선택 필요 여부 (ok=True로 오는 경우는 현재 없지만 안전 처리)
+    if (data.school_kind_needs_choice) { state.isScanning = false; _el('btn-scan').disabled = false; _showSchoolKindModal(); return; }
+    _setSchoolKindWarn(false);
 
     // 뱃지 + 카드 — events 직접 사용
     const status = data.status || null;
@@ -677,6 +696,66 @@ function toggleFilter(key) {
   }
 
   function _hideSchoolKindWarn() { _setSchoolKindWarn(false); }
+
+  function _showSchoolKindModal() {
+    // 기존 인라인 UI 숨기기
+    _setSchoolKindWarn(false);
+    _setBadge('warn', '확인 필요');
+    _setMessage('');
+    App.setStepState(2, 'warn');
+
+    const bd = document.createElement('div');
+    bd.className = 'confirm-modal-backdrop';
+    bd.innerHTML = `
+      <div class="confirm-modal">
+        <div class="confirm-modal-title">학교 구분 선택 필요</div>
+        <div class="confirm-modal-body">
+          학교명에서 학교 구분(초/중/고)을 자동으로 판별하지 못했습니다.<br>
+          학교 구분을 선택한 뒤 다시 스캔해 주세요.
+        </div>
+        <div class="confirm-modal-options">
+          <label class="confirm-modal-option selected">
+            <input type="radio" name="school-kind-modal" value="초등부" checked>
+            <div><div class="confirm-modal-option-label">초등부</div></div>
+          </label>
+          <label class="confirm-modal-option">
+            <input type="radio" name="school-kind-modal" value="중등부">
+            <div><div class="confirm-modal-option-label">중등부</div></div>
+          </label>
+          <label class="confirm-modal-option">
+            <input type="radio" name="school-kind-modal" value="고등부">
+            <div><div class="confirm-modal-option-label">고등부</div></div>
+          </label>
+          <label class="confirm-modal-option">
+            <input type="radio" name="school-kind-modal" value="">
+            <div><div class="confirm-modal-option-label">기타(빈칸)</div></div>
+          </label>
+        </div>
+        <div class="confirm-modal-footer">
+          <button class="btn-primary" id="school-kind-modal-ok" style="height:36px;padding:0 20px">선택 후 다시 스캔</button>
+        </div>
+      </div>`;
+    document.body.appendChild(bd);
+
+    bd.querySelectorAll('input[type="radio"]').forEach(r => {
+      r.addEventListener('change', () => {
+        bd.querySelectorAll('.confirm-modal-option').forEach(o => o.classList.remove('selected'));
+        r.closest('.confirm-modal-option').classList.add('selected');
+      });
+    });
+
+    bd.querySelector('#school-kind-modal-ok').addEventListener('click', () => {
+      const selected = bd.querySelector('input[name="school-kind-modal"]:checked')?.value ?? '초등부';
+      bd.remove();
+      // state에 override 저장 + select UI 동기화
+      state.school_kind_override = selected || null;
+      const sel = _el('school-kind-select');
+      if (sel) { sel.value = selected; }
+      _setSchoolKindWarn(!!selected);
+      // 직접 스캔 재실행 (btn.click()은 이벤트 루프 문제 있음)
+      start();
+    });
+  }
 
   // ──────────────────────────────────────────────
   // 학년도 아이디 규칙 갱신 (StatusPanel)

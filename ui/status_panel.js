@@ -371,8 +371,11 @@ const Panel = (() => {
         <label>${g}학년</label>
         <input type="number" id="grade-year-${g}" min="0" max="2099" placeholder="-" value="" disabled>
       `;
+      // 초기 기본값: 6학년까지만 표시 (학교 선택 시 setGradeCount로 재조정)
+      if (g > 6) row.style.display = 'none';
       container.appendChild(row);
     }
+    _maxGrade = 6;
   }
 
   function toggleGrade() {
@@ -529,15 +532,23 @@ const StatusUI = (() => {
     el.textContent = badge?.text || fallbackText || '';
   }
 
+  const NO_SUMMARY_CODES = new Set([
+    'KINDERGARTEN_IN_FILE', 'MERGED_CELL', 'MULTIPLE_SHEETS',
+    'NO_TEACHER_ID_REQUEST', 'FRESHMEN_EXTRA_GRADES',
+    'OPEN_DATE_MISSING', 'SCHOOL_KIND_UNKNOWN',
+  ]);
+
   function normalizeStatusCard(messages, mode='warn', status=null) {
     const esc = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     const rawLines = Array.from(new Set((messages || []).map(m => typeof m === 'string' ? m : String(m?.text || '').trim()).map(s => s.replace(/^\[(WARN|ERROR)\]\s*/i, '').trim()).filter(Boolean)));
     const lines = rawLines.map(s => s.replace(/파일 구조를 확인해 주세요\.?/g, '').replace(/선택 파일에서 확인해 주세요\.?/g, '').replace(/\s{2,}/g,' ').trim()).filter(Boolean);
     if (!lines.length && !status?.summary_text) return null;
-    const head = esc(status?.summary_text || `${mode === 'error' ? '오류' : '경고'} ${lines.length}건이 있습니다.`);
+    const eventCodes = (status?.messages || []).map(m => m?.code).filter(Boolean);
+    const skipSummary = eventCodes.length > 0 && eventCodes.every(c => NO_SUMMARY_CODES.has(c));
+    const head = skipSummary ? '' : esc(status?.summary_text || `${mode === 'error' ? '오류' : '경고'} ${lines.length}건이 있습니다.`);
     const body = lines.map(msg => `<div class="warn-line">• ${esc(msg.replace(/필수값/g, '값'))}</div>`).join('');
     const action = status?.action_text ? `<div class="warn-line">${esc(status.action_text)}</div>` : '';
-    return head + body + action;
+    return (head ? head + body : body) + action || null;
   }
 
   function renderWarnCard(elOrId, messages, mode='warn', status=null) {

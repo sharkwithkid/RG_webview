@@ -11,14 +11,22 @@ webview_app.py — WebView 버전 진입점
 """
 
 import sys
+import os
 from pathlib import Path
 
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QUrl, Qt
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
 
 from bridge import Bridge
+
+# ── Windows High DPI 설정 ────────────────────────
+# QApplication 생성 전에 설정해야 효과 있음
+os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--enable-font-antialiasing --font-render-hinting=full")
+QApplication.setHighDpiScaleFactorRoundingPolicy(
+    Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+)
 
 
 HTML_PATH = Path(__file__).parent / "ui" / "index.html"
@@ -31,6 +39,7 @@ MIN_WINDOW_W, MIN_WINDOW_H = 1040, 800
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName(WINDOW_TITLE)
+    # AA_UseHighDpiPixmaps는 PyQt6에서 제거됨 — 기본으로 활성화됨
 
     # ── Bridge 생성 ──────────────────────────────
     bridge = Bridge()

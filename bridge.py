@@ -24,9 +24,6 @@ import re
 import traceback as tb_module
 from pathlib import Path
 
-# 디버그 출력용
-def _dbg(*args):
-    print("[BRIDGE]", *args, flush=True)
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QApplication, QFileDialog
@@ -177,7 +174,7 @@ def _status_from_events(events: list) -> dict:
     else:       summary = "완료"
     return {
         "level": level, "badge": badge,
-        "messages": [{"level": e.level, "text": e.message} for e in all_msgs],
+        "messages": [{"level": e.level, "text": e.message, "code": e.code} for e in all_msgs],
         "summary_text": summary,
         "detail_messages": [e.message for e in all_msgs],
         "action_text": "",
@@ -282,16 +279,31 @@ def _build_status_bundle(*, logs=None, warning_text='', issue_rows=None, running
     }
 
 
-def _normalize_scan_item(meta, kind_label):
+def _normalize_scan_item(meta, kind_label, file_key=None, events=None):
     if meta is None:
         return None
     data_start_row = _meta_get(meta, 'data_start_row', 2)
-    warning = _meta_get(meta, 'warning', '')
     issue_rows = _as_abs_issue_rows(_meta_get(meta, 'issue_rows', []) or [], data_start_row)
-    logs = []
-    severity = _meta_get(meta, 'severity', 'ok')
-    if severity == 'error' and warning:
-        logs = [{'level': 'error', 'message': warning}]
+
+    # events 기반으로 이 파일의 severity/메시지 결정
+    file_evts = [e for e in (events or []) if getattr(e, 'file_key', None) == file_key] if file_key else []
+    if file_evts:
+        errs  = [e for e in file_evts if e.level == 'error']
+        warns = [e for e in file_evts if e.level == 'warn']
+        if errs:
+            severity = 'error'
+            warning  = errs[0].message
+        elif warns:
+            severity = 'warn'
+            warning  = '\n'.join(e.message for e in warns)
+        else:
+            severity = 'ok'
+            warning  = ''
+    else:
+        # events 없으면 기존 meta 기반 fallback (하위 호환)
+        severity = _meta_get(meta, 'severity', 'ok')
+        warning  = _meta_get(meta, 'warning', '')
+
     item = {
         'kind': kind_label,
         'file_name': _meta_get(meta, 'file_name', ''),
@@ -304,8 +316,15 @@ def _normalize_scan_item(meta, kind_label):
         'issue_rows': issue_rows,
         'extra_grades': list(_meta_get(meta, 'extra_grades', []) or []),
         'severity': severity,
+        'messages': [{'level': e.level, 'text': e.message} for e in file_evts],
     }
-    item['status'] = _build_status_bundle(logs=logs, warning_text=(warning if severity != 'error' else ''), issue_rows=issue_rows, ok=(severity != 'error'), default_ok_text='확인 완료')
+    item['status'] = _status_from_events(file_evts) if file_evts else {
+        'level': severity if severity in ('error','warn') else 'ok',
+        'badge': {'type': 'err' if severity=='error' else ('warn' if severity=='warn' else 'ok'),
+                  'text': '오류' if severity=='error' else ('경고' if severity=='warn' else '확인 완료')},
+        'messages': [], 'summary_text': '확인 완료', 'detail_messages': [], 'action_text': '',
+        'row_marks': {'warn_rows': [], 'error_rows': [], 'issue_rows': issue_rows},
+    }
     return item
 
 
@@ -328,7 +347,14 @@ def _normalize_compare_item(compare_file, compare_layout):
         'extra_grades': [],
         'severity': _meta_get(compare_layout, 'severity', 'warn' if warning or issue_rows else 'ok'),
     }
-    item['status'] = _build_status_bundle(logs=[], warning_text=warning, issue_rows=issue_rows, ok=(item['severity'] != 'error'), default_ok_text='확인 완료')
+    cmp_evts = [e for e in ([] if True else []) ]  # compare events는 to_scan_payload에서 주입
+    item['status'] = {
+        'level': item['severity'] if item['severity'] in ('error','warn') else 'ok',
+        'badge': {'type': 'err' if item['severity']=='error' else ('warn' if item['severity']=='warn' else 'ok'),
+                  'text': '오류' if item['severity']=='error' else ('경고' if item['severity']=='warn' else '확인 완료')},
+        'messages': [], 'summary_text': '확인 완료', 'detail_messages': [], 'action_text': '',
+        'row_marks': {'warn_rows': issue_rows, 'error_rows': [], 'issue_rows': issue_rows},
+    }
     return item
 
 
@@ -341,10 +367,10 @@ def to_scan_payload(result) -> dict:
 
     items = [
         i for i in [
-            _normalize_scan_item(getattr(result, 'freshmen', None), '신입생'),
-            _normalize_scan_item(getattr(result, 'transfer_in', None), '전입생'),
-            _normalize_scan_item(getattr(result, 'transfer_out', None), '전출생'),
-            _normalize_scan_item(getattr(result, 'teachers', None), '교직원'),
+            _normalize_scan_item(getattr(result, 'freshmen', None),     '신입생', 'freshmen',    events),
+            _normalize_scan_item(getattr(result, 'transfer_in', None),  '전입생', 'transfer_in', events),
+            _normalize_scan_item(getattr(result, 'transfer_out', None), '전출생', 'transfer_out',events),
+            _normalize_scan_item(getattr(result, 'teachers', None),     '교직원', 'teachers',    events),
             _normalize_compare_item(getattr(result, 'compare_file', None), getattr(result, 'compare_layout', None)),
         ] if i is not None
     ]
@@ -386,13 +412,18 @@ def to_scan_payload(result) -> dict:
         for r in item.get('issue_rows', []) or []:
             if r not in overall_issue_rows:
                 overall_issue_rows.append(r)
+    # events 기반으로만 status 결정 — logs fallback 없음
+    status = _status_from_events(events) if events else {
+        "level": "ok" if bool(getattr(result, 'ok', False)) else "error",
+        "badge": {"type": "ok", "text": "스캔 완료"} if bool(getattr(result, 'ok', False)) else {"type": "err", "text": "오류"},
+        "messages": [], "summary_text": "스캔 완료" if bool(getattr(result, 'ok', False)) else "오류가 있습니다.",
+        "detail_messages": [], "action_text": "",
+        "row_marks": {"warn_rows": [], "error_rows": [], "issue_rows": []},
+    }
     if events:
-        status = _status_from_events(events)
         _warn_rows  = [m.row for m in row_marks if m.level in ("warn", "dup")]
         _error_rows = [m.row for m in row_marks if m.level == "error"]
         status["row_marks"] = {"warn_rows": _warn_rows, "error_rows": _error_rows, "issue_rows": _warn_rows + _error_rows}
-    else:
-        status = _build_status_bundle(logs=logs, issue_rows=overall_issue_rows, ok=bool(getattr(result, 'ok', False)), default_ok_text='스캔 완료')
 
     return {
         "ok":                     bool(getattr(result, "ok", False)),
@@ -434,19 +465,22 @@ def to_run_payload(result) -> dict:
     action_text = ''
     if any('헤더를 찾을 수 없습니다.' in str(l.get('message', '')) for l in logs):
         action_text = '헤더행과 열 이름을 확인해 주세요.'
-    status_logs = list(logs)
+    status_logs = []
     if real_hold > 0:
         status_logs.append({'level':'warn','message':f'확인 필요 건이 {real_hold}건 있습니다.'})
+    # events 기반으로만 status 결정 — logs fallback 없음
+    # run_main이 이제 events를 채우므로 항상 events 경로
     if events:
         status = _status_from_events(events)
     else:
-        status = _build_status_bundle(
-            logs=status_logs,
-            issue_rows=issue_rows,
-            ok=bool(getattr(result, 'ok', False)),
-            default_ok_text='완료',
-            action_text=action_text,
-        )
+        ok = bool(getattr(result, 'ok', False))
+        status = {
+            "level": "ok" if ok else "error",
+            "badge": {"type": "ok", "text": "완료"} if ok else {"type": "err", "text": "오류"},
+            "messages": [], "summary_text": "완료" if ok else "오류가 있습니다.",
+            "detail_messages": [], "action_text": action_text,
+            "row_marks": {"warn_rows": [], "error_rows": [], "issue_rows": []},
+        }
     return {
         "ok": bool(getattr(result, "ok", False)),
         "output_files": [{"name": p.name, "path": str(p)} for p in (getattr(result, "outputs", None) or [])],
@@ -474,14 +508,18 @@ def to_diff_run_payload(result) -> dict:
     row_marks = list(getattr(result, "row_marks", None) or [])
     warnings  = [l for l in logs if l["level"] in ("warn", "error")]
 
+    # events 기반으로만 status 결정 — logs fallback 없음
     if events:
         status = _status_from_events(events)
     else:
-        status = _build_status_bundle(
-            logs=logs, issue_rows=[],
-            ok=bool(getattr(result, 'ok', False)),
-            default_ok_text='완료',
-        )
+        ok = bool(getattr(result, 'ok', False))
+        status = {
+            "level": "ok" if ok else "error",
+            "badge": {"type": "ok", "text": "완료"} if ok else {"type": "err", "text": "오류"},
+            "messages": [], "summary_text": "완료" if ok else "오류가 있습니다.",
+            "detail_messages": [], "action_text": "",
+            "row_marks": {"warn_rows": [], "error_rows": [], "issue_rows": []},
+        }
 
     return {
         "ok": bool(getattr(result, "ok", False)),
@@ -525,14 +563,6 @@ class ScanWorker(QObject):
 
     def run(self):
         try:
-            _dbg("ScanWorker.run start", {
-                "school_name": self._params.get("school_name"),
-                "work_root": self._params.get("work_root"),
-                "roster_xlsx": self._params.get("roster_xlsx"),
-                "work_date": self._params.get("work_date"),
-                "school_start_date": self._params.get("school_start_date"),
-                "roster_basis_date": self._params.get("roster_basis_date"),
-            })
 
             started = time.time()
 
@@ -544,17 +574,15 @@ class ScanWorker(QObject):
                 roster_basis_date=self._params.get("roster_basis_date"),
                 roster_xlsx=self._params.get("roster_xlsx") or None,
                 col_map=self._params.get("col_map"),
+                school_kind_override=self._params.get("school_kind_override") or None,
             )
 
-            _dbg("scan_main_engine returned", time.time() - started)
 
             self.scan_result = result
             payload = async_ok("scan_main", to_scan_payload(result))
-            _dbg("ScanWorker before finished emit")
             self.finished.emit(payload)
 
         except Exception as e:
-            _dbg("ScanWorker error", str(e))
             self.scan_result = None
             self.failed.emit(async_error("scan_main", str(e), tb_module.format_exc()))
 
@@ -717,7 +745,8 @@ class PreviewWorker(QObject):
                 if last_data_row >= start_row:
                     rows = rows[:last_data_row - start_row + 1]
                     displayed_count = len(rows)
-                actual_count = max(0, last_data_row - start_row + 1)
+                # 실제 명단 수 = data_start_row 이후 행만 카운트 (예시행 제외)
+                actual_count = max(0, last_data_row - data_start + 1)
                 max_row = last_data_row
 
                 columns = header_values if header_values else [""] * max_cols
@@ -752,7 +781,6 @@ class PreviewWorker(QObject):
 
         except Exception as e:
             tb = tb_module.format_exc()
-            _dbg("PreviewWorker error:", str(e), "\n", tb)
             self.failed.emit(json.dumps({
                 "ok": False, "kind": kind,
                 "error": str(e), "traceback": tb,
@@ -1013,7 +1041,6 @@ class Bridge(QObject):
 
     @pyqtSlot(str, result=str)
     def startScanMain(self, params_json: str) -> str:
-        _dbg("startScanMain called", params_json)
         """
         params: {
           work_root, school_name,
@@ -1046,25 +1073,20 @@ class Bridge(QObject):
         thread = QThread()
         self._scan_worker = worker
         self._scan_thread = thread
-        _dbg("startScanMain starting worker thread")
         self._start_worker(worker, thread, self._on_scan_finished, self._on_scan_failed)
         return ok_response({})
 
     def _on_scan_finished(self, payload: str):
-        _dbg("_on_scan_finished entered")
         self._is_scanning = False
         # Worker의 scan_result 원본을 Bridge에 보관 (run_main_engine 인자용)
         if self._scan_worker is not None:
             self._last_scan_result = getattr(self._scan_worker, "scan_result", None)
         self.scanFinished.emit(payload)
-        _dbg("_on_scan_finished emitted")
 
     def _on_scan_failed(self, payload: str):
-        _dbg("_on_scan_failed entered")
         self._is_scanning = False
         self._last_scan_result = None
         self.scanFailed.emit(payload)
-        _dbg("_on_scan_failed emitted")
 
     # ── Run ────────────────────────────────────
 
