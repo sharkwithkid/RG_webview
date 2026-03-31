@@ -24,7 +24,6 @@ import re
 import traceback as tb_module
 from pathlib import Path
 
-
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QApplication, QFileDialog
 
@@ -40,74 +39,19 @@ from engine import (
     load_notice_templates,
 )
 from core.roster_log import write_work_result, write_email_sent
-from core.events import CoreEvent, RowMark
+from core.config_store import (
+    load_app_config,
+    save_app_config,
+    load_work_history,
+    save_work_history,
+)
+from core.presenter import (
+    as_abs_issue_rows,
+    present_diff_run_result,
+    present_run_result,
+    present_scan_result,
+)
 
-from core.common import derive_grade_year_map
-
-
-# ── app_config 직접 읽기/쓰기 (별도 모듈 없음) ──────────────
-
-CONFIG_PATH = Path("app_config.json")
-
-DEFAULT_APP_CONFIG = {
-    "work_root": "",
-    "roster_log_path": "",
-    "worker_name": "",
-    "school_start_date": "",
-    "work_date": "",
-    "last_school": "",
-    "roster_col_map": {
-        "sheet": "",
-        "header_row": 0,
-        "data_start": 0,
-        "col_school": 0,
-        "col_email_arr": 0,
-        "col_email_snt": 0,
-        "col_worker": 0,
-        "col_freshmen": 0,
-        "col_transfer": 0,
-        "col_withdraw": 0,
-        "col_teacher": 0,
-        "col_seq": 0,
-    },
-}
-
-def _load_app_config() -> dict:
-    if CONFIG_PATH.exists():
-        try:
-            return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return dict(DEFAULT_APP_CONFIG)
-
-def _save_app_config(config: dict) -> None:
-    CONFIG_PATH.write_text(
-        json.dumps(config, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-# ── work_history 직접 읽기/쓰기 ──────────────────────────────
-
-def _work_history_path(school_year: int) -> Path:
-    return Path(f"work_history_{school_year}.json")
-
-def _load_work_history(school_year: int) -> dict:
-    path = _work_history_path(school_year)
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-def _save_work_history(school_year: int, school_name: str, entry: dict) -> None:
-    history = _load_work_history(school_year)
-    history[school_name] = entry
-    _work_history_path(school_year).write_text(
-        json.dumps(history, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
 
 
 # ──────────────────────────────────────────────
@@ -129,419 +73,6 @@ def async_error(task: str, message: str, traceback: str = "") -> str:
         ensure_ascii=False,
     )
 
-
-# ──────────────────────────────────────────────
-# Result -> Payload 변환
-# (ScanResult/PipelineResult 원본은 JS로 절대 노출하지 않는다)
-# ──────────────────────────────────────────────
-
-def _parse_log_entry(raw: str) -> dict:
-    """'[INFO] ...' 또는 '[HH:MM:SS] [INFO] ...' 형식 로그 -> {level, message} dict"""
-    import re as _re
-    s = str(raw)
-    # 타임스탬프 prefix 제거: [22:11:05] 형태
-    s = _re.sub(r'^\[\d{2}:\d{2}:\d{2}\]\s*', '', s)
-    if s.startswith("[ERROR]"):
-        return {"level": "error", "message": s[7:].strip()}
-    if s.startswith("[WARN]"):
-        return {"level": "warn",  "message": s[6:].strip()}
-    if s.startswith("[DEBUG]"):
-        return {"level": "debug", "message": s[7:].strip()}
-    if s.startswith("[INFO]"):
-        return {"level": "info",  "message": s[6:].strip()}
-    if s.startswith("[DONE]"):
-        return {"level": "info",  "message": s[6:].strip()}
-    if s.startswith("[TIMER]"):
-        return {"level": "info",  "message": s.strip()}
-    return {"level": "info", "message": s.strip()}
-
-def _logs_from_result(result) -> list:
-    return [_parse_log_entry(l) for l in (getattr(result, "logs", None) or [])]
-
-
-def _status_from_events(events: list) -> dict:
-    errs  = [e for e in events if e.level == "error"]
-    holds = [e for e in events if e.level == "hold"]
-    warns = [e for e in events if e.level == "warn"]
-    if errs:    level, badge = "error", {"type": "err",  "text": "오류"}
-    elif holds: level, badge = "hold",  {"type": "hold", "text": "보류"}
-    elif warns: level, badge = "warn",  {"type": "warn", "text": "경고"}
-    else:       level, badge = "ok",    {"type": "ok",   "text": "완료"}
-    all_msgs = errs + holds + warns
-    if errs:    summary = f"오류 {len(errs)}건이 있습니다."
-    elif holds: summary = f"보류 {len(holds)}건이 있습니다."
-    elif warns: summary = f"경고 {len(warns)}건이 있습니다."
-    else:       summary = "완료"
-    return {
-        "level": level, "badge": badge,
-        "messages": [{"level": e.level, "text": e.message, "code": e.code} for e in all_msgs],
-        "summary_text": summary,
-        "detail_messages": [e.message for e in all_msgs],
-        "action_text": "",
-        "row_marks": {"warn_rows": [], "error_rows": [], "issue_rows": []},
-    }
-
-
-def _serialize_event(e: CoreEvent) -> dict:
-    return {
-        "code": e.code, "level": e.level, "message": e.message,
-        "detail": e.detail, "file_key": e.file_key,
-        "row": e.row, "field_name": e.field_name, "blocking": e.blocking,
-    }
-
-
-def _serialize_row_mark(m: RowMark) -> dict:
-    return {"file_key": m.file_key, "row": m.row, "level": m.level, "code": m.code}
-
-
-def _meta_get(meta, key, default=None):
-    if meta is None:
-        return default
-    if isinstance(meta, dict):
-        return meta.get(key, default)
-    return getattr(meta, key, default)
-
-
-def _as_abs_issue_rows(issue_rows, data_start_row):
-    out = []
-    base = int(data_start_row or 1)
-    for r in list(issue_rows or []):
-        try:
-            r_i = int(r)
-        except Exception:
-            continue
-        if r_i >= base:
-            out.append(r_i)
-        else:
-            out.append(base + r_i)
-    # stable unique
-    seen = set()
-    uniq = []
-    for r in out:
-        if r not in seen:
-            seen.add(r)
-            uniq.append(r)
-    return uniq
-
-
-def _build_status_bundle(*, logs=None, warning_text='', issue_rows=None, running=False, ok=True, default_ok_text='완료', action_text=''):
-    logs = list(logs or [])
-    warn_msgs = []
-    err_msgs = []
-    for l in logs:
-        level = str(l.get('level', 'info'))
-        msg = str(l.get('message', '')).strip()
-        if not msg:
-            continue
-        if level == 'error':
-            if msg not in err_msgs:
-                err_msgs.append(msg)
-        elif level == 'warn':
-            if msg not in warn_msgs:
-                warn_msgs.append(msg)
-    for msg in str(warning_text or '').splitlines():
-        msg = msg.strip()
-        if msg and msg not in warn_msgs:
-            warn_msgs.append(msg)
-
-    if running:
-        level = 'running'; badge_type = 'running'; badge_text = '실행 중'
-    elif err_msgs or not ok:
-        level = 'error'; badge_type = 'err'; badge_text = '오류'
-    elif warn_msgs or list(issue_rows or []):
-        level = 'warn'; badge_type = 'warn'; badge_text = '경고'
-    else:
-        level = 'ok'; badge_type = 'ok'; badge_text = default_ok_text
-
-    detail_messages = err_msgs if level == 'error' else warn_msgs
-    if level == 'error':
-        summary_text = f"오류 {len(err_msgs)}건이 있습니다." if err_msgs else '오류가 있습니다.'
-    elif level == 'warn':
-        summary_text = f"경고 {len(warn_msgs)}건이 있습니다." if warn_msgs else '경고가 있습니다.'
-    elif running:
-        summary_text = '실행 중입니다.'
-    else:
-        summary_text = default_ok_text
-
-    return {
-        'level': level,
-        'badge': {'type': badge_type, 'text': badge_text},
-        'messages': ([{'level': 'error', 'text': m} for m in err_msgs] +
-                     [{'level': 'warn', 'text': m} for m in warn_msgs]),
-        'summary_text': summary_text,
-        'detail_messages': detail_messages,
-        'action_text': str(action_text or '').strip(),
-        'row_marks': {
-            'warn_rows': list(issue_rows or []),
-            'error_rows': [],
-            'issue_rows': list(issue_rows or []),
-        },
-    }
-
-
-def _normalize_scan_item(meta, kind_label, file_key=None, events=None):
-    if meta is None:
-        return None
-    data_start_row = _meta_get(meta, 'data_start_row', 2)
-    issue_rows = _as_abs_issue_rows(_meta_get(meta, 'issue_rows', []) or [], data_start_row)
-
-    # events 기반으로 이 파일의 severity/메시지 결정
-    file_evts = [e for e in (events or []) if getattr(e, 'file_key', None) == file_key] if file_key else []
-    if file_evts:
-        errs  = [e for e in file_evts if e.level == 'error']
-        warns = [e for e in file_evts if e.level == 'warn']
-        if errs:
-            severity = 'error'
-            warning  = errs[0].message
-        elif warns:
-            severity = 'warn'
-            warning  = '\n'.join(e.message for e in warns)
-        else:
-            severity = 'ok'
-            warning  = ''
-    else:
-        # events 없으면 기존 meta 기반 fallback (하위 호환)
-        severity = _meta_get(meta, 'severity', 'ok')
-        warning  = _meta_get(meta, 'warning', '')
-
-    item = {
-        'kind': kind_label,
-        'file_name': _meta_get(meta, 'file_name', ''),
-        'file_path': _meta_get(meta, 'file_path', ''),
-        'sheet_name': _meta_get(meta, 'sheet_name', ''),
-        'header_row': _meta_get(meta, 'header_row', 1),
-        'data_start_row': data_start_row,
-        'row_count': _meta_get(meta, 'row_count', 0),
-        'warning': warning,
-        'issue_rows': issue_rows,
-        'extra_grades': list(_meta_get(meta, 'extra_grades', []) or []),
-        'severity': severity,
-        'messages': [{'level': e.level, 'text': e.message} for e in file_evts],
-    }
-    item['status'] = _status_from_events(file_evts) if file_evts else {
-        'level': severity if severity in ('error','warn') else 'ok',
-        'badge': {'type': 'err' if severity=='error' else ('warn' if severity=='warn' else 'ok'),
-                  'text': '오류' if severity=='error' else ('경고' if severity=='warn' else '확인 완료')},
-        'messages': [], 'summary_text': '확인 완료', 'detail_messages': [], 'action_text': '',
-        'row_marks': {'warn_rows': [], 'error_rows': [], 'issue_rows': issue_rows},
-    }
-    return item
-
-
-def _normalize_compare_item(compare_file, compare_layout):
-    if not compare_file:
-        return None
-    compare_layout = compare_layout or {}
-    issue_rows = _as_abs_issue_rows(_meta_get(compare_layout, 'issue_rows', []) or [], _meta_get(compare_layout, 'data_start_row', 2))
-    warning = _meta_get(compare_layout, 'warning', '')
-    item = {
-        'kind': '재학생',
-        'file_name': getattr(compare_file, 'name', str(compare_file)),
-        'file_path': str(compare_file),
-        'sheet_name': _meta_get(compare_layout, 'sheet_name', ''),
-        'header_row': _meta_get(compare_layout, 'header_row', 1),
-        'data_start_row': _meta_get(compare_layout, 'data_start_row', 2),
-        'row_count': _meta_get(compare_layout, 'row_count', 0),
-        'warning': warning,
-        'issue_rows': issue_rows,
-        'extra_grades': [],
-        'severity': _meta_get(compare_layout, 'severity', 'warn' if warning or issue_rows else 'ok'),
-    }
-    cmp_evts = [e for e in ([] if True else []) ]  # compare events는 to_scan_payload에서 주입
-    item['status'] = {
-        'level': item['severity'] if item['severity'] in ('error','warn') else 'ok',
-        'badge': {'type': 'err' if item['severity']=='error' else ('warn' if item['severity']=='warn' else 'ok'),
-                  'text': '오류' if item['severity']=='error' else ('경고' if item['severity']=='warn' else '확인 완료')},
-        'messages': [], 'summary_text': '확인 완료', 'detail_messages': [], 'action_text': '',
-        'row_marks': {'warn_rows': issue_rows, 'error_rows': [], 'issue_rows': issue_rows},
-    }
-    return item
-
-
-def to_scan_payload(result) -> dict:
-    """ScanResult / DiffScanResult -> JS 전달용 요약 dict"""
-    logs      = _logs_from_result(result)
-    events    = list(getattr(result, "events",    None) or [])
-    row_marks = list(getattr(result, "row_marks", None) or [])
-    warnings  = [l for l in logs if l["level"] in ("warn", "error")]
-
-    items = [
-        i for i in [
-            _normalize_scan_item(getattr(result, 'freshmen', None),     '신입생', 'freshmen',    events),
-            _normalize_scan_item(getattr(result, 'transfer_in', None),  '전입생', 'transfer_in', events),
-            _normalize_scan_item(getattr(result, 'transfer_out', None), '전출생', 'transfer_out',events),
-            _normalize_scan_item(getattr(result, 'teachers', None),     '교직원', 'teachers',    events),
-            _normalize_compare_item(getattr(result, 'compare_file', None), getattr(result, 'compare_layout', None)),
-        ] if i is not None
-    ]
-
-    roster_basis_date = ""
-    rbd = getattr(result, "roster_basis_date", None)
-    if rbd is not None:
-        roster_basis_date = rbd.isoformat() if hasattr(rbd, "isoformat") else str(rbd)
-
-    grade_year_map = {}
-    roster_info = getattr(result, "roster_info", None)
-    if roster_info is not None:
-        target_grades = set()
-        prefix_mode = getattr(roster_info, "prefix_mode_by_roster_grade", {}) or {}
-        shift = int(getattr(roster_info, "ref_grade_shift", 0) or 0)
-        for g_roster in prefix_mode.keys():
-            try:
-                g_cur = int(g_roster) - shift
-            except Exception:
-                continue
-            if g_cur > 0:
-                target_grades.add(g_cur)
-        freshmen_meta = getattr(result, "freshmen", None) or {}
-        extra_grades = _meta_get(freshmen_meta, 'extra_grades', []) or []
-        for g in extra_grades:
-            try:
-                g_i = int(g)
-            except Exception:
-                continue
-            if g_i > 0:
-                target_grades.add(g_i)
-        target_grades.update({1,2,3,4,5,6})
-        year_int = int(getattr(result, "year_int", 0) or 0)
-        derived = derive_grade_year_map(target_grades=sorted(target_grades), input_year=year_int, roster_info=roster_info)
-        grade_year_map = {int(k): int(v) for k, v in derived.items()}
-
-    overall_issue_rows = []
-    for item in items:
-        for r in item.get('issue_rows', []) or []:
-            if r not in overall_issue_rows:
-                overall_issue_rows.append(r)
-    # events 기반으로만 status 결정 — logs fallback 없음
-    status = _status_from_events(events) if events else {
-        "level": "ok" if bool(getattr(result, 'ok', False)) else "error",
-        "badge": {"type": "ok", "text": "스캔 완료"} if bool(getattr(result, 'ok', False)) else {"type": "err", "text": "오류"},
-        "messages": [], "summary_text": "스캔 완료" if bool(getattr(result, 'ok', False)) else "오류가 있습니다.",
-        "detail_messages": [], "action_text": "",
-        "row_marks": {"warn_rows": [], "error_rows": [], "issue_rows": []},
-    }
-    if events:
-        _warn_rows  = [m.row for m in row_marks if m.level in ("warn", "dup")]
-        _error_rows = [m.row for m in row_marks if m.level == "error"]
-        status["row_marks"] = {"warn_rows": _warn_rows, "error_rows": _error_rows, "issue_rows": _warn_rows + _error_rows}
-
-    return {
-        "ok":                     bool(getattr(result, "ok", False)),
-        "school_profile_mode":    str(getattr(result, "school_profile_mode", "single") or "single"),
-        "school_kind_needs_choice": bool(getattr(result, "school_kind_needs_choice", False)),
-        "grade_rule_max_grade":   int(getattr(result, "grade_rule_max_grade", 6) or 6),
-        "can_execute":            bool(getattr(result, "can_execute", False)),
-        "can_execute_after_input":bool(getattr(result, "can_execute_after_input", False)),
-        "missing_fields":         list(getattr(result, "missing_fields", []) or []),
-        "needs_open_date":        bool(getattr(result, "needs_open_date", False)),
-        "need_roster":            bool(getattr(result, "need_roster", False)),
-        "roster_date_mismatch":   bool(getattr(result, "roster_date_mismatch", False)),
-        "roster_basis_date":      roster_basis_date,
-        "roster_path": str(getattr(result, "roster_path", None) or "") or None,
-        "has_school_kind_warn":   False,
-        "grade_year_map":         grade_year_map,
-        "items":    items,
-        "warnings":  warnings,
-        "logs":      logs,
-        "status":    status,
-        "events":    [_serialize_event(e)    for e in events],
-        "row_marks": [_serialize_row_mark(m) for m in row_marks],
-    }
-
-
-def to_run_payload(result) -> dict:
-    """PipelineResult -> JS 전달용 요약 dict (Path -> str 전수 변환)"""
-    logs      = _logs_from_result(result)
-    events    = list(getattr(result, "events",    None) or [])
-    row_marks = list(getattr(result, "row_marks", None) or [])
-    warnings  = [l for l in logs if l["level"] in ("warn", "error")]
-    audit = getattr(result, "audit_summary", {}) or {}
-    in_cnt = audit.get("input_counts", {})
-    transfer_in_hold = int(getattr(result, 'transfer_in_hold', 0) or 0)
-    transfer_out_hold = int(getattr(result, 'transfer_out_hold', 0) or 0)
-    transfer_out_auto_skip = int(getattr(result, 'transfer_out_auto_skip', 0) or 0)
-    real_hold = transfer_in_hold + transfer_out_hold - transfer_out_auto_skip
-    issue_rows = list(getattr(result, 'notice_dup_rows', []) or []) + list(getattr(result, 'notice_teacher_dup_rows', []) or [])
-    action_text = ''
-    if any('헤더를 찾을 수 없습니다.' in str(l.get('message', '')) for l in logs):
-        action_text = '헤더행과 열 이름을 확인해 주세요.'
-    status_logs = []
-    if real_hold > 0:
-        status_logs.append({'level':'warn','message':f'확인 필요 건이 {real_hold}건 있습니다.'})
-    # events 기반으로만 status 결정 — logs fallback 없음
-    # run_main이 이제 events를 채우므로 항상 events 경로
-    if events:
-        status = _status_from_events(events)
-    else:
-        ok = bool(getattr(result, 'ok', False))
-        status = {
-            "level": "ok" if ok else "error",
-            "badge": {"type": "ok", "text": "완료"} if ok else {"type": "err", "text": "오류"},
-            "messages": [], "summary_text": "완료" if ok else "오류가 있습니다.",
-            "detail_messages": [], "action_text": action_text,
-            "row_marks": {"warn_rows": [], "error_rows": [], "issue_rows": []},
-        }
-    return {
-        "ok": bool(getattr(result, "ok", False)),
-        "output_files": [{"name": p.name, "path": str(p)} for p in (getattr(result, "outputs", None) or [])],
-        "freshmen_count":          int(in_cnt.get("freshmen", 0)),
-        "teacher_count":           int(in_cnt.get("teacher",  0)),
-        "transfer_in_done":        int(getattr(result, "transfer_in_done",       0)),
-        "transfer_in_hold":        int(getattr(result, "transfer_in_hold",       0)),
-        "transfer_out_done":       int(getattr(result, "transfer_out_done",      0)),
-        "transfer_out_hold":       int(getattr(result, "transfer_out_hold",      0)),
-        "transfer_out_auto_skip":  int(getattr(result, "transfer_out_auto_skip", 0)),
-        "notice_dup_rows":          list(getattr(result, "notice_dup_rows", []) or []),
-        "notice_teacher_dup_rows":  list(getattr(result, "notice_teacher_dup_rows", []) or []),
-        "warnings":  warnings,
-        "logs":      logs,
-        "status":    status,
-        "events":    [_serialize_event(e)    for e in events],
-        "row_marks": [_serialize_row_mark(m) for m in row_marks],
-    }
-
-
-def to_diff_run_payload(result) -> dict:
-    """DiffPipelineResult -> JS 전달용 요약 dict"""
-    logs      = _logs_from_result(result)
-    events    = list(getattr(result, "events",    None) or [])
-    row_marks = list(getattr(result, "row_marks", None) or [])
-    warnings  = [l for l in logs if l["level"] in ("warn", "error")]
-
-    # events 기반으로만 status 결정 — logs fallback 없음
-    if events:
-        status = _status_from_events(events)
-    else:
-        ok = bool(getattr(result, 'ok', False))
-        status = {
-            "level": "ok" if ok else "error",
-            "badge": {"type": "ok", "text": "완료"} if ok else {"type": "err", "text": "오류"},
-            "messages": [], "summary_text": "완료" if ok else "오류가 있습니다.",
-            "detail_messages": [], "action_text": "",
-            "row_marks": {"warn_rows": [], "error_rows": [], "issue_rows": []},
-        }
-
-    return {
-        "ok": bool(getattr(result, "ok", False)),
-        "output_files": [{"name": p.name, "path": str(p)} for p in (getattr(result, "outputs", None) or [])],
-        "compare_only_count": int(getattr(result, "compare_only_count", 0)),
-        "roster_only_count":  int(getattr(result, "roster_only_count",  0)),
-        "matched_count":      int(getattr(result, "matched_count",      0)),
-        "unresolved_count":   int(getattr(result, "unresolved_count",   0)),
-        "transfer_in_done":   int(getattr(result, "transfer_in_done",   0)),
-        "transfer_in_hold":   int(getattr(result, "transfer_in_hold",   0)),
-        "transfer_out_done":  int(getattr(result, "transfer_out_done",  0)),
-        "transfer_out_hold":  int(getattr(result, "transfer_out_hold",  0)),
-        "roster_only_rows":   list(getattr(result, "roster_only_rows", []) or []),
-        "matched_rows":       list(getattr(result, "matched_rows", []) or []),
-        "compare_only_rows":  list(getattr(result, "compare_only_rows", []) or []),
-        "unresolved_rows":    list(getattr(result, "unresolved_rows", []) or []),
-        "warnings":  warnings,
-        "logs":      logs,
-        "status":    status,
-        "events":    [_serialize_event(e)    for e in events],
-        "row_marks": [_serialize_row_mark(m) for m in row_marks],
-    }
 
 
 def _validate_date(date_str: str) -> bool:
@@ -579,7 +110,7 @@ class ScanWorker(QObject):
 
 
             self.scan_result = result
-            payload = async_ok("scan_main", to_scan_payload(result))
+            payload = async_ok("scan_main", present_scan_result(result))
             self.finished.emit(payload)
 
         except Exception as e:
@@ -610,7 +141,7 @@ class RunWorker(QObject):
                 layout_overrides=self._layout_overrides,
                 school_kind_override=self._school_kind_override,
             )
-            self.finished.emit(async_ok("run_main", to_run_payload(result)))
+            self.finished.emit(async_ok("run_main", present_run_result(result)))
         except Exception as e:
             self.failed.emit(async_error("run_main", str(e), tb_module.format_exc()))
 
@@ -635,7 +166,7 @@ class DiffScanWorker(QObject):
                 roster_xlsx=self._params.get("roster_xlsx") or None,
                 col_map=self._params.get("col_map"),
             )
-            self.finished.emit(async_ok("diff_scan", to_scan_payload(result)))
+            self.finished.emit(async_ok("diff_scan", present_scan_result(result)))
         except Exception as e:
             self.failed.emit(async_error("diff_scan", str(e), tb_module.format_exc()))
 
@@ -662,7 +193,7 @@ class DiffRunWorker(QObject):
                 col_map=self._params.get("col_map"),
                 layout_overrides=self._params.get("layout_overrides"),
             )
-            self.finished.emit(async_ok("diff_run", to_diff_run_payload(result)))
+            self.finished.emit(async_ok("diff_run", present_diff_run_result(result)))
         except Exception as e:
             self.failed.emit(async_error("diff_run", str(e), tb_module.format_exc()))
 
@@ -754,9 +285,9 @@ class PreviewWorker(QObject):
                     columns += [""] * (max_cols - len(columns))
                 rows = [r + [""] * (max_cols - len(r)) for r in rows]
                 row_marks = {
-                    'warn_rows': _as_abs_issue_rows(issue_rows, data_start),
+                    'warn_rows': as_abs_issue_rows(issue_rows, data_start),
                     'error_rows': [],
-                    'issue_rows': _as_abs_issue_rows(issue_rows, data_start),
+                    'issue_rows': as_abs_issue_rows(issue_rows, data_start),
                     'muted_rows': list(range(start_row, max(data_start, start_row) )),
                 }
             finally:
@@ -775,7 +306,7 @@ class PreviewWorker(QObject):
                 "header_row": header_row,
                 "data_start_row": data_start,
                 "start_row": start_row,
-                "issue_rows": _as_abs_issue_rows(issue_rows, data_start),
+                "issue_rows": as_abs_issue_rows(issue_rows, data_start),
                 "row_marks": row_marks,
             }, ensure_ascii=False))
 
@@ -916,7 +447,7 @@ class Bridge(QObject):
     @pyqtSlot(result=str)
     def loadAppConfig(self) -> str:
         try:
-            return ok_response({"config": _load_app_config()})
+            return ok_response({"config": load_app_config()})
         except Exception as e:
             return error_response(str(e))
 
@@ -931,7 +462,7 @@ class Bridge(QObject):
         except (ValueError, TypeError):
             return error_response("잘못된 학년도 형식입니다")
         try:
-            history = _load_work_history(year)
+            history = load_work_history(year)
             return ok_response({"history": history})
         except Exception as e:
             return error_response(str(e))
@@ -949,7 +480,7 @@ class Bridge(QObject):
         except Exception:
             return error_response("잘못된 파라미터 형식입니다")
         try:
-            _save_work_history(year, school_name, entry)
+            save_work_history(year, school_name, entry)
             return ok_response({})
         except Exception as e:
             return error_response(str(e))
@@ -965,7 +496,7 @@ class Bridge(QObject):
         except Exception:
             return error_response("잘못된 파라미터 형식입니다")
         try:
-            _save_app_config(config)
+            save_app_config(config)
             return ok_response({})
         except Exception as e:
             return error_response(str(e))

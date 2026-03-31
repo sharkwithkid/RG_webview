@@ -74,7 +74,6 @@ const Run = (() => {
     _noticeTeacherDupRows = new Set(data.notice_teacher_dup_rows || []);
 
     if (!data.ok) {
-      const err = (data.logs || []).find(l => l.level === 'error');
       const status = data.status || {
         level: 'error',
         summary_text: '오류가 있습니다.',
@@ -84,7 +83,8 @@ const Run = (() => {
       _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
       _renderRunStatusCard(status, data);
       App.setStepState(3, 'warn');
-      toast(err ? err.message : '작업 실행 중 오류 — 실행 로그 보기에서 확인하세요.', 'err');
+      const primaryErr = UICommon.primaryMessage({ status, events: data.events || [], prefer: ['error'] });
+      toast(primaryErr || '작업 실행 중 오류 — 실행 로그 보기에서 확인하세요.', 'err');
       return;
     }
 
@@ -200,13 +200,13 @@ const Run = (() => {
 
 
   function _collectStatusMessages(data, status) {
-    const fromStatus = Array.from(new Set((status?.detail_messages || []).map(v => String(v || '').trim()).filter(Boolean)));
+    const fromStatus = Array.from(new Set(UICommon.getStatusDetailMessages(status)));
     if (fromStatus.length) return fromStatus;
-    const fromLogs = Array.from(new Set((data?.logs || [])
-      .filter(l => ['warn', 'error'].includes(String(l.level || '').toLowerCase()))
-      .map(l => String(l.message || '').trim())
-      .filter(Boolean)));
-    return fromLogs;
+    return Array.from(new Set(UICommon.collectMessages({
+      status,
+      events: data?.events || [],
+      prefer: ['error', 'hold', 'warn'],
+    })));
   }
 
   function onFailed(error) {
@@ -235,18 +235,11 @@ const Run = (() => {
     const action = String(status?.action_text || '').trim();
 
     if (!summary && !details.length && !action) {
-      holdWarn.style.display = 'none';
-      holdWarn.innerHTML = '';
+      UICommon.hideStatusCard(holdWarn);
       return;
     }
 
-    holdWarn.classList.toggle('error', level === 'error');
-    const html = (typeof StatusUI !== 'undefined' && StatusUI.normalizeStatusCard)
-      ? StatusUI.normalizeStatusCard(details, level, { summary_text: summary, action_text: action })
-      : null;
-
-    holdWarn.innerHTML = html || '';
-    holdWarn.style.display = 'block';
+    UICommon.renderStatusCard(holdWarn, details, level, { summary_text: summary, action_text: action });
   }
 
   // ──────────────────────────────────────────────
@@ -275,26 +268,7 @@ const Run = (() => {
   function _renderOutputFiles() {
     const el = _el('output-file-list');
     if (!el) return;
-    el.textContent = '';
-
-    if (!_outputFiles.length) {
-      const empty = document.createElement('span');
-      empty.className   = 'muted';
-      empty.textContent = '생성된 파일 없음';
-      el.appendChild(empty);
-      return;
-    }
-
-    _outputFiles.forEach(f => {
-      const row  = document.createElement('div');
-      row.className = 'output-file-item';
-      const link = document.createElement('span');
-      link.className   = 'output-file-name';
-      link.textContent = f.name;
-      link.addEventListener('click', () => Run.openFile(f.path));
-      row.appendChild(link);
-      el.appendChild(row);
-    });
+    UICommon.renderOutputFiles(el, _outputFiles, (file) => Run.openFile(file.path));
 
     // 첫 파일 자동 뷰어 로드
     _loadFileViewer(_outputFiles[0].path);

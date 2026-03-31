@@ -15,6 +15,7 @@ const Notice = (() => {
   let _templates    = {};   // { key: rawText }
   let _rendered     = {};   // { key: replacedText }
   let _currentKey   = null;
+  let _lastCtx      = null;
 
   // ──────────────────────────────────────────────
   // 템플릿 로드 (App.onSchoolSelected에서 호출)
@@ -23,7 +24,8 @@ const Notice = (() => {
     _templates  = rawTemplates || {};
     _rendered   = {};
     _currentKey = null;
-    _applyReplace(ctx);
+    _lastCtx    = ctx || {};
+    _applyReplace(_lastCtx);
     _renderList();
     _selectFirst();
     // 캡션 업데이트
@@ -146,7 +148,7 @@ const Notice = (() => {
   // ──────────────────────────────────────────────
   function reset() {
     if (!_currentKey) return;
-    _applyReplace();
+    _applyReplace(_lastCtx || {});
     selectKey(_currentKey);
   }
 
@@ -155,7 +157,8 @@ const Notice = (() => {
   // ──────────────────────────────────────────────
   function refresh(ctx) {
     if (!Object.keys(_templates).length) return;
-    _applyReplace(ctx);
+    _lastCtx = ctx || _lastCtx || {};
+    _applyReplace(_lastCtx);
     _renderList();
     if (_currentKey) selectKey(_currentKey);
     else _selectFirst();
@@ -168,6 +171,7 @@ const Notice = (() => {
     _templates  = {};
     _rendered   = {};
     _currentKey = null;
+    _lastCtx    = null;
     const listEl = _el('notice-list');
     if (listEl) listEl.innerHTML = '';
     const textEl = _el('notice-text');

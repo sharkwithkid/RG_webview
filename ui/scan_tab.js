@@ -115,12 +115,8 @@ const Scan = (() => {
         if (nonBlockingMsgs.length) {
           _showScanWarnCard(nonBlockingMsgs, 'error', status);
         } else {
-          // events 비어있을 때 — logs에서 ERROR 메시지 추출해서 표시
-          const logErrs = (data.logs || [])
-            .filter(l => l.level === 'error')
-            .map(l => l.message)
-            .filter(Boolean);
-          if (logErrs.length) _showScanWarnCard(logErrs, 'error', status);
+          const statusErrs = UICommon.getStatusMessages(status, ['error']);
+          if (statusErrs.length) _showScanWarnCard(statusErrs, 'error', status);
           else _showScanWarnCard(['예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.'], 'error', status);
         }
       }
@@ -634,26 +630,13 @@ function _normalizeScanCardMessage(msg, mode) {
 function _showScanWarnCard(messages, mode = 'warn', status = null) {
   const el = _el('scan-warn-card');
   if (!el) return;
-  const html = (typeof StatusUI !== 'undefined' && StatusUI.normalizeStatusCard)
-    ? StatusUI.normalizeStatusCard(messages, mode, status)
-    : null;
-  if (!html) {
-    el.style.display = 'none';
-    el.innerHTML = '';
-    el.classList.remove('error');
-    return;
-  }
-  el.classList.toggle('error', mode === 'error');
-  el.innerHTML = html;
-  el.style.display = 'block';
+  UICommon.renderStatusCard(el, messages, mode, status);
 }
 
   function _hideScanWarnCard() {
     const el = _el('scan-warn-card');
     if (!el) return;
-    el.style.display = 'none';
-    el.innerHTML = '';
-    el.classList.remove('error');
+    UICommon.hideStatusCard(el);
   }
 
   // ──────────────────────────────────────────────
@@ -890,9 +873,8 @@ function toggleFilter(key) {
   function applyManualGradeReady(overrides) {
     if (!_lastScanData || !_lastScanData.can_execute_after_input) return false;
 
-    const hasStrictRosterError = (state.last_scan_logs || []).some(l =>
-      l.level === 'error' && String(l.message || '').includes('학생명부가 필요합니다.')
-    );
+    const statusMsgs = UICommon.collectMessages({ status: _lastScanData?.status, events: _lastScanData?.events || [] });
+    const hasStrictRosterError = statusMsgs.some(msg => String(msg || '').includes('학생명부가 필요합니다.'));
     if (hasStrictRosterError) return false;
 
     _lastScanData.grade_year_map = {

@@ -109,12 +109,12 @@ const Diff = (() => {
   }
   function onScanFinished(data) {
     state.isDiffScanning = false;
-    state.last_diff_logs = data.logs || [];
+    AppState.setTaskLogs('diff', data.logs || []);
     _lastScanData = data || null;
     _compareItem = (data.items || []).find(i => i.kind === COMPARE_KIND) || null;
     if (!data.ok || !_compareItem) {
       const status = data.status || null;
-      const errMsg = (status?.messages || []).find(m => m.level === 'error')?.text
+      const errMsg = UICommon.primaryMessage({ status, prefer: ['error'] })
         || '재학생 파일을 확인할 수 없습니다.';
       _setScanBadge('err', '오류');
       _setScanMessage('');
@@ -198,8 +198,8 @@ const Diff = (() => {
       _setRunInfo('');
       if (blockingEvt) {
         toast(blockingEvt.message, 'err', 6000);
-        const nonBlocking = (status?.messages || []).filter(m => m.message !== blockingEvt.message);
-        if (nonBlocking.length) _showWarnCard('diff-run-warn-card', nonBlocking.map(m => m.text), 'error', status);
+        const nonBlocking = UICommon.subtractMessage(UICommon.getStatusMessages(status, ['error']), blockingEvt.message);
+        if (nonBlocking.length) _showWarnCard('diff-run-warn-card', nonBlocking, 'error', status);
         else _hideWarnCard('diff-run-warn-card');
       } else {
         const errMsg = (status?.messages || []).find(m => m.level === 'error')?.text || '실행 중 오류가 발생했습니다.';
@@ -236,25 +236,8 @@ const Diff = (() => {
     if (filesEl) {
       filesEl.textContent = '';
       const outputFiles = data.output_files || [];
-      if (!outputFiles.length) {
-        const empty = document.createElement('span');
-        empty.className = 'muted';
-        empty.textContent = '생성된 파일 없음';
-        filesEl.appendChild(empty);
-      } else {
-        outputFiles.forEach(f => {
-          const row = document.createElement('div');
-          row.className = 'output-file-item';
-          const link = document.createElement('span');
-          link.className = 'output-file-name';
-          link.textContent = f.name;
-          link.addEventListener('click', () => bridge.openFile(f.path));
-          row.appendChild(link);
-          filesEl.appendChild(row);
-        });
-        // 첫 파일 자동으로 열기
-        if (outputFiles[0]?.path) bridge.openFile(outputFiles[0].path);
-      }
+      UICommon.renderOutputFiles(filesEl, outputFiles, (file) => bridge.openFile(file.path));
+      if (outputFiles[0]?.path) bridge.openFile(outputFiles[0].path);
     }
     // 폴더 열기 버튼 활성화
     const btnFolder = _el('btn-diff-open-folder');
@@ -465,23 +448,12 @@ const Diff = (() => {
   function _showWarnCard(id, messages, mode = 'warn', status = null) {
     const el = _el(id);
     if (!el) return;
-    const html = (typeof StatusUI !== 'undefined' && StatusUI.normalizeStatusCard)
-      ? StatusUI.normalizeStatusCard(messages, mode, status)
-      : null;
-    if (!html) {
-      _hideWarnCard(id);
-      return;
-    }
-    el.classList.toggle('error', mode === 'error');
-    el.innerHTML = html;
-    el.style.display = 'block';
+    UICommon.renderStatusCard(el, messages, mode, status);
   }
   function _hideWarnCard(id) {
     const el = _el(id);
     if (!el) return;
-    el.style.display = 'none';
-    el.innerHTML = '';
-    el.classList.remove('error');
+    UICommon.hideStatusCard(el);
   }
   function _clearTables() {
     _renderSimpleRows('diff-tbody-roster-only', [], 3);

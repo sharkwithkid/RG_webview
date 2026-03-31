@@ -139,7 +139,7 @@ WITHDRAW_KEYWORDS = ["전출생", "전출"]
 # =========================
 
 
-def find_single_input_file(input_dir: Path, keywords: Sequence[str]) -> Optional[Path]:
+def find_single_input_file(input_dir: Path, keywords: Sequence[str], *, file_key: str | None = None, kind_label: str | None = None) -> Optional[Path]:
     if not input_dir.exists():
         return None
 
@@ -178,7 +178,6 @@ def find_single_input_file(input_dir: Path, keywords: Sequence[str]) -> Optional
     if len(candidates) == 0:
         return None
     if len(candidates) > 1:
-        sr.events.append(duplicate_input_file(file_key or "global", kind_label or "입력"))
         raise ValueError(f"[ERROR] 입력 파일이 2개 이상 감지되었습니다: {[c.name for c in candidates]}")
     return candidates[0]
 
@@ -1121,25 +1120,25 @@ def scan_pipeline(
             log(f"[WARN] 학교 폴더 파일 목록 조회 중 오류: {e}")
 
         try:
-            freshmen_file = find_single_input_file(input_dir, FRESHMEN_KEYWORDS)
+            freshmen_file = find_single_input_file(input_dir, FRESHMEN_KEYWORDS, file_key='freshmen', kind_label='신입생')
         except ValueError as _e:
             if ".xls" in str(_e): sr.events.append(input_xls_format([]))
             elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("freshmen", "신입생"))
             raise
         try:
-            teacher_file = find_single_input_file(input_dir, TEACHER_KEYWORDS)
+            teacher_file = find_single_input_file(input_dir, TEACHER_KEYWORDS, file_key='teachers', kind_label='교직원')
         except ValueError as _e:
             if ".xls" in str(_e): sr.events.append(input_xls_format([]))
             elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("teachers", "교직원"))
             raise
         try:
-            transfer_file = find_single_input_file(input_dir, TRANSFER_KEYWORDS)
+            transfer_file = find_single_input_file(input_dir, TRANSFER_KEYWORDS, file_key='transfer_in', kind_label='전입생')
         except ValueError as _e:
             if ".xls" in str(_e): sr.events.append(input_xls_format([]))
             elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("transfer_in", "전입생"))
             raise
         try:
-            withdraw_file = find_single_input_file(input_dir, WITHDRAW_KEYWORDS)
+            withdraw_file = find_single_input_file(input_dir, WITHDRAW_KEYWORDS, file_key='transfer_out', kind_label='전출생')
         except ValueError as _e:
             if ".xls" in str(_e): sr.events.append(input_xls_format([]))
             elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("transfer_out", "전출생"))

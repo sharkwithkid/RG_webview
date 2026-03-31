@@ -4,21 +4,21 @@
   "worker_name": "임지윤",
   "school_start_date": "2026-03-03",
   "work_date": "2026-03-31",
-  "arrived_date": "2026-03-30",
   "last_school": "",
   "roster_col_map": {
     "sheet": "학교명단",
     "header_row": 7,
     "data_start": 8,
-    "col_seq": 2,
     "col_school": 5,
-    "col_domain": 6,
     "col_email_arr": 11,
     "col_email_snt": 12,
     "col_worker": 13,
     "col_freshmen": 14,
     "col_transfer": 15,
     "col_withdraw": 16,
-    "col_teacher": 16
-  }
+    "col_teacher": 16,
+    "col_seq": 2,
+    "col_domain": 6
+  },
+  "arrived_date": "2026-03-30"
 }

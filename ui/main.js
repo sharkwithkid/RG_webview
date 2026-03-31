@@ -10,42 +10,7 @@
 
 'use strict';
 
-// ──────────────────────────────────────────────
-// 전역 앱 상태 (JS Source of Truth)
-// ──────────────────────────────────────────────
-const state = {
-  worker_name:        '',
-  work_root:          '',
-  work_date:          '',
-  school_start_date:  '',
-  roster_log_path:    '',
-  roster_col_map:     {},
-  arrived_date:       '',
-  school_folders:     [],   // work_root 내 학교 폴더명 목록 (예: ["270. 용인정평초", ...])
-
-  school_names:       [],
-  selected_school:    '',
-  selected_domain:    '',
-  current_seq_no:     null,
-
-  last_scan_logs:     [],
-  last_run_logs:      [],
-  last_diff_logs:     [],
-
-  isInitializing:     true,
-  isScanning:         false,
-  isRunning:          false,
-  isDiffScanning:     false,
-  isDiffRunning:      false,
-  isPreviewLoading:   false,
-
-  currentPage:        'setup',
-  currentTab:         'scan',
-  currentMode:        'main',
-
-  pending_roster_log:   false,
-  school_kind_override: null,
-};
+// 상태 정의는 app_state.js에서 관리한다.
 
 // ──────────────────────────────────────────────
 // Bridge
@@ -102,7 +67,7 @@ function _getOrCreateToastContainer() {
 async function initApp() {
   try {
     bridge = await _connectBridge();
-    _connectSignals();
+    BridgeRuntime.connectSignals(bridge);
 
     const cfgRes = JSON.parse(await bridge.loadAppConfig());
     if (!cfgRes.ok) throw new Error('설정 로드 실패: ' + cfgRes.error);
@@ -297,78 +262,7 @@ function _connectBridge() {
 // ──────────────────────────────────────────────
 // Bridge 시그널 연결
 // ──────────────────────────────────────────────
-function _connectSignals() {
-  bridge.scanFinished.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isScanning     = false;
-    state.last_scan_logs = p.data?.logs || [];
-    if (p.ok) Scan.onFinished(p.data);
-    else      Scan.onFailed('예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.');
-  });
-  bridge.scanFailed.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isScanning     = false;
-    state.last_scan_logs = [{ level: 'error', message: p.error || '' }];
-    Scan.onFailed('예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.');
-  });
-  bridge.runFinished.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isRunning     = false;
-    state.last_run_logs = p.data?.logs || [];
-    if (p.ok) Run.onFinished(p.data);
-    else      Run.onFailed('예기치 못한 오류가 발생했습니다. 실행 로그를 확인해 주세요.');
-  });
-  bridge.runFailed.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isRunning     = false;
-    state.last_run_logs = [{ level: 'error', message: p.error || '' }];
-    Run.onFailed('예기치 못한 오류가 발생했습니다. 실행 로그를 확인해 주세요.');
-  });
-  bridge.diffScanFinished.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isDiffScanning = false;
-    if (p.ok) Diff.onScanFinished(p.data);
-    else      Diff.onScanFailed(p.error || '명단 비교 스캔 실패');
-  });
-  bridge.diffScanFailed.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isDiffScanning = false;
-    Diff.onScanFailed(p.error || '예기치 못한 오류');
-  });
-  bridge.diffRunFinished.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isDiffRunning  = false;
-    state.last_diff_logs = p.data?.logs || [];
-    if (p.ok) Diff.onFinished(p.data);
-    else      Diff.onFailed(p.error || '명단 비교 실패');
-  });
-  bridge.diffRunFailed.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isDiffRunning  = false;
-    state.last_diff_logs = [{ level: 'error', message: p.error || '' }];
-    Diff.onFailed('예기치 못한 오류가 발생했습니다. 로그를 확인해 주세요.');
-  });
-  bridge.previewLoaded.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isPreviewLoading = false;
-    if (p.ok) {
-      if (p.kind === 'run_output') Run.onPreviewLoaded(p);
-      else if (p.kind === 'compare' || p.kind === '재학생') Diff.onPreviewLoaded?.(p);
-      else                         Scan.onPreviewLoaded(p);
-    } else {
-      if (p.kind === 'run_output') _el('run-preview-info').textContent = p.error || '미리보기 실패';
-      else if (p.kind === 'compare' || p.kind === '재학생') Diff.onPreviewFailed?.(p.kind, p.error || '미리보기 실패');
-      else                         Scan.onPreviewFailed(p.kind, p.error || '미리보기 실패');
-    }
-  });
-  bridge.previewFailed.connect(payload => {
-    const p = JSON.parse(payload);
-    state.isPreviewLoading = false;
-    if (p.kind === 'run_output') Run.onPreviewFailed?.(p.kind || '', p.error || '예기치 못한 오류');
-    else if (p.kind === 'compare' || p.kind === '재학생') Diff.onPreviewFailed?.(p.kind || '', p.error || '예기치 못한 오류');
-    else Scan.onPreviewFailed(p.kind || '', p.error || '예기치 못한 오류');
-  });
-}
+// Bridge signal wiring moved to app_runtime.js
 
 // ──────────────────────────────────────────────
 // App 네임스페이스
@@ -376,136 +270,12 @@ function _connectSignals() {
 const App = {
 
   async onSetupComplete(params) {
-    state.work_root         = params.work_root;
-    state.roster_log_path   = params.roster_log_path;
-    state.worker_name       = params.worker_name;
-    state.school_start_date = params.school_start_date;
-    state.work_date         = params.work_date;
-
-    await bridge.saveAppConfig(JSON.stringify(_readFullConfig()));
-
-    _el('header-work-date').textContent = `작업일 · ${state.work_date}`;
-
-    // 학교 폴더 목록 로드
-    const inspRes = JSON.parse(await bridge.inspectWorkRoot(state.work_root));
-    state.school_folders = inspRes.ok ? (inspRes.data.school_folders || []) : [];
-
-    const namesRes = JSON.parse(
-      await bridge.loadSchoolNames(
-        state.roster_log_path,
-        JSON.stringify(state.roster_col_map || {})
-      )
-    );
-    state.school_names = namesRes.ok ? (namesRes.data.school_names || []) : [];
-    Panel.init(state.school_names);
-    Panel.setWorkContext({ work_date: state.work_date, arrived_date: state.arrived_date });
-
-    App.setStepState(0, 'done');
-    App.setStepState(1, 'active');
-    for (let i = 2; i <= 4; i++) App.setStepState(i, 'idle');
-
-    _showPage('main');
-
-    // 학교 선택 단계로 진입: goTab('scan')은 스텝2(스캔)를 highlight하므로 직접 처리
-    state.currentTab = 'scan';
-    document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
-    _el('tab-scan')?.classList.add('active');
-    _highlightStep(1);  // 스텝1(학교 선택) active
-
-    // 모드 버튼만 갱신 (goTab 미호출이므로 수동 처리)
-    state.currentMode = 'main';
-    _el('btn-mode-main').classList.add('active');
-    _el('btn-mode-diff').classList.remove('active');
-
-    _setSchoolInputHighlight(true);
+    return Workflow.onSetupComplete(params, bridge);
   },
 
   async onSchoolSelected(schoolName) {
-    // 이전 학교 스캔/실행 결과 초기화
-    if (typeof Scan !== 'undefined' && Scan.reset) Scan.reset();
-    if (typeof Run  !== 'undefined' && Run.reset)  Run.reset();
-    if (typeof Diff !== 'undefined' && Diff.reset) Diff.reset();
-
-    state.selected_school = schoolName;
-    state.current_seq_no  = null;
-
-    if (state.work_root) {
-      try {
-        const inspRes = JSON.parse(await bridge.inspectWorkRoot(state.work_root));
-        if (inspRes.ok && inspRes.data?.ok) {
-          state.school_folders = inspRes.data.school_folders || [];
-        }
-      } catch (e) {
-        console.warn('inspectWorkRoot refresh failed:', e);
-      }
-    }
-
-    const domRes = JSON.parse(
-      await bridge.getSchoolDomain(
-        state.roster_log_path,
-        schoolName,
-        JSON.stringify(state.roster_col_map || {})
-      )
-    );
-    state.selected_domain = domRes.ok ? (domRes.data.domain || '') : '';
-
-    const tplRes = JSON.parse(await bridge.loadNoticeTemplates(state.work_root));
-    if (tplRes.ok) Notice.loadTemplates(tplRes.data.templates || {}, _noticeCtx());
-
-    // 작업 이력 로드
-    const schoolYear = (state.work_date || _todayStr()).slice(0, 4);
-    const histRes = JSON.parse(await bridge.loadWorkHistory(schoolYear));
-    const histEntry = histRes.ok ? (histRes.data.history?.[schoolName] || null) : null;
-
-    let history_text = null;
-    if (histEntry) {
-      const SHORT = { '신입생': '신입', '전입생': '전입', '전출생': '전출', '교직원': '교직' };
-      const countStr = Object.entries(histEntry.counts || {})
-        .filter(([, v]) => v)
-        .map(([k, v]) => `${SHORT[k] ?? k} ${v}`)
-        .join(' · ');
-      history_text = `마지막 작업 · ${histEntry.last_date || '-'}`;
-      if (histEntry.worker) history_text += ` (${histEntry.worker})`;
-      if (countStr) history_text += `\n${countStr}`;
-    }
-
-    // 학교 폴더명에서 표시 이름 추출 — 새 학교 시작 이후에도 실제 폴더명이 안정적으로 뜨게 보강
-    const normalize = s => (s && s.normalize ? s.normalize('NFC') : (s || ''));
-    const compact = s => normalize(s).replace(/[\s._-]+/g, '');
-    const schoolNameCompact = compact(schoolName);
-    const folderName = state.school_folders.find(f => {
-      const nf = normalize(f);
-      return nf.includes(normalize(schoolName)) || compact(nf).includes(schoolNameCompact);
-    }) || schoolName;
-
-    Panel.updateSchoolInfo({ school_name: folderName, history_text });
-    Panel.setGradeCount(schoolName);
-
-    App.setStepState(1, 'done');
-    App.setStepState(2, 'active');
-    for (let i = 3; i <= 4; i++) App.setStepState(i, 'idle');
-
-    _el('btn-scan').disabled = false;
-    _el('btn-run').disabled  = true;
-
-    // 학교 선택 시점: 명단 파일이 있으면 파일 열기 버튼 바로 활성화
-    // (전체 명단 반영은 실행 완료 후에만 활성화)
-    Panel.setRosterBtns(false, !!state.roster_log_path);
-
-    _setSchoolInputHighlight(false);
-
-    if (state.currentMode === 'diff') {
-      App.goTab('diff');
-      Diff.reset();
-      _el('btn-scan-diff').disabled = false;
-      _el('btn-run-diff').disabled = true;
-    } else {
-      _el('btn-scan-diff').disabled = true;
-      _el('btn-run-diff').disabled = true;
-      App.goTab('scan');
-      Scan.reset();
-    }
-    },
+    return Workflow.onSchoolSelected(schoolName, bridge);
+  },
 
   goTab(tab) {
     state.currentTab = tab;
@@ -642,7 +412,7 @@ const App = {
       ? '전체 명단에 아직 반영하지 않았습니다.\n초기 설정으로 돌아가시겠습니까?\n현재 작업 내용이 모두 초기화됩니다.'
       : '초기 설정으로 돌아가시겠습니까?\n현재 작업 내용이 모두 초기화됩니다.';
     App._confirm(msg, () => {
-      _resetSharedState();
+      Workflow.resetSharedState();
       App.setStepState(0, 'active');
       for (let i = 1; i <= 4; i++) App.setStepState(i, 'idle');
       _showPage('setup');
@@ -651,7 +421,7 @@ const App = {
 
   resetToSchoolSelect() {
     const _doReset = () => {
-      _resetSharedState();
+      Workflow.resetSharedState();
       App.setStepState(0, 'done');
       App.setStepState(1, 'active');
       for (let i = 2; i <= 4; i++) App.setStepState(i, 'idle');
@@ -709,41 +479,6 @@ function _checkScanReady() {
     return { ok: false, msg: `${unchecked.join(', ')} 파일의 시작행을 확인해 주세요.` };
   }
   return { ok: true };
-}
-
-function _resetSharedState() {
-  state.selected_school     = '';
-  state.selected_domain     = '';
-  state.current_seq_no      = null;
-  state.pending_roster_log  = false;
-  state.school_kind_override = null;
-  state.last_scan_logs     = [];
-  state.last_run_logs      = [];
-  state.last_diff_logs     = [];
-
-  Panel.reset();
-  Scan.reset();
-  Run.reset();
-  if (typeof Diff !== 'undefined' && Diff.reset) Diff.reset();
-  Notice.clear();
-  App.setFloatingNext(false, null);
-
-  // 뱃지 강제 리셋 (reset() 호출이 중간에 실패해도 UI가 남지 않도록)
-  const scanBadge = _el('scan-status-badge');
-  if (scanBadge) { scanBadge.className = 'status-badge badge-idle'; scanBadge.textContent = '대기'; }
-  const runBadge = _el('run-status-badge');
-  if (runBadge)  { runBadge.className  = 'status-badge badge-idle'; runBadge.textContent  = '대기'; }
-  const btnGotoRun = _el('btn-goto-run');
-  if (btnGotoRun) btnGotoRun.style.display = 'none';
-  const btnGotoNotice = _el('btn-goto-notice');
-  if (btnGotoNotice) btnGotoNotice.style.display = 'none';
-
-  _el('btn-scan').disabled     = true;
-  _el('btn-run').disabled      = true;
-  const btnScanDiff = _el('btn-scan-diff');
-  if (btnScanDiff) btnScanDiff.disabled = true;
-  _el('btn-run-diff').disabled = true;
-
 }
 
 
