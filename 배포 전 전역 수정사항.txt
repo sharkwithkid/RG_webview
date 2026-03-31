@@ -1,0 +1,1266 @@
+
+
+*** 배포 전 전역 수정하상 ***
+
+지금까지 본 기준으로는 “바로 배포” 단계는 아니다. 가장 먼저 보이는 건 배포 재현성 부족인데, 의존성 목록/패키징 기준 파일이 없고 캐시·로컬 산출물이 그대로 섞여 있다.
+
+배포 막는 냄새가 더 있다. 현재 압축본 안에 .git, __pycache__, 개인 설정 JSON, 작업 이력 JSON이 같이 들어가 있어서 “배포본”이 아니라 “작업 폴더 통째 복사본”에 가깝다.
+
+1m 15s 동안 생각함
+
+결론
+
+아직 배포 가능한 단계는 아님.
+정확히 말하면 개발자 PC에서는 돌릴 수 있는 상태에 가깝고, 다른 사람 PC에 안정적으로 배포할 수준은 아직 아니다.
+
+변경사항
+배포 판단: 보류
+
+원인
+
+실행 환경 재현성이 없다
+requirements.txt, pyproject.toml, setup.py 같은 의존성 기준 파일이 없음.
+실제로 여기서 스모크 체크해보니 openpyxl은 되는데 PyQt6가 없어서 bridge.py, webview_app.py import가 바로 실패했다.
+즉, 배포 받는 쪽 PC에서 뭘 깔아야 하는지 기준이 없다.
+배포본에 개발 찌꺼기가 너무 많이 섞여 있다
+.git/, __pycache__/, .DS_Store, work_history_2026.json, app_config.json이 같이 들어있음.
+이건 배포 패키지라기보다 작업 폴더 통째 복사본 형태다.
+심지어 git status 기준으로 수정 중 파일도 많고 삭제 표시된 파일도 있어서, 지금 압축본 자체가 정리된 릴리스 상태가 아니다.
+환경 의존 설정이 그대로 박혀 있다
+app_config.json에 C:/Users/Readinggate/Desktop/2026반편성
+//192.168.0.230/... 같은 사내 UNC 경로
+worker_name, work_date 같은 개인/운영 값도 들어있음.
+배포 받는 사람 PC에서는 바로 깨질 가능성이 높다.
+경로 기준이 상대경로 고정이라 배포 시 깨질 수 있다
+bridge.py에서 CONFIG_PATH = Path("app_config.json")
+work_history_*.json도 현재 작업 디렉터리 기준으로 읽고 씀.
+exe나 다른 폴더에서 실행하면 실행 위치에 따라 설정 파일 위치가 달라질 수 있다.
+이건 배포 후 가장 흔하게 터지는 유형이다.
+압축 자체도 깔끔하지 않다
+unzip 할 때 한글 파일명 mismatch 경고가 떴다.
+즉, 지금 zip 패키징 방식이 파일명 인코딩 면에서도 안정적이지 않다.
+배포 스크립트/패키징 기준이 없다
+PyInstaller spec, 배포용 build 스크립트, 런처, 설치/실행 가이드가 없다.
+run_dev.py는 이름 그대로 개발용 핫리로드 실행기라 배포용이 아니다.
+
+조치
+배포 가능 단계로 가려면 최소 이 정도는 필요하다.
+
+배포본 정리
+배포 zip에서 반드시 제외
+.git/
+__pycache__/
+.DS_Store
+개인 설정 JSON
+작업 이력 JSON
+테스트 문서/임시 zip
+지금 상태로는 먼저 폴더 클린업부터 해야 한다.
+환경 기준 파일 추가
+requirements.txt 또는 pyproject.toml 작성
+최소 후보는 아마 이런 식일 가능성이 큼
+PyQt6
+PyQt6-WebEngine
+openpyxl
+정확한 건 전체 코드 기준으로 한 번 더 고정해야 한다.
+설정 파일 구조 분리
+app_config.json은 기본 템플릿만 두고
+예: app_config.example.json
+실제 사용자 설정은 첫 실행 시 생성되게 바꾸는 게 맞다.
+개인 경로/사내 경로를 배포본에 넣으면 안 된다.
+경로 기준 고정
+Path("app_config.json") 말고
+Path(__file__).resolve().parent / "app_config.json"
+같은 식으로 바꿔야 한다.
+work_history_*.json도 같은 기준으로 묶어야 한다.
+배포 방식 확정
+네 프로젝트 성격상 사실상 선택지는 둘 중 하나다.
+사내 Python 환경 전제 배포
+Windows exe 배포(PyInstaller)
+팀원용이면 exe 쪽이 맞다.
+그러면 PyInstaller spec + resource 포함 규칙 + fonts/ui 포함 규칙까지 같이 잡아야 한다.
+릴리스 체크리스트 만들기
+다른 PC에서 새 폴더에 압축 해제
+설정 파일 없는 상태에서 첫 실행
+작업 루트 선택
+학교 선택
+scan/run/diff 최소 1회
+출력 파일 생성 확인
+파일 열기/폴더 열기 확인
+종료 후 재실행해 설정 유지 확인
+
+최종 판단
+지금은 “내 PC 개발 실행 가능” 수준이고, “타인 배포 가능” 수준은 아니다.
+특히 막는 핵심은 아래 4개다.
+
+의존성 명세 없음
+개인/사내 경로가 설정 파일에 박혀 있음
+배포 쓰레기 파일 혼입
+실행 기준 경로가 배포 친화적으로 안 잡혀 있음
+
+다음으로 바로 해야 하는 우선순위
+
+배포 제외 파일 정리
+설정 파일 템플릿화
+경로 기준 수정
+requirements 작성
+PyInstaller 기준 잡기
+
+원하면 다음 답변에서 내가 바로 “배포 전 체크리스트 + 수정 파일 목록 + 고쳐야 할 코드 포인트” 형태로 쪼개서 정리해주겠다.
+
+아니 그 코어나 ui쪽 코드 보라고
+
+맞다. 방금 건 패키징 관점이었고, 지금은 코어/UI 코드 자체가 배포 가능한 품질인지를 봐야 한다. 압축 안 코드 기준으로 구조·예외 처리·상태 관리·모드 분리부터 바로 확인하겠다.
+
+지금 코드 기준으로는 핵심 문제가 보인다. 코어는 분리 방향은 맞는데, UI 상태관리와 메시지 규약이 아직 한 군데로 안 모여 있어서 배포 후 유지보수 비용이 큰 구조다.
+
+1m 24s 동안 생각함
+
+변경사항
+코드 기준으로 보면 아직 배포 가능 단계 아님.
+이유는 패키징 문제가 아니라 코어/UI 구조상 배포 후 바로 유지보수 지옥으로 갈 포인트가 남아 있음.
+
+원인
+
+코어에 실제 런타임 버그가 있다
+
+core/scan_main.py:181
+
+sr.events.append(duplicate_input_file(file_key or "global", kind_label or "입력"))
+여기서 sr, file_key, kind_label은 이 함수 스코프에 없다.
+즉 동일 키워드 파일이 2개 이상 잡히는 순간 NameError로 터질 가능성이 있다.
+지금은 상위에서 일부 예외를 다시 감싸서 평소엔 안 보일 수 있어도, 근본 버그는 맞다.
+소스 오브 트루스가 둘로 갈라져 있다
+core/scan_main.py
+ui/scan_main.py
+거의 같은 대형 파일이 둘 다 존재한다.
+실제 diff도 이미 생김. 지금은 작은 주석 차이처럼 보여도, 이런 구조는 곧 한쪽만 수정되고 다른 쪽은 방치되는 사고로 간다.
+배포 기준에서는 이거 하나만으로도 위험 신호다.
+UI 메시지 체계가 아직 완전히 단일화되지 않았다
+방향은 status.messages 중심으로 가고 있는데, 아직 군데군데 로그 fallback이 남아 있다.
+예:
+ui/run_tab.js는 실패 시 data.logs에서 먼저 에러를 찾음
+ui/scan_tab.js도 일부는 state.last_scan_logs를 직접 봄
+즉 코어 이벤트 → bridge status → UI 렌더링으로 완전히 닫히지 않았다.
+그래서 네가 계속 겪던 “뱃지/카드/행 색칠 따로 노는 현상”이 다시 재발할 구조다.
+UI 필드 스키마를 혼동하는 코드가 있다
+
+ui/diff_tab.js:201
+
+const nonBlocking = (status?.messages || []).filter(m => m.message !== blockingEvt.message);
+그런데 이 파일 전체에서 status.messages 항목은 m.text를 쓰고 있다.
+즉 여기만 m.message를 비교하고 있어서 필터가 의도대로 안 먹을 가능성이 높다.
+이런 건 바로 “경고 카드가 이상하게 남는다 / 중복으로 뜬다”로 이어진다.
+브리지 계층이 아직 너무 두껍다
+bridge.py가 단순 연결층이라기엔
+config 읽기/쓰기
+work history 관리
+result/status 직렬화
+로그 파싱
+이벤트 요약
+UI용 payload 가공
+를 다 품고 있다.
+지금 단계에서는 굴러가지만, 배포 후 수정 포인트가 생기면 bridge가 병목이 된다.
+특히 메시지 정책 바꾸면 core/UI만이 아니라 bridge도 같이 건드려야 할 가능성이 큼.
+상태 관리가 모듈별로 분산돼 있고 결합이 강하다
+main.js 전역 state 하나를 여러 탭 모듈이 직접 만진다.
+Run, Scan, Diff, Panel이 서로 다른 모듈인데 실제로는 느슨하지 않다.
+그래서 한쪽에서 reset/change를 빼먹으면 다른 탭 잔상이 남는 구조다.
+네가 최근 계속 잡던 초기화 잔존, 모드 전환 꼬임, 버튼 활성화 불일치가 이 결합 구조에서 나온다.
+
+조치
+
+배포 전 최소 수정 우선순위만 바로 말하면 이거다.
+
+중복 소스 제거
+ui/scan_main.py는 삭제하거나, 정말 필요하면 이름을 바꿔서 백업임을 명확히 해.
+실제 실행 소스는 core/scan_main.py 하나로 고정.
+find_single_input_file() 즉시 수정
+지금 함수 시그니처에 필요한 값이 없으니
+file_key, kind_label, event_sink를 인자로 받게 바꾸거나
+이 함수는 순수 탐색만 하고 이벤트 적재는 호출부에서 하게 분리해야 함.
+이건 배포 전 필수 수정.
+UI 메시지 원천 완전 단일화
+status.messages, events, row_marks만 쓰고
+data.logs, state.last_*_logs 기반 판정은 전부 제거.
+로그는 “로그 보기” 전용으로만 남겨.
+그래야 뱃지/카드/행 색칠이 다시 안 꼬인다.
+status.messages 필드명 통일
+전부 text로 갈 거면 m.message 같은 옛 코드 전부 제거.
+특히 ui/diff_tab.js:201 바로 수정.
+bridge 역할 줄이기
+config/history는 별도 모듈로 빼고
+bridge는 진짜로 “호출/응답 변환 + signal emit”만 남기는 게 맞다.
+지금 당장 전면 리팩토링까진 아니어도, 최소한 status 생성 규칙은 한 함수군으로 묶어야 함.
+상태 초기화 규약 고정
+모드 전환 / 새 학교 시작 / 스캔 재실행 / diff 진입 시
+badge
+warn card
+row mark
+selected file/sheet
+button enabled state
+를 한 번에 초기화하는 공통 루틴이 필요하다.
+지금은 각 탭이 일부만 지워서 잔상이 남는 구조다.
+
+최종 판단
+지금 코드는 “배포 직전”이 아니라 “내부 테스트 계속 가능한 상태” 정도다.
+치명도 기준으로 보면:
+
+즉시 수정 필수
+core/scan_main.py의 undefined 변수 버그
+ui/diff_tab.js 필드명 혼용
+ui/scan_main.py 중복 소스 정리
+배포 전 구조 정리 권장
+status/log 이원화 제거
+bridge 비대화 완화
+reset/state 공통화
+
+원하면 다음 답변에서 내가 바로
+**“수정해야 할 파일별 포인트”**만 골라서
+파일명 - 문제 - 왜 문제인지 - 어떻게 고칠지 형식으로 정리해주겠다.
+
+ui/scan_main.py 은 잘못 들어간 거라 지웠고. 그러면 너라면 어떻게 개선할 것 같아? 아키텍쳐 관점에서 설명해줘.
+1초 동안 생각함
+
+변경사항
+내가 잡을 방향은 “코어는 순수 판단, 브리지는 변환, UI는 렌더링”으로 더 세게 분리하는 거다.
+지금 프로젝트는 큰 방향은 맞는데, 아직 판단 로직·상태 요약·화면 규칙이 중간층에서 조금씩 섞여 있다.
+
+원인
+지금까지 네가 계속 겪은 문제들이 전부 같은 뿌리다.
+
+뱃지 / 카드 / 행 색칠이 따로 놈
+scan / run / diff마다 메시지 표현이 다름
+초기화가 일부만 먹음
+로그와 status가 이중 소스처럼 작동함
+bridge가 점점 비대해짐
+
+이건 기능 문제가 아니라 책임 경계가 아직 완전히 고정되지 않았기 때문이다.
+
+조치
+
+1. 레이어를 4층으로 딱 자른다
+
+내 기준 권장 구조는 이거다.
+
+L1. domain/core
+
+순수 비즈니스 판단만 담당.
+
+예:
+
+헤더 감지
+시작행 감지
+파일 분류
+학교 판정
+전입/전출/신입 처리 규칙
+diff 비교 규칙
+경고/오류 생성
+
+여기는 절대 알면 안 되는 것:
+
+PyQt
+JS
+화면 카드
+badge 이름
+toast
+HTML용 문자열 조립
+
+즉, 코어는 그냥 이런 것만 반환해야 한다.
+
+status
+events
+artifacts
+preview_rows
+row_marks
+L2. application/service
+
+코어 유스케이스를 묶는 층.
+
+예:
+
+scan_school_folder()
+run_assignment()
+compare_roster()
+
+여기 역할:
+
+입력 정리
+코어 함수 호출 순서 orchestration
+예외를 도메인 이벤트로 바꾸기
+최종 결과 객체 생성
+
+즉, 지금 scan_main.py, pipeline.py, diff_main.py 류가 여기다.
+
+여기서 중요한 건
+“한 유스케이스 = 하나의 결과 객체” 원칙이다.
+
+예를 들면 scan이면:
+
+ScanResult(
+    status=...,
+    files=[...],
+    previews={...},
+    events=[...],
+    row_marks={...},
+)
+
+run이면:
+
+RunResult(
+    status=...,
+    outputs=[...],
+    events=[...],
+    logs=[...],   # 로그는 참고용
+)
+L3. presenter/adapter
+
+이 층이 지금 제일 중요하다.
+
+여기서 하는 일:
+
+Python 결과 객체 → UI payload 변환
+status.messages 정규화
+badge 계산
+카드에 보여줄 텍스트 정리
+row mark schema 통일
+
+즉, UI가 직접 코어 결과를 해석하지 않게 하는 층이다.
+
+지금은 이 역할이
+
+bridge.py
+일부 JS
+일부 코어 post-processing
+에 흩어져 있다.
+
+내가 하면 여기 따로 만든다. 예:
+
+presenters/scan_presenter.py
+presenters/run_presenter.py
+presenters/diff_presenter.py
+
+예:
+
+def present_scan(result: ScanResult) -> dict:
+    return {
+        "status": normalize_status(result.status, result.events),
+        "files": [...],
+        "previews": ...,
+        "row_marks": normalize_row_marks(result.row_marks),
+    }
+
+핵심은
+UI용 규칙은 presenter 한 군데서만 만든다는 거다.
+
+L4. UI
+
+여기는 진짜 렌더링만.
+
+해야 하는 일:
+
+payload 받아서 badge 보여주기
+warn/error card 렌더링
+table row 색칠
+버튼 활성/비활성
+탭 이동
+
+여기서 하면 안 되는 일:
+
+logs 보고 경고 다시 판정
+status.messages 다시 재해석
+에러 문구 재조합
+row 색상 조건 다시 계산
+
+즉 지금 네가 계속 잡고 있는 문제는
+UI가 판단을 하고 있어서 생긴 것들이 많다.
+
+2. “이벤트”를 1급 객체로 올린다
+
+지금 구조에서 가장 중요한 건 메시지 통일이다.
+내가 하면 로그 말고 Event 중심으로 재설계한다.
+
+예:
+
+Event(
+    code="HEADER_NOT_FOUND",
+    level="error",
+    scope="scan",
+    file="전입생 파일",
+    row=None,
+    field=None,
+    text="헤더를 찾을 수 없습니다.",
+    blocking=True,
+)
+
+또는
+
+Event(
+    code="CLASS_SUFFIX_INCLUDED",
+    level="warn",
+    scope="run",
+    file="전입생 파일",
+    row=7,
+    field="반",
+    text="반 열 끝에 '반' 포함 — 등록 파일에 중복됩니다: '미편성반'",
+    blocking=False,
+)
+
+이렇게 해두면 좋은 점이 크다.
+
+badge 계산 가능
+카드 묶음 가능
+행 색칠 가능
+로그와 분리 가능
+메시지 표현 통일 가능
+scan/run/diff 공통 스키마 사용 가능
+
+즉,
+뱃지/카드/행 색칠이 세트로 움직이게 하려면 원천 데이터도 세트여야 한다.
+그 원천이 Event다.
+
+3. status는 “요약”, event는 “근거”로 분리한다
+
+이거 아주 중요하다.
+
+지금은 status.messages, logs, events가 조금 겹치는 느낌이 있는데
+내가 하면 역할을 이렇게 딱 자른다.
+
+status
+
+화면 상단 한 줄 요약용
+
+overall: ok / warn / error
+counts: error_count, warn_count
+summary_text: “경고 2건이 있습니다.”
+events
+
+실제 세부 근거
+
+어떤 파일
+어떤 행
+어떤 필드
+왜 문제인지
+blocking 여부
+logs
+
+디버깅/개발 확인용
+
+traceback
+internal info
+실행 순서
+
+즉:
+
+사용자 UX는 status + events
+개발자 디버깅은 logs
+
+이 분리가 안 되면 계속 UI에서 로그를 뒤져서 판정하게 된다.
+
+4. UI 상태는 “서버 결과 상태”와 “화면 상태”를 분리한다
+
+지금 main.js 전역 state가 좀 많은 걸 들고 있다.
+이걸 둘로 나누는 게 좋다.
+
+data state
+
+백엔드 결과 그 자체
+
+current_scan_result
+current_run_result
+current_diff_result
+selected_school
+selected_files
+view state
+
+화면 표시용 임시 상태
+
+현재 열린 탭
+선택된 파일 프리뷰
+선택된 시트
+확장된 카드
+필터 토글
+모달 열림 여부
+
+이걸 안 나누면
+결과가 바뀌었는데 화면 상태가 남거나,
+화면만 초기화됐는데 데이터 상태가 남아서 다시 꼬인다.
+
+즉 네가 말한
+
+초기화했는데 색이 안 사라짐
+모드 바꿨는데 이전 탭 상태가 남음
+버튼이 엉뚱하게 켜짐
+
+이건 거의 다 여기서 나온다.
+
+5. “공통 렌더링 규약”을 만든다
+
+scan / run / diff가 사실 UI 패턴이 거의 같다.
+
+요약 배지
+에러 카드
+경고 카드
+파일 프리뷰
+행 강조
+
+그런데 지금은 탭별 js가 각자 조금씩 따로 만든다.
+그러면 무조건 다시 어긋난다.
+
+내가 하면 UI 공통 컴포넌트를 이렇게 뺀다.
+
+renderStatusBadge(status)
+renderEventCard(containerId, events, level)
+applyRowMarks(tableEl, rowMarks)
+resetResultPane(scope)
+renderPreviewTable(...)
+
+즉 탭별 JS는 조립만 하고,
+판단과 표시 규칙은 공통 함수가 먹게 한다.
+
+이렇게 해야
+
+scan에서 고친 카드 규칙이
+run/diff에도 자동으로 먹는다.
+6. bridge는 얇게 만든다
+
+지금 bridge가 비대해질 조짐이 있다 했던 이유가 이거다.
+브리지가 “규칙 만드는 곳”이 되면 안 된다.
+
+브리지 역할은 딱 여기까지가 맞다.
+
+UI 요청 받음
+application service 호출
+presenter 호출
+직렬화해서 UI로 넘김
+
+즉:
+
+result = run_scan(...)
+payload = present_scan(result)
+return payload
+
+여기서
+
+경고 문구 새로 조합
+blocking 판정
+row_mark 생성
+badge 레벨 계산
+이런 걸 또 하면 안 된다.
+
+그건 presenter나 application에서 끝내야 한다.
+
+7. 예외를 화면까지 raw로 보내지 말고 도메인 에러로 감싼다
+
+배포 관점에서 진짜 중요한 부분이다.
+
+예:
+
+except Exception as e:
+    ...
+
+이후 바로 문자열로 뿌리는 식이면
+매번 표현이 달라지고, UX도 망가진다.
+
+내가 하면 예외는 중간에서 표준화한다.
+
+예:
+
+UserFacingError
+ConfigError
+InputFileError
+HeaderDetectionError
+BusinessRuleError
+
+그리고 presenter가 이걸 event로 바꾼다.
+
+그러면 최종적으로는 항상 같은 톤으로 나온다.
+
+헤더를 찾을 수 없습니다.
+학생명부 파일이 필요합니다.
+학교 프로필을 찾을 수 없습니다.
+
+이런 식으로.
+
+8. 지금 프로젝트에 바로 적용하면 폴더 구조는 이렇게 간다
+
+예시로 말하면:
+
+core/
+  domain/
+    events.py
+    status.py
+    models.py
+    scan_rules.py
+    run_rules.py
+    diff_rules.py
+
+  application/
+    scan_service.py
+    run_service.py
+    diff_service.py
+
+  presenters/
+    scan_presenter.py
+    run_presenter.py
+    diff_presenter.py
+    common_presenter.py
+
+  infra/
+    excel_reader.py
+    xlsb_reader.py
+    config_repo.py
+    history_repo.py
+
+그리고 UI 쪽은:
+
+ui/
+  components/
+    status.js
+    event_card.js
+    preview_table.js
+    row_marks.js
+
+  tabs/
+    scan_tab.js
+    run_tab.js
+    diff_tab.js
+
+  state/
+    app_state.js
+    view_state.js
+
+이렇게 가면 책임이 명확해진다.
+
+9. 네 프로젝트에서 가장 먼저 손댈 3군데
+
+전면 리팩토링 말고 현실적으로 시작하면 이 순서다.
+
+1순위: 이벤트/상태 스키마 고정
+
+먼저 Event, Status, RowMark 구조를 확정해.
+이게 안 고정되면 나머지 정리는 계속 흔들린다.
+
+2순위: presenter 도입
+
+bridge나 JS에서 하던 메시지/뱃지/카드 규칙을 presenter로 끌어온다.
+
+3순위: UI 공통 렌더러화
+
+scan/run/diff 각자 카드 그리는 거 공통 함수로 뺀다.
+
+이 3개만 해도 구조가 꽤 정리된다.
+
+최종적으로 내가 잡는 원칙은 한 줄이다.
+
+코어는 사실을 만들고, presenter는 의미를 붙이고, UI는 보여주기만 한다.
+
+지금 네 프로젝트는 이미 그 방향으로 갈 기반은 있다.
+문제는 아직 몇 군데가 섞여 있다는 거고, 그래서 유지보수 때 계속 새는 거다.
+
+원하면 다음 답변에서
+지금 네 파일 기준으로 “어느 파일을 살리고, 어느 파일 책임을 어디로 옮길지”를
+실제 파일명 단위로 쪼개서 설계안처럼 적어주겠다.
+
+이렇게 코드를 쪼개면 관리하기 어렵지 않아?
+1초 동안 생각함
+
+변경사항
+무조건 잘게 쪼개는 건 아니다.
+내 답은 “쪼개되, 기준 없이 쪼개면 망한다”다.
+
+원인
+네 걱정이 맞다. 파일만 많아지면 오히려 관리 더 어렵다.
+
+특히 이런 식으로 가면 망한다.
+
+함수 몇 개 있다고 파일 바로 쪼갬
+scan/run/diff마다 비슷한 파일 세트 복붙
+공통 모듈 만든다 해놓고 실제론 여기저기 다시 분기
+찾기 어려운 얇은 파일 수십 개 생성
+
+그러면 구조만 있어 보이고 실제론 더 귀찮아진다.
+
+조치
+
+내 기준은 **“변경 이유가 같이 움직이는 것끼리만 묶는다”**다.
+즉 파일 개수 기준이 아니라 같이 수정될 가능성 기준으로 자른다.
+
+안 쪼개도 되는 것
+
+지금 네 프로젝트에서 이런 건 굳이 쪼갤 필요 없다.
+
+scan 서비스 내부의 보조 함수 몇 개
+run 쪽만 쓰는 작은 유틸
+diff 탭 전용 렌더링 코드
+한번에 읽는 게 더 쉬운 200~300줄짜리 응집된 파일
+
+이건 한 파일에 있어도 된다.
+
+꼭 쪼개야 하는 것
+
+반대로 이건 분리해야 한다.
+
+여러 군데에서 반복해서 고치는 규칙
+status 메시지 정규화
+badge 레벨 계산
+row mark schema
+warn/error 카드 렌더링
+
+이건 한 군데 있어야 한다.
+안 그러면 scan 고치고 run 망가지고 diff 또 따로 논다.
+
+UI와 코어 사이 변환
+코어 결과를 UI payload로 바꾸는 부분
+이건 bridge나 JS 여기저기에 흩어지면 계속 꼬인다.
+환경/입출력 의존 코드
+config 저장
+history 저장
+파일 열기
+경로 처리
+
+이건 비즈니스 로직과 섞이면 테스트가 어려워진다.
+
+그래서 내가 추천하는 현실적 수준은 “중간 분해”다
+
+너 프로젝트에 맞게 말하면
+레이어는 나누되 파일 수는 최소화가 맞다.
+
+예를 들면 이 정도면 충분하다.
+
+core/
+  pipeline.py
+  scan_main.py
+  diff_main.py
+  models.py
+  events.py
+  presenter.py
+  config_store.py
+
+UI는
+
+ui/
+  main.js
+  scan_tab.js
+  run_tab.js
+  diff_tab.js
+  ui_common.js
+
+이 정도.
+이건 과하지 않다.
+
+내가 안 권하는 구조
+
+이런 건 너 스타일에도 안 맞다.
+
+presenters/
+  scan_status_presenter.py
+  scan_event_presenter.py
+  scan_rowmark_presenter.py
+  run_status_presenter.py
+  run_event_presenter.py
+  ...
+
+이건 너무 잘게 찢은 거다.
+찾기도 힘들고 수정도 귀찮다.
+
+네 프로젝트에서 좋은 기준은 이거다
+1. 한 파일에 질문 하나만 답하게 하기
+
+예를 들어:
+
+scan_main.py
+→ “스캔을 어떻게 수행하나?”
+presenter.py
+→ “코어 결과를 UI에 어떻게 보여주나?”
+ui_common.js
+→ “공통 카드/뱃지/행 색칠을 어떻게 렌더링하나?”
+
+이렇게 파일별 역할이 한 문장으로 말돼야 한다.
+
+그게 안 되면 분리가 잘못된 거다.
+
+2. 같이 고치는 코드는 같이 두기
+
+예를 들어 status/event/row_mark를 매번 같이 고친다면
+
+events.py
+status.py
+로 찢지 말고
+그냥 models.py 하나에 둬도 된다.
+
+즉 이론상 예쁜 구조보다 실제 수정 패턴이 더 중요하다.
+
+3. “재사용 가능성”보다 “중복 제거 효과”가 클 때만 분리
+
+공통화가 항상 좋은 게 아니다.
+
+예를 들어 scan 전용 작은 헬퍼를
+“나중에 쓸 수도 있으니까” 빼는 건 보통 실패한다.
+
+반대로 지금처럼
+
+뱃지 규칙
+카드 메시지 규칙
+row mark 적용
+이런 건 이미 여러 탭에서 반복되니까 빼는 게 맞다.
+네 프로젝트 기준으로 내가 잡을 적정선
+
+내가 너 프로젝트를 맡으면 아키텍처는 이렇게 간다.
+
+Python
+scan_main.py 유지
+diff_main.py 유지
+pipeline.py 유지
+models.py 추가 또는 정리
+presenter.py 추가
+config_store.py 분리
+JS
+scan_tab.js, run_tab.js, diff_tab.js 유지
+공통 렌더링만 ui_common.js로 분리
+
+즉 큰 파일 6~10개 정도 축으로 가고,
+그 이상은 문제 생길 때만 추가 분리.
+
+이 정도면
+
+찾기 쉽고
+과분해 아니고
+책임도 좀 잡힌다.
+한 줄 판단 기준
+
+네가 파일 쪼갤지 말지 고민될 때는 이것만 보면 된다.
+
+“이 코드가 바뀔 때 항상 같이 바뀌는 코드가 어디까지냐?”
+
+항상 같이 바뀌면 같이 둔다
+따로 바뀌면 분리한다
+
+최종 답
+응, 너무 쪼개면 관리 더 어려워진다.
+그래서 네 프로젝트는 클린아키텍처 교과서식 분해 말고,
+중간 규모 분리가 맞다.
+
+즉:
+
+코어 / 변환 / UI 공통만 분리
+나머지는 응집된 큰 파일 유지
+
+이게 현실적으로 제일 낫다.
+
+원하면 내가 다음 답변에서
+**현재 파일 기준으로 “이건 유지 / 이건 합치기 / 이건 새로 분리”**만 딱 잘라서 정리해줄게.
+
+그럼 현재 파일 기준에서 어떻게 리팩토링하는 게 맞아?
+
+지금은 말로만 구조 얘기하면 또 뜬다. 실제 현재 파일 기준으로 보고, 유지/합치기/분리로 바로 정리하겠다.
+
+31s 동안 생각함
+
+변경사항
+현재 파일 기준으로는 전면 재구성 말고, 1차 정리 → 2차 공통화 순서가 맞다.
+내가 하면 파일 수는 크게 늘리지 않고, 책임만 바로잡는 리팩토링으로 간다.
+
+원인
+지금 구조 문제는 “파일이 적어서”가 아니라 파일 안 책임이 섞여 있는 것 때문이다.
+
+핵심은 4개다.
+
+bridge.py가 너무 많이 안고 있음
+config 입출력
+work history 저장
+result → payload 변환
+상태 요약
+일부 UI 친화 규칙
+core/* 결과 스키마가 완전히 통일되지 않음
+PipelineResult, DiffPipelineResult, ScanResult 류가 있지만
+UI가 바로 쓰기엔 규약이 약해서 bridge/JS가 다시 해석함
+ui/*_tab.js에 공통 렌더링 규칙이 중복됨
+badge 렌더링
+warn/error 카드
+파일 목록
+결과 상태 처리
+main.js state가 너무 많은 걸 직접 들고 있음
+데이터 상태와 화면 상태가 섞여 있음
+
+조치
+
+내가 권하는 현재 파일 기준 리팩토링
+0. 전제
+
+ui/scan_main.py는 네 말대로 삭제 기준으로 본다.
+이건 맞는 조치다.
+
+1. 파일별로 “유지 / 축소 / 분리”를 먼저 정한다
+그대로 유지
+
+이건 큰 틀 유지가 맞다.
+
+core/scan_main.py
+core/run_main.py
+core/scan_diff.py
+core/run_diff.py
+ui/scan_tab.js
+ui/run_tab.js
+ui/diff_tab.js
+ui/status_panel.js
+
+이 파일들은 역할 축 자체는 맞다.
+문제는 안의 혼합도다.
+
+역할 줄여야 하는 파일
+bridge.py
+ui/main.js
+
+이 두 개는 지금 너무 많은 걸 품고 있다.
+
+새로 분리할 파일
+
+딱 이것만 추가하면 된다.
+
+Python:
+
+core/presenter.py
+core/config_store.py
+
+JS:
+
+ui/ui_common.js
+ui/app_state.js ← 선택사항이지만 있으면 좋음
+
+이 정도면 충분하다.
+교과서식으로 20개 파일 쪼갤 필요 없다.
+
+2. Python 쪽 리팩토링
+A. bridge.py에서 뺄 것
+지금 bridge.py에 있는 문제
+
+이 파일이 사실상
+
+어댑터
+저장소
+presenter
+상태 요약기
+를 다 하고 있다.
+
+특히 아래는 분리 대상이다.
+
+_load_app_config
+_save_app_config
+_load_work_history
+_save_work_history
+_status_from_events
+_serialize_event
+_serialize_row_mark
+scan/run/diff payload 변환 함수들
+B. 새 파일 core/config_store.py
+
+여기로 옮길 것:
+
+DEFAULT_APP_CONFIG
+load_app_config()
+save_app_config()
+work_history_path()
+load_work_history()
+save_work_history()
+
+이유:
+
+bridge는 저장소가 아니다
+설정 저장 규칙 바뀔 때 bridge를 건드리면 안 됨
+
+즉 바뀐 구조는 이렇게.
+
+# bridge.py
+from core.config_store import load_app_config, save_app_config
+C. 새 파일 core/presenter.py
+
+여기로 옮길 것:
+
+_status_from_events
+_serialize_event
+_serialize_row_mark
+scan/run/diff 결과를 UI payload로 바꾸는 함수
+
+권장 함수명:
+
+present_scan_result(result) -> dict
+present_run_result(result) -> dict
+present_diff_scan_result(result) -> dict
+present_diff_run_result(result) -> dict
+
+이유:
+
+코어 결과를 UI가 먹을 JSON으로 바꾸는 건 bridge 역할이 아니라 presenter 역할임
+지금 UI 혼선의 핵심이 여기다
+
+즉 bridge는 이렇게 바뀌면 된다.
+
+result = scan_main_engine(...)
+payload = present_scan_result(result)
+return async_ok("scan", payload)
+
+이렇게 줄어들어야 맞다.
+
+D. core/events.py는 더 중심으로 올린다
+
+지금 이 파일은 이미 방향이 맞다.
+여기서 더 해야 할 건 사건 스키마를 완전 기준점으로 만드는 것이다.
+
+내가 하면 여기서 아래를 확정한다.
+
+CoreEvent
+RowMark
+event code naming 규칙
+level enum 규칙 (error, warn, hold, info)
+blocking 의미
+
+즉 앞으로 UI는
+
+로그를 보지 않고
+events, row_marks, status
+만 믿게 만든다.
+E. core/scan_main.py, run_main.py, scan_diff.py, run_diff.py는 “유스케이스 파일”로 유지
+
+이 4개는 더 찢지 않는다.
+대신 안에서 규칙만 지킨다.
+
+이 파일 안에서 해야 하는 일
+입력 파일 읽기
+헤더 감지
+비즈니스 판정
+산출물 생성
+이벤트 적재
+결과 객체 반환
+이 파일 안에서 하면 안 되는 일
+badge 문구 결정
+UI용 카드 문구 조합
+“이건 토스트로 보여줄지 카드로 보여줄지” 같은 화면 정책
+logs fallback 전제 설계
+
+즉 지금 이 파일들은 유지하되,
+UI 친화 후처리만 presenter로 빼는 것이 핵심이다.
+
+3. JS 쪽 리팩토링
+A. main.js는 앱 셸만 남긴다
+
+지금 main.js는
+
+global state
+init
+binding
+액션 라우팅
+일부 검증
+까지 다 한다.
+
+완전 분리까진 안 해도 되는데, 최소한 이렇게 줄이는 게 맞다.
+
+main.js에 남길 것
+app bootstrap
+bridge 연결
+signal 연결
+상위 액션 라우팅
+모드/페이지 전환
+main.js에서 뺄 것
+상태 구조 정의
+탭 공통 렌더링 보조
+공통 결과 초기화 로직
+B. 새 파일 ui/ui_common.js
+
+이건 꼭 만드는 게 좋다.
+
+여기로 뺄 것:
+
+공통 badge 렌더링 래퍼
+warn/error card 렌더링
+output file list 렌더링
+상태 초기화
+row mark 공통 적용
+
+예시 함수:
+
+renderStatusBadge(elId, status, fallbackText)
+renderEventCard(elId, status, levels)
+renderOutputFiles(elId, files, onOpen)
+resetResultArea(scope)
+pickPrimaryMessage(status, level)
+
+지금은 scan_tab.js, run_tab.js, diff_tab.js가 각자 비슷한 코드로 한다.
+이걸 한 번만 모아도 유지보수 난이도가 꽤 떨어진다.
+
+C. ui/app_state.js는 있으면 좋고 없어도 됨
+
+선택사항이지만, 있으면 main.js가 훨씬 가벼워진다.
+
+지금 state가 너무 크다.
+특히 아래가 같이 섞여 있다.
+
+데이터 상태:
+
+selected_school
+work_root
+roster_col_map
+last_scan_logs
+
+화면 상태:
+
+isScanning
+currentPage
+currentTab
+currentMode
+isPreviewLoading
+
+이걸 최소한 논리적으로라도 나누는 게 좋다.
+
+예:
+
+const appState = {
+  data: {...},
+  view: {...}
+}
+
+파일까지 분리 안 해도 되지만,
+지금처럼 한 객체에 다 들어있으면 reset 꼬이기 쉽다.
+
+4. 각 JS 파일은 어떻게 정리할지
+ui/scan_tab.js
+
+유지한다.
+대신 역할을 이렇게 고정한다.
+
+해야 하는 일:
+
+스캔 시작 요청
+scan payload 수신
+preview 렌더링 요청
+scan 전용 UI 바인딩
+
+빼야 하는 것:
+
+status 해석 규칙 중복
+warn card 구성 중복
+배지 수준 재판단
+
+즉 status.messages를 보고 카드 분기만 하고,
+문구를 다시 만들지 않게 한다.
+
+ui/run_tab.js
+
+여기도 유지.
+대신 지금처럼 logs fallback 섞이는 부분 있으면 다 걷어낸다.
+
+원칙:
+
+정상 UX 판단은 data.status, data.events, data.row_marks
+data.logs는 “로그 보기” 버튼 전용
+
+이렇게 못 박아야 네가 말한 메시지 체계가 안 흔들린다.
+
+ui/diff_tab.js
+
+이건 현재 제일 예민하다.
+네가 최근 계속 잡던 문제가 여기 많이 모여 있다.
+
+즉시 고칠 것:
+
+status.messages는 전부 m.text 기준으로 통일
+m.message 같은 옛 필드 참조 제거
+blocking event를 제외한 메시지 필터링도 동일 스키마로 맞춤
+
+여긴 공통 유틸로 많이 빼는 게 맞다.
+
+ui/status_panel.js
+
+이 파일은 오히려 응집이 괜찮은 편이다.
+학교 선택/작업 컨텍스트 패널 역할로 유지해도 된다.
+
+다만 이 파일이
+
+scan/run/diff 결과까지 직접 만지기 시작하면 안 됨
+패널 고유 UI만 담당하게 제한하는 게 좋다
+5. 실제 적용 순서
+
+이건 한 번에 다 하지 말고 순서대로 가는 게 맞다.
+
+1단계
+
+bridge.py 슬림화
+
+core/config_store.py 생성
+core/presenter.py 생성
+bridge에서 저장/변환 로직 제거
+
+이 단계만 해도 구조가 많이 정리된다.
+
+2단계
+
+ui/ui_common.js 생성
+
+badge
+event card
+output files
+reset helpers
+
+를 공통화한다.
+
+이 단계에서 scan/run/diff UI의 문구·카드 스타일이 맞춰진다.
+
+3단계
+
+main.js state 정리
+
+data/view 논리 분리
+reset 루틴 공통화
+탭 전환 시 초기화 규칙 통일
+
+이 단계에서 모드 전환 잔상 문제가 줄어든다.
+
+6. 최종 구조 예시
+
+내가 현재 프로젝트를 최소 수정으로 정리하면 이 정도다.
+
+bridge.py                # Qt <-> app 연결만
+engine.py                # 엔진 공개 진입점 유지
+
+core/
+  scan_main.py           # 메인 스캔 유스케이스
+  run_main.py            # 메인 실행 유스케이스
+  scan_diff.py           # diff 스캔 유스케이스
+  run_diff.py            # diff 실행 유스케이스
+  events.py              # CoreEvent, RowMark, event factory
+  presenter.py           # result -> ui payload
+  config_store.py        # app_config / work_history
+  common.py
+  output_common.py
+  roster_log.py
+  tasklog.py
+  utils.py
+  xlsx_db.py
+ui/
+  main.js                # bootstrap, routing
+  ui_common.js           # 공통 렌더링/초기화
+  scan_tab.js
+  run_tab.js
+  diff_tab.js
+  status_panel.js
+  notice_tab.js
+  col_map_dialog.js
+  setup.js
+  date_picker.js
+  index.html
+
+이 구조면
+
+파일이 과하게 늘지 않고
+네가 어디를 고쳐야 할지 찾기 쉽고
+공통 규칙이 한 군데 모인다
+7. 한 줄로 정리하면
+
+내 기준에서 현재 파일 기준 리팩토링은 이거다.
+
+코어 유스케이스 파일은 유지
+bridge에서 저장/변환 로직 제거
+UI 공통 렌더링만 별도 파일로 분리
+state는 데이터/화면으로 나눠 관리
+
+즉,
+대수술이 아니라 “bridge 비우기 + UI 공통화”가 1차 정답이다.
