@@ -442,5 +442,29 @@
     },
     "run_completed": true,
     "master_recorded": false
+  },
+  "서울충무초": {
+    "last_date": "2026-03-31",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 9,
+      "전입생": 0,
+      "전출생": 3,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "군포수리중": {
+    "last_date": "2026-03-31",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 196,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 5
+    },
+    "run_completed": true,
+    "master_recorded": false
   }
 }
