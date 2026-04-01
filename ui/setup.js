@@ -72,21 +72,24 @@ const Setup = (() => {
     const path = _getVal('work-root');
     if (!path) { _updateWorkRootBadge(null); return; }
 
+    // 1) 폴더 구조 생성 (write) — scaffold 전용 API, inspect와 분리
+    const scaffoldRes = JSON.parse(await bridge.ensureWorkRootScaffold(path));
+    if (scaffoldRes.ok) {
+      const scaffolded = scaffoldRes.data.scaffolded || [];
+      if (scaffolded.length) {
+        toast(
+          `작업 폴더 구조를 생성했습니다.\n${scaffolded.map(f => '  • ' + f).join('\n')}\n\ntemplates 폴더에 등록·안내 템플릿 파일을,\nnotices 폴더에 안내문 txt 파일을 넣어 주세요.`,
+          'info', 6000
+        );
+      }
+    }
+
+    // 2) 순수 상태 조회 (read-only) — 부작용 없음
     const res = JSON.parse(await bridge.inspectWorkRoot(path));
     if (!res.ok) {
       _updateWorkRootBadge('err', '폴더 오류');
       return;
     }
-
-    // 이번 호출에서 새로 생성된 폴더가 있으면 안내
-    const scaffolded = res.data.scaffolded || [];
-    if (scaffolded.length) {
-      toast(
-        `작업 폴더 구조를 생성했습니다.\n${scaffolded.map(f => '  • ' + f).join('\n')}\n\ntemplates 폴더에 등록·안내 템플릿 파일을,\nnotices 폴더에 안내문 txt 파일을 넣어 주세요.`,
-        'info', 6000
-      );
-    }
-
     if (!res.data.ok) {
       const msgs = (res.data.errors || [])
         .map(e => e.replace(/^\[ERROR\]\s*/, ''))

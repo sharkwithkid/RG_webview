@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Union
 
 from core.run_main import PipelineResult, run_pipeline, execute_pipeline
 from core.run_diff import DiffPipelineResult, run_diff_pipeline
-from core.scan_main import ScanResult, scan_pipeline, load_all_school_names, get_school_domain, ScanResult, scan_work_root
+from core.scan_main import ScanResult, scan_pipeline, load_all_school_names, get_school_domain, scan_work_root, ensure_work_root_scaffold
 from core.scan_diff import DiffScanResult, scan_diff_pipeline
 
 from core.common import get_project_dirs, load_notice_templates
@@ -41,11 +41,14 @@ def _to_date(value: DateLike) -> date:
 # resources / work_root 점검
 # =========================
 def inspect_work_root(work_root: Union[str, Path]) -> Dict[str, Any]:
-    """
-    PyQt 시작 시 1회 호출용.
-    resources(DB/templates/notices) 준비 상태와 학교 폴더 목록을 확인한다.
-    """
+    """resources 폴더 구조 점검 — 순수 조회, 부작용 없음."""
     return scan_work_root(_to_path(work_root))
+
+
+def scaffold_work_root(work_root: Union[str, Path]) -> list:
+    """resources/templates/notices 폴더 생성. 이미 있으면 건너뜀.
+    반환: 새로 생성된 폴더 이름 목록."""
+    return ensure_work_root_scaffold(_to_path(work_root))
 
 
 # =========================
@@ -224,6 +227,7 @@ def run_diff_engine(
 
 __all__ = [
     "inspect_work_root",
+    "scaffold_work_root",
     "load_all_school_names",
     "scan_main_engine",
     "run_main_engine",

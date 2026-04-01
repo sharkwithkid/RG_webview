@@ -632,6 +632,7 @@ function _makeMockBridge() {
     loadAppConfig:       async () => JSON.stringify({ ok: true, data: { config: {} } }),
     saveAppConfig:       noop,
     inspectWorkRoot:     async () => JSON.stringify({ ok: true, data: { ok: true, errors: [] } }),
+    ensureWorkRootScaffold: async () => JSON.stringify({ ok: true, data: { scaffolded: [] } }),
     loadSchoolNames:     async () => JSON.stringify({ ok: true, data: { school_names: [] } }),
     getSchoolDomain:     async () => JSON.stringify({ ok: true, data: { domain: '' } }),
     getProjectDirs:      async () => JSON.stringify({ ok: true, data: { dirs: {} } }),

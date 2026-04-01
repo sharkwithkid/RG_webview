@@ -57,14 +57,14 @@ const BridgeRuntime = (() => {
 
     activeBridge.diffScanFinished.connect(payload => {
       const p = JSON.parse(payload);
-      AppState.setBusy('diffScan', false);
+      AppState.setBusy('diff_scan', false);
       if (p.ok) Diff.onScanFinished(p.data);
       else Diff.onScanFailed(p.error || '명단 비교 스캔 실패');
     });
 
     activeBridge.diffScanFailed.connect(payload => {
       const p = JSON.parse(payload);
-      AppState.setBusy('diffScan', false);
+      AppState.setBusy('diff_scan', false);
       Diff.onScanFailed(p.error || '예기치 못한 오류');
     });
 
@@ -78,7 +78,7 @@ const BridgeRuntime = (() => {
 
     activeBridge.diffRunFailed.connect(payload => {
       const p = JSON.parse(payload);
-      AppState.setBusy('diffRun', false);
+      AppState.setBusy('diff_run', false);
       AppState.setTaskLogs('diff', [], p.error || '');
       Diff.onFailed(_taskFailedMessage('diff'));
     });

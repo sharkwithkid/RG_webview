@@ -1549,29 +1549,15 @@ def scan_pipeline(
 # =========================
 # L5. 작업 루트 점검
 # =========================
-def scan_work_root(work_root: Path) -> Dict[str, Any]:
+def ensure_work_root_scaffold(work_root: Path) -> List[str]:
     """
-    앱 시작 시 1회 호출하여 resources 폴더 구조를 점검한다.
-    engine.py의 inspect_work_root()가 이 함수를 호출한다.
+    작업 폴더 하위에 resources/templates/notices 폴더 구조를 생성한다.
+    이미 있는 폴더는 건드리지 않는다 (exist_ok=True).
 
-    반환 dict 키:
-      ok                — 전체 이상 없음 여부
-      errors            — 오류 메시지 목록
-      message           — ok일 때 성공 메시지
-      school_folders    — 작업 루트 내 학교 폴더 이름 목록
-      notice_titles     — notices/*.txt 파일명(stem) 목록
-      format_ok         — templates 폴더 정상 여부
-      errors_format     — templates 관련 오류 목록
-      register_template — 등록 템플릿 경로 (없으면 None)
-      notice_template   — 안내 템플릿 경로 (없으면 None)
-      scaffolded        — 이번 호출에서 새로 생성된 폴더 목록
+    반환: 이번 호출에서 새로 생성된 폴더 이름 목록 (빈 리스트면 이미 모두 존재)
     """
-    work_root = work_root.resolve()
+    work_root = Path(work_root).resolve()
     dirs = get_project_dirs(work_root)
-
-    # ── 폴더 자동 생성 ────────────────────────────────────────────────
-    # 작업 폴더가 지정되면 resources 하위 구조를 자동으로 만들어 둔다.
-    # 이미 있는 폴더는 건드리지 않음 (exist_ok=True).
     scaffolded: List[str] = []
     for key, label in [
         ("RESOURCES_ROOT", "resources"),
@@ -1584,8 +1570,29 @@ def scan_work_root(work_root: Path) -> Dict[str, Any]:
                 folder.mkdir(parents=True, exist_ok=True)
                 scaffolded.append(label)
             except Exception:
-                pass  # 생성 실패해도 아래 오류 체크에서 처리됨
-    # ──────────────────────────────────────────────────────────────────
+                pass
+    return scaffolded
+
+
+def scan_work_root(work_root: Path) -> Dict[str, Any]:
+    """
+    앱 시작 시 1회 호출하여 resources 폴더 구조를 점검한다.
+    engine.py의 inspect_work_root()가 이 함수를 호출한다.
+    순수 조회만 수행한다 — 폴더 생성 등 부작용 없음.
+
+    반환 dict 키:
+      ok                — 전체 이상 없음 여부
+      errors            — 오류 메시지 목록
+      message           — ok일 때 성공 메시지
+      school_folders    — 작업 루트 내 학교 폴더 이름 목록
+      notice_titles     — notices/*.txt 파일명(stem) 목록
+      format_ok         — templates 폴더 정상 여부
+      errors_format     — templates 관련 오류 목록
+      register_template — 등록 템플릿 경로 (없으면 None)
+      notice_template   — 안내 템플릿 경로 (없으면 None)
+    """
+    work_root = work_root.resolve()
+    dirs = get_project_dirs(work_root)
 
     errors: List[str] = []
 
@@ -1632,5 +1639,4 @@ def scan_work_root(work_root: Path) -> Dict[str, Any]:
         "notice_titles": notice_titles,
         "format_ok": format_ok, "errors_format": errors_format,
         "register_template": register_template, "notice_template": notice_template,
-        "scaffolded": scaffolded,
     }

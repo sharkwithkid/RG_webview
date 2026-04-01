@@ -42,12 +42,11 @@ const AppState = (() => {
   };
 
   const BUSY_KEY = {
-    scan: 'isScanning',
-    run: 'isRunning',
-    diffScan: 'isDiffScanning',
-    diffRun: 'isDiffRunning',
-    preview: 'isPreviewLoading',
-    diff: 'isDiffRunning',
+    scan:      'isScanning',
+    run:       'isRunning',
+    diff_scan: 'isDiffScanning',
+    diff_run:  'isDiffRunning',
+    preview:   'isPreviewLoading',
   };
 
   function setTaskLogs(kind, logs, fallbackMessage = '') {

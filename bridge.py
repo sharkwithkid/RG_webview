@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import QApplication, QFileDialog
 
 from engine import (
     inspect_work_root,
+    scaffold_work_root,
     load_all_school_names,
     scan_main_engine,
     run_main_engine,
@@ -391,6 +392,16 @@ class Bridge(QObject):
         except Exception as e:
             return error_response(str(e))
 
+    @pyqtSlot(str, result=str)
+    def ensureWorkRootScaffold(self, work_root: str) -> str:
+        """resources/templates/notices 폴더 생성 (없는 것만).
+        반환: { scaffolded: ["resources", ...] }"""
+        try:
+            scaffolded = scaffold_work_root(work_root)
+            return ok_response({"scaffolded": scaffolded})
+        except Exception as e:
+            return error_response(str(e))
+
     @pyqtSlot(str, str, result=str)
     def loadSchoolNames(self, roster_xlsx: str, col_map_json: str) -> str:
         """
@@ -609,14 +620,15 @@ class Bridge(QObject):
 
     def _on_scan_finished(self, payload: str):
         self._is_scanning = False
-        # Worker의 scan_result 원본을 Bridge에 보관 (run_main_engine 인자용)
         if self._scan_worker is not None:
             self._last_scan_result = getattr(self._scan_worker, "scan_result", None)
+        self._scan_worker = None; self._scan_thread = None
         self.scanFinished.emit(payload)
 
     def _on_scan_failed(self, payload: str):
         self._is_scanning = False
         self._last_scan_result = None
+        self._scan_worker = None; self._scan_thread = None
         self.scanFailed.emit(payload)
 
     # ── Run ────────────────────────────────────
@@ -666,10 +678,12 @@ class Bridge(QObject):
 
     def _on_run_finished(self, payload: str):
         self._is_running = False
+        self._run_worker = None; self._run_thread = None
         self.runFinished.emit(payload)
 
     def _on_run_failed(self, payload: str):
         self._is_running = False
+        self._run_worker = None; self._run_thread = None
         self.runFailed.emit(payload)
 
     # ── Diff Scan ──────────────────────────────
@@ -710,10 +724,12 @@ class Bridge(QObject):
 
     def _on_diff_scan_finished(self, payload: str):
         self._is_diff_scanning = False
+        self._diff_scan_worker = None; self._diff_scan_thread = None
         self.diffScanFinished.emit(payload)
 
     def _on_diff_scan_failed(self, payload: str):
         self._is_diff_scanning = False
+        self._diff_scan_worker = None; self._diff_scan_thread = None
         self.diffScanFailed.emit(payload)
 
     # ── Diff Run ───────────────────────────────
@@ -737,6 +753,10 @@ class Bridge(QObject):
             return error_response("작업 폴더가 없습니다")
         if not params.get("school_name"):
             return error_response("학교가 선택되지 않았습니다")
+        if not _validate_date(params.get("school_start_date", "")):
+            return error_response("개학일 형식이 올바르지 않습니다 (YYYY-MM-DD)")
+        if not _validate_date(params.get("work_date", "")):
+            return error_response("작업일 형식이 올바르지 않습니다 (YYYY-MM-DD)")
         if self._is_diff_running:
             return error_response("이미 명단비교 실행이 진행 중입니다")
 
@@ -751,10 +771,12 @@ class Bridge(QObject):
 
     def _on_diff_run_finished(self, payload: str):
         self._is_diff_running = False
+        self._diff_run_worker = None; self._diff_run_thread = None
         self.diffRunFinished.emit(payload)
 
     def _on_diff_run_failed(self, payload: str):
         self._is_diff_running = False
+        self._diff_run_worker = None; self._diff_run_thread = None
         self.diffRunFailed.emit(payload)
 
     # ── Preview ────────────────────────────────
@@ -792,10 +814,12 @@ class Bridge(QObject):
 
     def _on_preview_loaded(self, payload: str):
         self._is_previewing = False
+        self._preview_worker = None; self._preview_thread = None
         self.previewLoaded.emit(payload)
 
     def _on_preview_failed(self, payload: str):
         self._is_previewing = False
+        self._preview_worker = None; self._preview_thread = None
         self.previewFailed.emit(payload)
 
     # ──────────────────────────────────────────
@@ -827,8 +851,8 @@ class Bridge(QObject):
           { sheets: [...], headers: [...], rows: [[...], ...] }
         """
         try:
-            from openpyxl import load_workbook as _load_wb
-            wb = _load_wb(str(xlsx_path), read_only=True, data_only=True)
+            from core.common import safe_load_workbook as _safe_wb
+            wb = _safe_wb(Path(str(xlsx_path)), data_only=True, read_only=True)
 
             sheets = wb.sheetnames
             target = sheet_name if (sheet_name and sheet_name in sheets) else sheets[0]
