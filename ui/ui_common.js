@@ -14,45 +14,26 @@ const UICommon = (() => {
     return details.map(v => String(v || '').trim()).filter(Boolean);
   }
 
-  function getLogMessages(logs, levels = ['warn', 'error']) {
-    return (Array.isArray(logs) ? logs : [])
-      .filter(l => levels.includes(String(l?.level || '').toLowerCase()))
-      .map(l => String(l?.message || '').trim())
-      .filter(Boolean);
-  }
-
-  function collectMessages({ status = null, events = [], logs = [], prefer = ['error', 'hold', 'warn'], allowLogs = false } = {}) {
+  // collectMessages: status.messages → events 순으로 수집.
+  // logs는 UX 판정에 사용하지 않음 — 로그 다이얼로그 전용.
+  function collectMessages({ status = null, events = [], prefer = ['error', 'hold', 'warn'] } = {}) {
     const messages = [];
     const seen = new Set();
     prefer.forEach(level => {
       getStatusMessages(status, [level]).forEach(msg => {
-        if (!seen.has(msg)) {
-          seen.add(msg);
-          messages.push(msg);
-        }
+        if (!seen.has(msg)) { seen.add(msg); messages.push(msg); }
       });
     });
-    if (allowLogs && !messages.length) {
-      getLogMessages(logs).forEach(msg => {
-        if (!seen.has(msg)) {
-          seen.add(msg);
-          messages.push(msg);
-        }
-      });
-    }
     if (!messages.length && Array.isArray(events)) {
       events.map(e => String(e?.message || '').trim()).filter(Boolean).forEach(msg => {
-        if (!seen.has(msg)) {
-          seen.add(msg);
-          messages.push(msg);
-        }
+        if (!seen.has(msg)) { seen.add(msg); messages.push(msg); }
       });
     }
     return messages;
   }
 
-  function primaryMessage({ status = null, events = [], logs = [], prefer = ['error', 'hold', 'warn'], allowLogs = false } = {}) {
-    return collectMessages({ status, events, logs, prefer, allowLogs })[0] || '';
+  function primaryMessage({ status = null, events = [], prefer = ['error', 'hold', 'warn'] } = {}) {
+    return collectMessages({ status, events, prefer })[0] || '';
   }
 
   function renderStatusCard(elOrId, messages = [], mode = 'warn', status = null) {
@@ -72,7 +53,7 @@ const UICommon = (() => {
   function renderWarnCard(elOrId, status, mode = 'warn', fallbackMessages = []) {
     const el = typeof elOrId === 'string' ? _el(elOrId) : elOrId;
     if (!el) return;
-    const messages = collectMessages({ status, logs: [], events: [], prefer: mode === 'error' ? ['error'] : ['warn', 'hold'] });
+    const messages = collectMessages({ status, events: [], prefer: mode === 'error' ? ['error'] : ['warn', 'hold'] });
     const source = messages.length ? messages : (Array.isArray(fallbackMessages) ? fallbackMessages : []);
     renderStatusCard(el, source, mode, status);
   }
@@ -108,7 +89,6 @@ const UICommon = (() => {
   return {
     getStatusMessages,
     getStatusDetailMessages,
-    getLogMessages,
     collectMessages,
     primaryMessage,
     renderStatusCard,

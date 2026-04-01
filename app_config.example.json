@@ -1,0 +1,23 @@
+{
+  "work_root": "",
+  "roster_log_path": "",
+  "worker_name": "",
+  "school_start_date": "",
+  "work_date": "",
+  "last_school": "",
+  "arrived_date": "",
+  "roster_col_map": {
+    "sheet": "",
+    "header_row": 0,
+    "data_start": 0,
+    "col_school": 0,
+    "col_email_arr": 0,
+    "col_email_snt": 0,
+    "col_worker": 0,
+    "col_freshmen": 0,
+    "col_transfer": 0,
+    "col_withdraw": 0,
+    "col_teacher": 0,
+    "col_seq": 0
+  }
+}

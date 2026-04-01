@@ -52,7 +52,9 @@ def _summary_for_level(level: str, count: int, ok_text: str = '완료') -> str:
 def build_status(level: str, messages: list[dict] | None = None, *, summary_text: str | None = None,
                  detail_messages: list[str] | None = None, action_text: str = '', row_marks: dict | None = None) -> dict:
     safe_messages = list(messages or [])
-    safe_details = list(detail_messages or [m.get('text', '') for m in safe_messages])
+    # detail_messages 미지정 시 messages의 text 필드로 일관되게 생성
+    # (messages 필드명이 'text'로 통일되어 있으므로 'message' fallback 불필요)
+    safe_details = list(detail_messages if detail_messages is not None else [m.get('text', '') for m in safe_messages if m.get('text')])
     return {
         'level': level,
         'badge': _badge_for_level(level),
@@ -135,12 +137,21 @@ def _row_mark_summary(row_marks: list[RowMark]) -> dict:
     return {'warn_rows': warn_rows, 'error_rows': error_rows, 'issue_rows': issue_rows}
 
 
-def _fallback_status(ok: bool, ok_text: str, *, action_text: str = '', row_marks: list[RowMark] | None = None) -> dict:
+def _fallback_status(ok: bool, ok_text: str, *, action_text: str = '',
+                     row_marks: list[RowMark] | None = None,
+                     error_detail: str = '') -> dict:
+    """events 없이 ok 여부만 알 때 사용하는 최소 status.
+    error_detail: logs에서 추출한 첫 오류 메시지 — UI 카드에 표시됨.
+    """
+    if ok:
+        return build_status('ok', [], summary_text=ok_text,
+                            detail_messages=[], action_text=action_text,
+                            row_marks=_row_mark_summary(row_marks or []))
+    msgs = [{'level': 'error', 'text': error_detail}] if error_detail else []
     return build_status(
-        'ok' if ok else 'error',
-        [],
-        summary_text=ok_text if ok else '오류가 있습니다.',
-        detail_messages=[],
+        'error', msgs,
+        summary_text='오류가 있습니다.',
+        detail_messages=[error_detail] if error_detail else [],
         action_text=action_text,
         row_marks=_row_mark_summary(row_marks or []),
     )
@@ -255,7 +266,6 @@ def present_scan_result(result) -> dict:
     logs = logs_from_result(result)
     events = list(getattr(result, 'events', None) or [])
     row_marks = list(getattr(result, 'row_marks', None) or [])
-    warnings = [l for l in logs if l['level'] in ('warn', 'error')]
 
     items = [
         i for i in [
@@ -270,8 +280,9 @@ def present_scan_result(result) -> dict:
     rbd = getattr(result, 'roster_basis_date', None)
     roster_basis_date = rbd.isoformat() if hasattr(rbd, 'isoformat') else (str(rbd) if rbd is not None else '')
 
+    _first_err = next((l['message'] for l in logs if l['level'] == 'error'), '')
     status = status_from_events(events) if events else _fallback_status(
-        bool(getattr(result, 'ok', False)), '스캔 완료', row_marks=row_marks
+        bool(getattr(result, 'ok', False)), '스캔 완료', row_marks=row_marks, error_detail=_first_err
     )
     if events:
         status['row_marks'] = _row_mark_summary(row_marks)
@@ -292,7 +303,6 @@ def present_scan_result(result) -> dict:
         'has_school_kind_warn': False,
         'grade_year_map': _grade_year_map_from_scan_result(result),
         'items': items,
-        'warnings': warnings,
         'logs': logs,
         'status': status,
         'events': [serialize_event(e) for e in events],
@@ -304,15 +314,15 @@ def present_run_result(result) -> dict:
     logs = logs_from_result(result)
     events = list(getattr(result, 'events', None) or [])
     row_marks = list(getattr(result, 'row_marks', None) or [])
-    warnings = [l for l in logs if l['level'] in ('warn', 'error')]
     audit = getattr(result, 'audit_summary', {}) or {}
     in_cnt = audit.get('input_counts', {})
     action_text = ''
     if any('헤더를 찾을 수 없습니다.' in str(l.get('message', '')) for l in logs):
         action_text = '헤더행과 열 이름을 확인해 주세요.'
 
+    _first_err = next((l['message'] for l in logs if l['level'] == 'error'), '')
     status = status_from_events(events) if events else _fallback_status(
-        bool(getattr(result, 'ok', False)), '완료', action_text=action_text, row_marks=row_marks
+        bool(getattr(result, 'ok', False)), '완료', action_text=action_text, row_marks=row_marks, error_detail=_first_err
     )
 
     return {
@@ -327,7 +337,6 @@ def present_run_result(result) -> dict:
         'transfer_out_auto_skip': int(getattr(result, 'transfer_out_auto_skip', 0)),
         'notice_dup_rows': list(getattr(result, 'notice_dup_rows', []) or []),
         'notice_teacher_dup_rows': list(getattr(result, 'notice_teacher_dup_rows', []) or []),
-        'warnings': warnings,
         'logs': logs,
         'status': status,
         'events': [serialize_event(e) for e in events],
@@ -339,9 +348,9 @@ def present_diff_run_result(result) -> dict:
     logs = logs_from_result(result)
     events = list(getattr(result, 'events', None) or [])
     row_marks = list(getattr(result, 'row_marks', None) or [])
-    warnings = [l for l in logs if l['level'] in ('warn', 'error')]
+    _first_err = next((l['message'] for l in logs if l['level'] == 'error'), '')
     status = status_from_events(events) if events else _fallback_status(
-        bool(getattr(result, 'ok', False)), '완료', row_marks=row_marks
+        bool(getattr(result, 'ok', False)), '완료', row_marks=row_marks, error_detail=_first_err
     )
     return {
         'ok': bool(getattr(result, 'ok', False)),
@@ -358,7 +367,6 @@ def present_diff_run_result(result) -> dict:
         'matched_rows': list(getattr(result, 'matched_rows', []) or []),
         'compare_only_rows': list(getattr(result, 'compare_only_rows', []) or []),
         'unresolved_rows': list(getattr(result, 'unresolved_rows', []) or []),
-        'warnings': warnings,
         'logs': logs,
         'status': status,
         'events': [serialize_event(e) for e in events],

@@ -1713,7 +1713,7 @@ def execute_pipeline(
             teacher_rows = read_teacher_rows(teacher_path, header_row=h, data_start_row=s)
             log(f"[OK] 교사 신청 {len(teacher_rows)}건 로드")
             _teacher_no_id_warn = teacher_rows and not any(
-                r.get("id_request") or r.get("아이디신청") for r in teacher_rows
+                r.get("admin_apply") or r.get("learn_apply") for r in teacher_rows
             )
         else:
             teacher_rows = []; log("[INFO] 교사 파일 없음 → 교사 관련 처리는 스킵")

@@ -56,7 +56,6 @@ def main():
     
     view.resize(WINDOW_W, WINDOW_H)
     view.setMinimumSize(MIN_WINDOW_W, MIN_WINDOW_H)
-    #view.setMaximumSize(WINDOW_W, WINDOW_H)
 
     # ── index.html 로드 ──────────────────────────
     if not HTML_PATH.exists():
@@ -64,14 +63,6 @@ def main():
         sys.exit(1)
 
     view.load(QUrl.fromLocalFile(str(HTML_PATH.resolve())))
-
-    # dev_view = QWebEngineView()
-
-    # view.page().setDevToolsPage(dev_view.page())
-    # dev_view.setWindowTitle("DevTools")
-    # dev_view.resize(1000, 700)
-    # dev_view.show()
-    
     view.show()
 
     sys.exit(app.exec())

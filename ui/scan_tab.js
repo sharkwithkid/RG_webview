@@ -25,7 +25,6 @@ const Scan = (() => {
   let _previewData  = {};       // { kind: { file_name, sheet_name, header_row, data_start_row, columns, rows, issue_rows } }
   let _currentKind  = null;
   let _filterState  = { issue: false, dup: false };
-  let _scanWarnState = _makeEmptyWarnState();
 
   // 구분 → 행 index 고정
   const KIND_ROW = { 신입생: 0, 전입생: 1, 전출생: 2, 교직원: 3 };
@@ -53,7 +52,6 @@ const Scan = (() => {
     App.setFloatingNext(false, null);
     if (typeof Panel !== 'undefined' && Panel.updateRosterMapBtn) Panel.updateRosterMapBtn(null);
     _hideSchoolKindWarn();
-    _scanWarnState = _makeEmptyWarnState();
     _hideScanWarnCard();
     _el('preview-warn').textContent = '';
     _el('preview-file-info').textContent = '';
@@ -209,7 +207,6 @@ const Scan = (() => {
       if (!tr) return;
 
       const cells = tr.querySelectorAll('td');
-      // severity가 error/warn이면 행 강조 — _scanWarnState 불필요
       const kindWarn  = item.severity === 'warn';
       const kindError = item.severity === 'error';
 
@@ -507,12 +504,6 @@ function _renderTable(data) {
     return `<tr class="${finalCls}"><td style="color:#94A3B8;font-size:11px;text-align:center;user-select:none">${structured ? excelRow : ''}</td>${cells}</tr>`;
   }).join('');
 
-  const kindEntry = _scanWarnState.byKind[_currentKind] || { messages: [], issueRows: new Set(), suspectCount: 0, rowIssues: new Map() };
-  kindEntry.rowIssues = rowIssueMap;
-  kindEntry.issueRows = new Set([...rowIssueMap.keys()]);
-  kindEntry.suspectCount = rowIssueMap.size;
-  _scanWarnState.byKind[_currentKind] = kindEntry;
-
   const firstIssueExcelRow = [...rowIssueMap.keys()].sort((a, b) => a - b)[0] ?? null;
   return {
     issueCount: rowIssueMap.size,
@@ -603,10 +594,6 @@ function _refreshWarnUI() {
     });
   }
 
-  function _makeEmptyWarnState() {
-    // 하위 호환용 — _scanWarnState 참조 코드 잔존 시 오류 방지
-    return { hasWarn: false, messages: [], byKind: {} };
-  }
 
 function _normalizeScanCardMessage(msg, mode) {
   let s = String(msg || '').trim();
@@ -837,7 +824,6 @@ function toggleFilter(key) {
     App.setFloatingNext(false, null);
     if (typeof Panel !== 'undefined' && Panel.updateRosterMapBtn) Panel.updateRosterMapBtn(null);
     _hideSchoolKindWarn();
-    _scanWarnState = _makeEmptyWarnState();
     _hideScanWarnCard();
     _el('preview-warn').textContent = '';
     _el('preview-file-info').textContent = '';
@@ -883,7 +869,10 @@ function toggleFilter(key) {
     };
     _lastScanData.can_execute = true;
 
-    _setBadge(_scanWarnState.hasWarn ? 'warn' : 'ok', _scanWarnState.hasWarn ? '경고' : '완료');
+    const _gradeStatus = _lastScanData?.status;
+    const _gradeLevel  = _gradeStatus?.level;
+    const _gradeHasWarn = _gradeLevel === 'warn' || _gradeLevel === 'hold';
+    _setBadge(_gradeHasWarn ? 'warn' : 'ok', _gradeHasWarn ? '경고' : '완료');
     _setMessage('학년도 아이디 규칙이 적용되었습니다. 바로 실행할 수 있습니다.');
     _el('btn-run').disabled = false;
     App.setFloatingNext(true, 'run');
@@ -909,7 +898,6 @@ function toggleFilter(key) {
     _setBadge('idle', '대기');
     _setMessage('');
     _hideSchoolKindWarn();
-    _scanWarnState = _makeEmptyWarnState();
     _hideScanWarnCard();
 
     // 스캔 표 초기화

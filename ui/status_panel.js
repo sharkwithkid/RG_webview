@@ -320,7 +320,7 @@ const Panel = (() => {
       console.error('[HISTORY] 업데이트 실패:', _histRes.error);
       toast('작업 이력 업데이트 오류: ' + (_histRes.error || ''), 'warn');
     } else {
-      console.log('[HISTORY] 반영 완료:', schoolYear, state.selected_school);
+      // 작업 이력 업데이트 완료
     }
 
     // UI 갱신

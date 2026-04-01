@@ -427,10 +427,6 @@ const Diff = (() => {
     if (!viewRows.length) { tbody.innerHTML = '<tr><td colspan="4" class="diff-empty">해당 항목 없음</td></tr>'; return; }
     tbody.innerHTML = viewRows.map(r => `<tr><td>${_escHtml(r.grade)}</td><td>${_escHtml(r.class)}</td><td>${_escHtml(r.name)}</td><td>${_escHtml(r.hold_reason || r.reason || '')}</td></tr>`).join('');
   }
-  function _makeEmptyWarnState() {
-    // 하위 호환용 — 실제 판정은 status 기반
-    return { hasWarn: false, hasError: false, messages: [], errorMessages: [], issueRows: new Set() };
-  }
   function _applyCompareWarnStyles(mode) {
     const row = _el('diff-compare-row');
     const file = _el('diff-compare-file-name');
