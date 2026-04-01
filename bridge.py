@@ -1,19 +1,30 @@
 """
 bridge.py — WebView ↔ Python 연결층
 
-설계 원칙:
-  - 호출/반환/상태 연결만 담당 (UI 로직·비즈니스 로직 금지)
-  - ScanResult/RunResult 원본은 JS로 절대 넘기지 않음 → to_*_payload() 변환 후 전달
-  - JS → Python: 슬롯 호출 + params_json
-  - Python → JS: pyqtSignal emit (QWebChannel)
-  - 모든 날짜는 YYYY-MM-DD 문자열로 통일
+역할:
+  JS(QWebChannel) 요청을 받아 engine/core를 호출하고 결과를 Signal로 돌려준다.
+  비즈니스 로직 없음. 입력 검증 → 엔진 호출 → presenter 변환 → emit 이 전부.
 
-엔진 시그니처 주의사항 (실제 코드 기준):
-  - load_all_school_names(roster_xlsx, col_map)  ← work_root 아님
-  - get_school_domain(roster_xlsx, school_name, col_map)
-  - get_project_dirs(work_root)  ← school_name 없음
-  - run_main_engine(scan, work_date, school_start_date, ...)  ← ScanResult 객체 직접 받음
-  - run_diff_engine(work_root, school_name, ...)  ← 내부에서 scan 재실행
+슬롯 구성 (호출 순서 기준):
+  A. 조회  — inspectWorkRoot, ensureWorkRootScaffold, loadSchoolNames,
+              getSchoolDomain, getProjectDirs, loadNoticeTemplates,
+              loadAppConfig, loadWorkHistory
+  B. 저장  — saveAppConfig, saveWorkHistory, writeWorkResult, writeEmailSent
+  C. 비동기 — startScanMain / startRunMain
+              startScanDiff / startRunDiff
+              startPreview
+              (완료·실패는 pyqtSignal emit)
+  D. OS연동 — pickWorkFolder, pickRosterLogFile, readXlsxMeta,
+              openFile, openFolder, copyToClipboard
+
+응답 포맷:
+  동기  성공: { ok: true,  data: {...} }
+  동기  실패: { ok: false, error: "메시지" }
+  비동기 성공: { ok: true,  task: "scan_main", data: {...} }
+  비동기 실패: { ok: false, task: "scan_main", error: "메시지", traceback: "..." }
+
+날짜: 모든 날짜는 YYYY-MM-DD 문자열.
+결과: ScanResult/PipelineResult 원본은 JS 미노출 — presenter 변환 후 전달.
 """
 
 from __future__ import annotations
@@ -62,17 +73,24 @@ from core.presenter import (
 def ok_response(data: dict) -> str:
     return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
 
-def error_response(message: str) -> str:
-    return json.dumps({"ok": False, "error": message}, ensure_ascii=False)
+def error_response(message: str, error_code: str = "") -> str:
+    """동기 실패 응답. error_code는 선택사항 (이벤트 추적용)."""
+    payload = {"ok": False, "error": message}
+    if error_code:
+        payload["error_code"] = error_code
+    return json.dumps(payload, ensure_ascii=False)
 
 def async_ok(task: str, data: dict) -> str:
     return json.dumps({"ok": True, "task": task, "data": data}, ensure_ascii=False)
 
-def async_error(task: str, message: str, traceback: str = "") -> str:
-    return json.dumps(
-        {"ok": False, "task": task, "error": message, "traceback": traceback},
-        ensure_ascii=False,
-    )
+def async_error(task: str, message: str, traceback: str = "", error_code: str = "") -> str:
+    """비동기 실패 응답. error_code는 이벤트 추적용 (예: "SCAN_FAILED", "DATE_INVALID")."""
+    payload = {"ok": False, "task": task, "error": message}
+    if traceback:
+        payload["traceback"] = traceback
+    if error_code:
+        payload["error_code"] = error_code
+    return json.dumps(payload, ensure_ascii=False)
 
 
 
@@ -80,9 +98,9 @@ def _validate_date(date_str: str) -> bool:
     return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str or ""))
 
 
-# ──────────────────────────────────────────────
-# Workers
-# ──────────────────────────────────────────────
+# ══════════════════════════════════════════════
+# Workers  (비동기 작업 단위 — QThread 기반)
+# ══════════════════════════════════════════════
 
 class ScanWorker(QObject):
     finished = pyqtSignal(str)
@@ -319,9 +337,10 @@ class PreviewWorker(QObject):
             }, ensure_ascii=False))
 
 
-# ──────────────────────────────────────────────
-# Bridge
-# ──────────────────────────────────────────────
+# ══════════════════════════════════════════════
+# Bridge  (QWebChannel 등록 객체)
+# 슬롯 순서: A.조회 → B.저장 → C.비동기 → D.OS연동
+# ══════════════════════════════════════════════
 
 class Bridge(QObject):
     """
@@ -377,7 +396,7 @@ class Bridge(QObject):
         thread.start()
 
     # ──────────────────────────────────────────
-    # A. 조회 계열 (동기)
+    # A. 조회 계열 (동기, read-only, 부작용 없음)
     # ──────────────────────────────────────────
 
     @pyqtSlot(str, result=str)
@@ -497,7 +516,7 @@ class Bridge(QObject):
             return error_response(str(e))
 
     # ──────────────────────────────────────────
-    # B. 저장 계열 (동기)
+    # B. 저장 계열 (동기, write)
     # ──────────────────────────────────────────
 
     @pyqtSlot(str, result=str)
@@ -579,6 +598,7 @@ class Bridge(QObject):
 
     # ──────────────────────────────────────────
     # C. 비동기 시작 계열
+    # 시작: 즉시 ok_response 반환 → 완료/실패는 Signal emit
     # ──────────────────────────────────────────
 
     @pyqtSlot(str, result=str)
@@ -622,13 +642,11 @@ class Bridge(QObject):
         self._is_scanning = False
         if self._scan_worker is not None:
             self._last_scan_result = getattr(self._scan_worker, "scan_result", None)
-        self._scan_worker = None; self._scan_thread = None
         self.scanFinished.emit(payload)
 
     def _on_scan_failed(self, payload: str):
         self._is_scanning = False
         self._last_scan_result = None
-        self._scan_worker = None; self._scan_thread = None
         self.scanFailed.emit(payload)
 
     # ── Run ────────────────────────────────────
@@ -678,12 +696,10 @@ class Bridge(QObject):
 
     def _on_run_finished(self, payload: str):
         self._is_running = False
-        self._run_worker = None; self._run_thread = None
         self.runFinished.emit(payload)
 
     def _on_run_failed(self, payload: str):
         self._is_running = False
-        self._run_worker = None; self._run_thread = None
         self.runFailed.emit(payload)
 
     # ── Diff Scan ──────────────────────────────
@@ -724,12 +740,10 @@ class Bridge(QObject):
 
     def _on_diff_scan_finished(self, payload: str):
         self._is_diff_scanning = False
-        self._diff_scan_worker = None; self._diff_scan_thread = None
         self.diffScanFinished.emit(payload)
 
     def _on_diff_scan_failed(self, payload: str):
         self._is_diff_scanning = False
-        self._diff_scan_worker = None; self._diff_scan_thread = None
         self.diffScanFailed.emit(payload)
 
     # ── Diff Run ───────────────────────────────
@@ -771,12 +785,10 @@ class Bridge(QObject):
 
     def _on_diff_run_finished(self, payload: str):
         self._is_diff_running = False
-        self._diff_run_worker = None; self._diff_run_thread = None
         self.diffRunFinished.emit(payload)
 
     def _on_diff_run_failed(self, payload: str):
         self._is_diff_running = False
-        self._diff_run_worker = None; self._diff_run_thread = None
         self.diffRunFailed.emit(payload)
 
     # ── Preview ────────────────────────────────
@@ -814,16 +826,14 @@ class Bridge(QObject):
 
     def _on_preview_loaded(self, payload: str):
         self._is_previewing = False
-        self._preview_worker = None; self._preview_thread = None
         self.previewLoaded.emit(payload)
 
     def _on_preview_failed(self, payload: str):
         self._is_previewing = False
-        self._preview_worker = None; self._preview_thread = None
         self.previewFailed.emit(payload)
 
     # ──────────────────────────────────────────
-    # D. OS 연동 계열
+    # D. OS 연동 계열 (파일 선택·열기·클립보드)
     # ──────────────────────────────────────────
 
     @pyqtSlot(result=str)

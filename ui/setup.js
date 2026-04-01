@@ -174,7 +174,19 @@ const Setup = (() => {
   async function loadDefaults() {
     const res = JSON.parse(await bridge.loadAppConfig());
     if (!res.ok) { _showBanner('err', '불러오기 실패: ' + res.error); return; }
-    init(res.data.config || {});
+    const cfg = res.data.config || {};
+    init(cfg);
+    // state 동기화 (init은 DOM만 변경하므로 별도 반영 필요)
+    AppState.applySetup({
+      work_root:          cfg.work_root          || '',
+      roster_log_path:    cfg.roster_log_path    || '',
+      worker_name:        cfg.worker_name        || '',
+      school_start_date:  cfg.school_start_date  || '',
+      work_date:          state.work_date,        // 작업일은 오늘 유지
+    });
+    state.roster_col_map = cfg.roster_col_map || {};
+    // DatePicker 버튼 텍스트 갱신
+    DatePicker._syncAll();
     _showBanner('ok', '기본 설정을 불러왔습니다.');
     _autoClear();
   }

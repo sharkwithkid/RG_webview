@@ -192,13 +192,13 @@
     "master_recorded": false
   },
   "부산대저초": {
-    "last_date": "2026-03-26",
+    "last_date": "2026-04-01",
     "worker": "임지윤",
     "counts": {
       "신입생": 4,
       "전입생": 1,
       "전출생": 2,
-      "교직원": 1
+      "교직원": 9
     },
     "run_completed": true,
     "master_recorded": false
@@ -324,7 +324,7 @@
     "master_recorded": false
   },
   "용인신월초": {
-    "last_date": "2026-03-31",
+    "last_date": "2026-04-01",
     "worker": "임지윤",
     "counts": {
       "신입생": 81,
@@ -463,6 +463,42 @@
       "전입생": 0,
       "전출생": 0,
       "교직원": 5
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "김해우암초": {
+    "last_date": "2026-04-01",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 37,
+      "전입생": 4,
+      "전출생": 0,
+      "교직원": 7
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "남양주풍양초": {
+    "last_date": "2026-04-01",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 35,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남샛별중": {
+    "last_date": "2026-04-01",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 161,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 0
     },
     "run_completed": true,
     "master_recorded": false

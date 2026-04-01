@@ -30,12 +30,12 @@
 
 /* ── 토큰 ─────────────────────────────────────────────── */
 :root {
-  /* ── 베이스 ─ 순수 중성 회색 ── */
-  --bg:            #F4F4F4;
+  /* ── 베이스 ─ 중성 (Oculis 레퍼런스) ── */
+  --bg:            #F5F4F2;
   --surface:       #FFFFFF;
-  --surface-2:     #EFEFEF;
-  --surface-hover: #E8E8E8;
-  --border:        #E0E0E0;
+  --surface-2:     #F0EFED;
+  --surface-hover: #E8E7E5;
+  --border:        #E2E0DC;
   --border-focus:  #5C5C5C;
 
   /* ── 텍스트 ─ 중성 다크 ── */
@@ -88,32 +88,30 @@ button {
 button:disabled { opacity: .35; cursor: default; }
 
 .btn-primary {
-  background: var(--accent); color: #fff;
-  padding: 0 16px; height: 32px; font-size: 12px; font-weight: 600;
-  border-radius: 16px;
+  background: var(--primary); color: #fff;
+  padding: 0 12px; height: 28px; font-size: 12px; font-weight: 600;
   letter-spacing: -.01em;
 }
-.btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-h); }
 .btn-ghost {
-  background: transparent;
-  border: 1px solid var(--text-2);
-  color: var(--text-2); padding: 0 14px; height: 32px; font-size: 12px;
-  border-radius: 16px;
+  background: var(--surface-2);
+  border: none;
+  color: var(--text-2); padding: 0 10px; height: 28px; font-size: 12px;
 }
-.btn-ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--text); color: var(--text); }
-.btn-ghost.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 0.5px rgba(0,0,0,.05); }
+.btn-ghost:hover:not(:disabled) { background: var(--surface-hover); }
+.btn-ghost.active { background: var(--accent-bg); color: var(--accent); }
 
 input[type="text"], input[type="date"], textarea, select {
   font-family: inherit; font-size: 13px; color: var(--text);
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--surface-2); border: 1px solid var(--border);
   border-radius: var(--radius-sm); outline: none;
   transition: border-color .12s, box-shadow .12s;
 }
 input[type="text"]:focus, input[type="date"]:focus,
 textarea:focus, select:focus {
-  border-color: var(--accent);
-  background: var(--surface);
-  box-shadow: 0 0 0 3px rgba(234,88,12,.08);
+  border-color: var(--border-focus);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(61,58,54,.07);
 }
 input::placeholder, textarea::placeholder { color: var(--muted-2); }
 input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
@@ -121,12 +119,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .card {
   background: var(--surface);
   border: none;
-  border-radius: 10px;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  border-radius: 0;
 }
 
 .muted { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.card-title { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; }
+.card-title { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.4; }
 .card-title + .muted { margin-top: 2px; }
 
 .status-badge {
@@ -161,13 +158,13 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
   background: #fff;
 }
 .setup-inner { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 28px; }
-.page-title   { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -.02em; }
-.page-subtitle{ font-size: 12px; color: var(--muted); margin-top: 3px; }
+.page-title   { font-size: 18px; font-weight: 600; color: var(--text); letter-spacing: -.02em; }
+.page-subtitle{ font-size: 13px; color: var(--muted); margin-top: 3px; }
 .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .stat-card {
   padding: 14px 16px; min-height: 72px;
   display: flex; flex-direction: column; gap: 4px;
-  border: none; border-radius: var(--radius); box-shadow: 0 1px 3px rgba(0,0,0,.07);
+  border: 1px solid var(--border); border-radius: var(--radius);
 }
 .stat-card .label { font-size: 11px; color: var(--muted); font-weight: 500; }
 .stat-card .value { font-size: 20px; font-weight: 600; color: var(--text); margin-top: auto; letter-spacing: -.03em; }
@@ -250,7 +247,7 @@ input[type="date"] { display: none; }
 
 .setup-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .sub-btns { display: flex; gap: 8px; }
-.btn-start { height: 34px; padding: 0 28px; font-size: 13px; border-radius: 16px; }
+.btn-start { height: 40px; padding: 0 32px; font-size: 13px; border-radius: var(--radius); }
 
 .file-badge {
   font-size: 10px; font-weight: 600; padding: 2px 7px;
@@ -273,21 +270,20 @@ input[type="date"] { display: none; }
 
 /* ── 헤더 ─────────────────────────────────────────────── */
 .app-header {
-  background: var(--surface);
+  background: #fff;
   border-bottom: 1px solid var(--border);
-  box-shadow: none;
-  padding: 0 20px; height: 52px;
+  padding: 0 20px; height: 48px;
   display: flex; align-items: center; gap: 14px; flex-shrink: 0;
 }
 .app-header .app-name { font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: -.02em; }
 .app-header .work-date { font-size: 11px; color: var(--muted); margin-top: 1px; }
-.mode-btns { display: flex; gap: 0; margin-left: auto; background: var(--surface-2); border-radius: 999px; padding: 3px; }
+.mode-btns { display: flex; gap: 1px; margin-left: auto; background: var(--surface-2); border-radius: 7px; padding: 3px; }
 .btn-mode {
-  height: 26px; padding: 0 14px; background: transparent;
-  border-radius: 999px; color: var(--muted); font-weight: 500; font-size: 12px;
-  transition: background .2s, color .2s;
+  height: 26px; padding: 0 12px; background: transparent;
+  border-radius: 5px; color: var(--muted); font-weight: 500; font-size: 12px;
+  transition: background .1s, color .1s;
 }
-.btn-mode.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.btn-mode.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(28,25,23,.10); }
 
 /* ── 본문 레이아웃 ─────────────────────────────────────── */
 .main-body {
@@ -298,35 +294,33 @@ input[type="date"] { display: none; }
 .step-bar {
   width: 160px; flex-shrink: 0;
   background: var(--surface); border-right: 1px solid var(--border);
-  box-shadow: none;
-  border-radius: 0;
   display: flex; flex-direction: column;
   padding: 16px 8px; gap: 1px; overflow-y: auto;
 }
 .step-bar-label {
-  font-size: 10px; font-weight: 500; color: var(--muted-2);
-  text-transform: uppercase; letter-spacing: .06em;
-  padding: 0 10px; margin-bottom: 4px;
+  font-size: 10px; font-weight: 600; color: var(--muted-2);
+  text-transform: uppercase; letter-spacing: .08em;
+  padding: 0 10px; margin-bottom: 8px;
 }
 .step-sep { display: none; }
 .step-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 0 10px; height: 36px; border-radius: var(--radius-sm);
-  cursor: pointer; transition: background .15s;
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 10px; height: 34px; border-radius: var(--radius-sm);
+  cursor: pointer; transition: background .1s;
 }
-.step-item:hover { background: rgba(0,0,0,.04); }
-.step-item.active { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 0.5px rgba(0,0,0,.05); }
+.step-item:hover { background: var(--surface-2); }
+.step-item.active { background: var(--surface-2); }
 .step-badge {
-  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 500;
-  background: var(--surface-2); color: var(--muted);
-  border: none;
+  font-size: 10px; font-weight: 700;
+  background: transparent; color: var(--muted-2);
+  border: 1.5px solid var(--border);
 }
 .step-badge.done    { background: var(--ok-bg); color: var(--ok-tx); border-color: var(--ok-bg); }
-.step-badge.active  { background: var(--accent); color: #fff; border-color: var(--accent); width: 18px; height: 18px; }
+.step-badge.active  { background: var(--accent); color: #fff; border-color: var(--accent); }
 .step-badge.warn    { background: var(--warn-bg); color: var(--warn-tx); border-color: var(--warn-bg); }
-.step-label { font-size: 12.5px; font-weight: 400; color: var(--muted); }
+.step-label { font-size: 13px; font-weight: 400; color: var(--muted); }
 .step-item.active .step-label { color: var(--text); font-weight: 500; }
 .step-item:has(.step-badge.done) .step-label { color: var(--text); font-weight: 500; }
 
@@ -336,8 +330,6 @@ input[type="date"] { display: none; }
   overflow-y: auto; overflow-x: hidden;
   border-right: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: none;
-  border-radius: 0;
   display: flex; flex-direction: column;
   padding: 0;
 }
@@ -346,11 +338,13 @@ input[type="date"] { display: none; }
 /* 사이드바 섹션 */
 .sb-section {
   padding: 14px 16px;
-  display: flex; flex-direction: column; gap: 6px;
+  border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 8px;
 }
+.sb-section:last-child { border-bottom: none; }
 .sb-label {
-  font-size: 11px; font-weight: 500; color: var(--muted);
-  padding: 0 0 4px 0; letter-spacing: .03em; text-transform: uppercase;
+  font-size: 10px; font-weight: 600; color: var(--muted-2);
+  text-transform: uppercase; letter-spacing: .08em;
 }
 
 /* 사이드바 내 기존 UI 조정 */
@@ -414,8 +408,7 @@ input[type="date"] { display: none; }
   border-bottom: 1px solid var(--border);
 }
 .school-item:last-child { border-bottom: none; }
-.school-item:hover { background: rgba(0,0,0,.04); }
-.school-item.hl { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 0.5px rgba(0,0,0,.05); }
+.school-item:hover, .school-item.hl { background: var(--surface-2); }
 
 .current-school-name { font-size: 14px; font-weight: 600; color: var(--text); word-break: keep-all; line-height: 1.3; }
 
@@ -472,8 +465,9 @@ input[type="date"] { display: none; }
   justify-content: space-between;
   min-width: 0;
   padding: 3px 0;
+  border-bottom: 1px solid var(--border);
 }
-
+.grade-row-item:last-of-type { border-bottom: none; }
 
 .grade-row-item label {
   font-size: 12px;
@@ -544,27 +538,29 @@ button:not(:disabled), a, [data-action]:not(:disabled),
   transition: background .15s, transform .15s, opacity .2s;
   opacity: .2; cursor: default; pointer-events: none;
 }
-.floating-next { right: 24px; background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(234,88,12,.30); }
+.floating-next { right: 24px; background: var(--primary); color: #fff; box-shadow: 0 4px 12px rgba(28,25,23,.18); }
 .floating-back { right: 76px; background: var(--surface-2); color: var(--text-2); box-shadow: 0 2px 8px rgba(0,0,0,.1); }
 .floating-next.active { opacity: 1; cursor: pointer; pointer-events: auto; }
 .floating-back.active { opacity: 1; cursor: pointer; pointer-events: auto; }
-.floating-next.active:hover { background: var(--accent-h); transform: scale(1.06); }
+.floating-next.active:hover { background: var(--primary-h); transform: scale(1.06); }
 .floating-back.active:hover { background: var(--surface-hover); transform: scale(1.08); }
 
 /* ── 콘텐츠 영역 ─────────────────────────────────────── */
 .content-area {
   flex: 1; overflow-y: auto;
   padding: 0; display: flex; flex-direction: column; gap: 0;
-  background: var(--surface);
+  background: #fff;
 }
 
 /* ── 탭 패널 ─────────────────────────────────────────── */
 .tab-panel { display: none; flex-direction: column; gap: 0; }
 .tab-panel.active { display: flex; }
 
+/* 탭 안에서 카드 구분은 border-bottom으로 */
 .tab-panel > .card {
+  border-bottom: 1px solid var(--border);
   padding: 18px 20px;
-  border-radius: 10px;
+  border-radius: 0;
 }
 
 /* 뷰어 카드는 패딩 없이 내부에서 처리 */
@@ -578,12 +574,9 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .scan-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .scan-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .scan-table th, .scan-table td {
-  border-bottom: 1px solid var(--border); padding: 9px 12px; text-align: left;
+  border-bottom: 1px solid var(--border); padding: 7px 12px; text-align: left;
 }
-.scan-table tbody tr { border-bottom: none; }
-.scan-table tbody tr:last-child { border-bottom: none; }
-.scan-table tbody tr:hover td { background: var(--surface-2); }
-.scan-table th { background: transparent; font-weight: 500; color: var(--muted); border-top: none; font-size: 11px; letter-spacing: .02em; }
+.scan-table th { background: var(--surface-2); font-weight: 600; color: var(--text-2); border-top: 1px solid var(--border); }
 .scan-table td.kind { color: var(--text); font-weight: 600; }
 .scan-table td.file-link { color: var(--accent); cursor: pointer; text-decoration: underline; }
 .scan-table td.file-link:hover { color: var(--accent-h); }
@@ -612,8 +605,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
   display: none;
   padding: 10px 14px;
   background: #FFFBEB;
-  border: 1px solid #FDE68A;
-  border-radius: var(--radius-sm);
+  border-left: 3px solid #B45309;
   font-size: 12px;
   font-weight: 600;
   color: #92400E;
@@ -622,8 +614,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
 .inline-warn-card.error {
   background: #FEF2F2;
-  border: 1px solid #FECDD3;
-  border-radius: var(--radius-sm);
+  border-left: 3px solid #DC2626;
   color: #B91C1C;
 }
 .scan-table td.file-link.file-link-error { color: #DC2626; font-weight: 700; }
@@ -636,13 +627,13 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .preview-warn-box .pw-meta { color:var(--muted); margin-top:2px; }
 
 /* ── 뷰어 ────────────────────────────────────────────── */
-.viewer-header { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-bottom: none; }
+.viewer-header { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
 .viewer-body { padding: 12px 20px 16px; display: flex; flex-direction: column; gap: 8px; }
 .filter-row { display: flex; gap: 8px; align-items: center; }
 .filter-row input { flex: 1; height: 30px; padding: 0 10px; }
 .preview-table-wrap { overflow: auto; max-height: 600px; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
-.data-table th, .data-table td { border-bottom: 1px solid var(--surface-2); padding: 6px 12px; text-align: left; }
+.data-table th, .data-table td { border-bottom: 1px solid var(--border); padding: 6px 12px; text-align: left; }
 .data-table th { background: var(--surface-2); font-weight: 600; color: var(--text-2); position: sticky; top: 0; z-index: 2; }
 .data-table tr.row-hold td { background: #FFF1F2; }
 .data-table tr.row-warn td { background: #fff7d8; }
@@ -658,8 +649,9 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .run-summary-grid .val { font-weight: 600; color: var(--text); }
 .output-file-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 0;
-  font-size: 12px;
+  border-bottom: 1px solid var(--border); font-size: 12px;
 }
+.output-file-item:last-child { border-bottom: none; }
 .output-file-name { flex: 1; color: var(--accent); cursor: pointer; }
 .output-file-name:hover { text-decoration: underline; }
 .sheet-tabs { display: flex; gap: 1px; flex-wrap: wrap; margin-bottom: 10px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 3px; width: fit-content; }
@@ -673,10 +665,10 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 /* ── 안내문탭 ─────────────────────────────────────────── */
 .notice-body { display: flex; gap: 0; flex: 1; min-height: 0; }
 .notice-list-wrap { width: 160px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); }
-.notice-list-item { padding: 9px 14px; font-size: 12px; cursor: pointer; border-bottom: none; color: var(--text-2); border-radius: var(--radius-sm); margin: 2px 6px; }
+.notice-list-item { padding: 9px 14px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); color: var(--text-2); }
 .notice-list-item:last-child { border-bottom: none; }
 .notice-list-item:hover { background: var(--surface-2); }
-.notice-list-item.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 0.5px rgba(0,0,0,.05); }
+.notice-list-item.active { background: var(--surface-2); color: var(--text); font-weight: 500; }
 .notice-right { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; padding: 14px; }
 .notice-text { flex: 1; resize: none; padding: 10px 12px; font-size: 13px; min-height: 320px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 
@@ -777,7 +769,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 }
 .confirm-modal-option:hover { background: var(--surface-hover); }
 .confirm-modal-option input[type="radio"] { margin-top: 1px; accent-color: var(--accent); flex-shrink: 0; }
-.confirm-modal-option.selected { background: var(--surface); border-color: var(--border); box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 0.5px rgba(0,0,0,.05); }
+.confirm-modal-option.selected { background: var(--accent-bg); border-color: var(--accent); }
 .confirm-modal-option-label { font-size: 13px; font-weight: 500; color: var(--text); }
 .confirm-modal-option-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .confirm-modal-footer { display: flex; justify-content: flex-end; gap: 6px; }
@@ -1069,11 +1061,11 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="grade-map-body open" id="grade-map-body">
             <span class="muted" style="font-size:11px">스캔 후 자동 감지 · 직접 수정 가능</span>
             <div id="grade-rows"></div>
-            <div style="display:flex;gap:6px;margin-top:4px">
-              <button class="btn-primary" style="flex:1;height:28px;font-size:12px" data-action="apply-grade">적용</button>
-              <button class="btn-ghost" id="btn-open-roster-map" disabled
-                      style="flex:1;height:28px;font-size:12px" data-action="open-roster-map">명부 열기</button>
-            </div>
+            <button class="btn-primary" style="width:100%;height:28px;font-size:12px;margin-top:4px" data-action="apply-grade">적용</button>
+            <button class="btn-ghost" id="btn-open-roster-map" disabled
+                    style="width:100%;height:28px;font-size:12px;margin-top:2px" data-action="open-roster-map">
+              학생명부 열기
+            </button>
             <span class="muted" id="roster-map-hint" style="font-size:11px;display:none">학생명부 파일이 없습니다.</span>
           </div>
           <button id="btn-grade-toggle" data-action="toggle-grade" style="display:none"></button>

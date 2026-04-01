@@ -102,17 +102,10 @@ const Scan = (() => {
       _setMessage('');
       _setSchoolKindWarn(false);
       App.setStepState(2, 'warn');
-      const blockingEvt = events.find(e => e.blocking && e.level === 'error');
-      if (blockingEvt) {
-        toast(blockingEvt.message, 'err', 6000);
-        _hideScanWarnCard();
+      const errMsgsAll = events.filter(e => e.level === 'error').map(e => e.message);
+      if (errMsgsAll.length) {
+        _showScanWarnCard(errMsgsAll, 'error', status);
       } else {
-        const nonBlockingMsgs = events
-          .filter(e => !e.blocking && e.level === 'error')
-          .map(e => e.message);
-        if (nonBlockingMsgs.length) {
-          _showScanWarnCard(nonBlockingMsgs, 'error', status);
-        } else {
           const statusErrs = UICommon.getStatusMessages(status, ['error']);
           if (statusErrs.length) _showScanWarnCard(statusErrs, 'error', status);
           else _showScanWarnCard(['예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.'], 'error', status);
@@ -134,18 +127,12 @@ const Scan = (() => {
     const events = data.events || [];
     StatusUI.renderBadge('scan-status-badge', status?.badge, '완료');
     _setMessage('');
-    const blockingEvt2 = events.find(e => e.blocking && e.level === 'error');
-    if (blockingEvt2) {
-      // blocking → 토스트만
-      toast(blockingEvt2.message, 'err', 6000);
-      _hideScanWarnCard();
-    } else {
-      const errMsgs  = events.filter(e => e.level === 'error').map(e => e.message);
-      const holdMsgs = events.filter(e => e.level === 'hold').map(e => e.message);
-      const warnMsgs = events.filter(e => e.level === 'warn').map(e => e.message);
-      if (errMsgs.length)       _showScanWarnCard(errMsgs,  'error', status);
-      else if (holdMsgs.length) _showScanWarnCard(holdMsgs, 'warn',  status);
-      else if (warnMsgs.length) _showScanWarnCard(warnMsgs, 'warn',  status);
+    const errMsgs  = events.filter(e => e.level === 'error').map(e => e.message);
+    const holdMsgs = events.filter(e => e.level === 'hold').map(e => e.message);
+    const warnMsgs = events.filter(e => e.level === 'warn').map(e => e.message);
+    if (errMsgs.length)       _showScanWarnCard(errMsgs,  'error', status);
+    else if (holdMsgs.length) _showScanWarnCard(holdMsgs, 'warn',  status);
+    else if (warnMsgs.length) _showScanWarnCard(warnMsgs, 'warn',  status);
       else                      _hideScanWarnCard();
     }
 

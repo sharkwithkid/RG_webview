@@ -171,14 +171,14 @@ def find_single_input_file(input_dir: Path, keywords: Sequence[str], *, file_key
     if len(candidates) == 0 and xls_candidates:
         names = ", ".join(p.name for p in xls_candidates)
         raise ValueError(
-            f"[ERROR] .xls 파일이 감지되었습니다: {names}\n"
+            f"__XLS_FORMAT__ .xls 파일이 감지되었습니다: {names}\n"
             ".xls 형식은 지원하지 않습니다. Excel에서 .xlsx로 저장 후 다시 시도해 주세요."
         )
 
     if len(candidates) == 0:
         return None
     if len(candidates) > 1:
-        raise ValueError(f"[ERROR] 입력 파일이 2개 이상 감지되었습니다: {[c.name for c in candidates]}")
+        raise ValueError(f"__DUPLICATE__ 입력 파일이 2개 이상 감지되었습니다: {[c.name for c in candidates]}")
     return candidates[0]
 
 
@@ -1122,26 +1122,30 @@ def scan_pipeline(
         try:
             freshmen_file = find_single_input_file(input_dir, FRESHMEN_KEYWORDS, file_key='freshmen', kind_label='신입생')
         except ValueError as _e:
-            if ".xls" in str(_e): sr.events.append(input_xls_format([]))
-            elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("freshmen", "신입생"))
+            _es = str(_e)
+            if "__DUPLICATE__" in _es: sr.events.append(duplicate_input_file("freshmen", "신입생"))
+            elif "__XLS_FORMAT__" in _es: sr.events.append(input_xls_format([]))
             raise
         try:
             teacher_file = find_single_input_file(input_dir, TEACHER_KEYWORDS, file_key='teachers', kind_label='교직원')
         except ValueError as _e:
-            if ".xls" in str(_e): sr.events.append(input_xls_format([]))
-            elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("teachers", "교직원"))
+            _es = str(_e)
+            if "__DUPLICATE__" in _es: sr.events.append(duplicate_input_file("teachers", "교직원"))
+            elif "__XLS_FORMAT__" in _es: sr.events.append(input_xls_format([]))
             raise
         try:
             transfer_file = find_single_input_file(input_dir, TRANSFER_KEYWORDS, file_key='transfer_in', kind_label='전입생')
         except ValueError as _e:
-            if ".xls" in str(_e): sr.events.append(input_xls_format([]))
-            elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("transfer_in", "전입생"))
+            _es = str(_e)
+            if "__DUPLICATE__" in _es: sr.events.append(duplicate_input_file("transfer_in", "전입생"))
+            elif "__XLS_FORMAT__" in _es: sr.events.append(input_xls_format([]))
             raise
         try:
             withdraw_file = find_single_input_file(input_dir, WITHDRAW_KEYWORDS, file_key='transfer_out', kind_label='전출생')
         except ValueError as _e:
-            if ".xls" in str(_e): sr.events.append(input_xls_format([]))
-            elif "2개 이상" in str(_e): sr.events.append(duplicate_input_file("transfer_out", "전출생"))
+            _es = str(_e)
+            if "__DUPLICATE__" in _es: sr.events.append(duplicate_input_file("transfer_out", "전출생"))
+            elif "__XLS_FORMAT__" in _es: sr.events.append(input_xls_format([]))
             raise
 
         warn_if_multi_sheet(freshmen_file, logs, "신입생")

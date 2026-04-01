@@ -84,7 +84,6 @@ const Run = (() => {
       _renderRunStatusCard(status, data);
       App.setStepState(3, 'warn');
       const primaryErr = UICommon.primaryMessage({ status, events: data.events || [], prefer: ['error'] });
-      toast(primaryErr || '작업 실행 중 오류 — 실행 로그 보기에서 확인하세요.', 'err');
       return;
     }
 
@@ -219,7 +218,6 @@ const Run = (() => {
       detail_messages: [String(error?.message || error || '예기치 못한 오류가 발생했습니다.')],
     });
     App.setStepState(3, 'warn');
-    toast('실행 오류 — 실행 로그 보기에서 자세한 내용을 확인하세요.', 'err');
   }
 
 

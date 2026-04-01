@@ -196,15 +196,11 @@ const Diff = (() => {
       const blockingEvt = events.find(e => e.blocking && e.level === 'error');
       _setRunBadge('err', '오류');
       _setRunInfo('');
-      if (blockingEvt) {
-        toast(blockingEvt.message, 'err', 6000);
-        const nonBlocking = UICommon.subtractMessage(UICommon.getStatusMessages(status, ['error']), blockingEvt.message);
-        if (nonBlocking.length) _showWarnCard('diff-run-warn-card', nonBlocking, 'error', status);
-        else _hideWarnCard('diff-run-warn-card');
-      } else {
-        const errMsg = (status?.messages || []).find(m => m.level === 'error')?.text || '실행 중 오류가 발생했습니다.';
-        _showWarnCard('diff-run-warn-card', [errMsg], 'error', status);
-      }
+      const errMsgs = UICommon.getStatusMessages(status, ['error']);
+      const allErrMsgs = errMsgs.length ? errMsgs
+        : events.filter(e => e.level === 'error').map(e => e.message);
+      if (allErrMsgs.length) _showWarnCard('diff-run-warn-card', allErrMsgs, 'error', status);
+      else _hideWarnCard('diff-run-warn-card');
       return;
     }
     const rosterOnlyCount = Number(data.roster_only_count || 0);
