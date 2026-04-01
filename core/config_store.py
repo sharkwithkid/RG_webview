@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 import json
+import os
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = BASE_DIR / 'app_config.json'
+# ── 경로 기준 ────────────────────────────────────────────────────────
+# PyInstaller exe 실행 시 webview_app.py가 RG_APP_DIR 환경 변수를 설정함.
+# 일반 실행 시에는 이 파일 기준 상위 폴더(앱 루트)를 사용.
+def _app_dir() -> Path:
+    env = os.environ.get("RG_APP_DIR")
+    if env:
+        return Path(env)
+    return Path(__file__).resolve().parent.parent
+
+BASE_DIR    = _app_dir()
+CONFIG_PATH = BASE_DIR / "app_config.json"
 
 DEFAULT_APP_CONFIG: dict[str, Any] = {
     'work_root': '',

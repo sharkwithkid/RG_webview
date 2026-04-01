@@ -1564,9 +1564,29 @@ def scan_work_root(work_root: Path) -> Dict[str, Any]:
       errors_format     — templates 관련 오류 목록
       register_template — 등록 템플릿 경로 (없으면 None)
       notice_template   — 안내 템플릿 경로 (없으면 None)
+      scaffolded        — 이번 호출에서 새로 생성된 폴더 목록
     """
     work_root = work_root.resolve()
     dirs = get_project_dirs(work_root)
+
+    # ── 폴더 자동 생성 ────────────────────────────────────────────────
+    # 작업 폴더가 지정되면 resources 하위 구조를 자동으로 만들어 둔다.
+    # 이미 있는 폴더는 건드리지 않음 (exist_ok=True).
+    scaffolded: List[str] = []
+    for key, label in [
+        ("RESOURCES_ROOT", "resources"),
+        ("TEMPLATES",      "resources/templates"),
+        ("NOTICES",        "resources/notices"),
+    ]:
+        folder = dirs[key]
+        if not folder.exists():
+            try:
+                folder.mkdir(parents=True, exist_ok=True)
+                scaffolded.append(label)
+            except Exception:
+                pass  # 생성 실패해도 아래 오류 체크에서 처리됨
+    # ──────────────────────────────────────────────────────────────────
+
     errors: List[str] = []
 
     res_root = dirs["RESOURCES_ROOT"].resolve()
@@ -1612,4 +1632,5 @@ def scan_work_root(work_root: Path) -> Dict[str, Any]:
         "notice_titles": notice_titles,
         "format_ok": format_ok, "errors_format": errors_format,
         "register_template": register_template, "notice_template": notice_template,
+        "scaffolded": scaffolded,
     }

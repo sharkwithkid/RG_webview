@@ -1942,7 +1942,9 @@ def execute_pipeline(
         log(f"[ERROR] {e}")
         log(f"[DEBUG] {_tb_str}")
         try:
-            _dump = Path(__file__).parent.parent / "run_error.log"
+            import os as _os
+            _app_dir = Path(_os.environ.get("RG_APP_DIR") or Path(__file__).parent.parent)
+            _dump = _app_dir / "run_error.log"
             _dump.write_text(_tb_str, encoding="utf-8")
         except Exception:
             pass

@@ -21,6 +21,20 @@ from PyQt6.QtWebChannel import QWebChannel
 
 from bridge import Bridge
 
+# ── 경로 기준 설정 ────────────────────────────────
+# PyInstaller exe: 번들 리소스는 sys._MEIPASS, 사용자 데이터는 exe 옆
+# 일반 실행: __file__ 기준
+if getattr(sys, "frozen", False):
+    _BUNDLE_DIR = Path(sys._MEIPASS)           # 번들 리소스 (읽기 전용)
+    _APP_DIR    = Path(sys.executable).parent  # exe 옆 (설정·이력 저장용)
+else:
+    _BUNDLE_DIR = Path(__file__).parent
+    _APP_DIR    = Path(__file__).parent
+
+# core/ 모듈이 사용자 데이터 경로를 알 수 있도록 환경 변수로 공유
+os.environ["RG_BUNDLE_DIR"] = str(_BUNDLE_DIR)
+os.environ["RG_APP_DIR"]    = str(_APP_DIR)
+
 # ── Windows High DPI 설정 ────────────────────────
 # QApplication 생성 전에 설정해야 효과 있음
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--enable-font-antialiasing --font-render-hinting=full")
@@ -29,7 +43,7 @@ QApplication.setHighDpiScaleFactorRoundingPolicy(
 )
 
 
-HTML_PATH = Path(__file__).parent / "ui" / "index.html"
+HTML_PATH = _BUNDLE_DIR / "ui" / "index.html"
 WINDOW_TITLE = "리딩게이트 반이동 자동화"
 
 WINDOW_W, WINDOW_H = 1040, 800
