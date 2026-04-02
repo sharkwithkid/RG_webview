@@ -324,7 +324,7 @@
     "master_recorded": false
   },
   "용인신월초": {
-    "last_date": "2026-04-01",
+    "last_date": "2026-04-02",
     "worker": "임지윤",
     "counts": {
       "신입생": 81,
@@ -499,6 +499,30 @@
       "전입생": 0,
       "전출생": 0,
       "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "대전가양중": {
+    "last_date": "2026-04-02",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 130,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "이천모가중": {
+    "last_date": "2026-04-02",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 5,
+      "전입생": 1,
+      "전출생": 0,
+      "교직원": 1
     },
     "run_completed": true,
     "master_recorded": false

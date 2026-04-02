@@ -262,7 +262,7 @@ const Diff = (() => {
     const actualCount = Number.isFinite(payload.actual_count) ? payload.actual_count : (payload.rows || []).length;
     const displayedCount = Number.isFinite(payload.displayed_count) ? payload.displayed_count : (payload.rows || []).length;
     const structured = payload.has_structured_rows !== false;
-    const info = `파일: ${payload.source_file || '-'} | 시트: ${payload.sheet_name || '-'} | 헤더행: ${structured && payload.header_row != null ? payload.header_row : '-'} | 시작행: ${structured && payload.data_start_row != null ? payload.data_start_row : '-'} | 실제 데이터 ${actualCount}행`;
+    const info = `헤더행: ${structured && payload.header_row != null ? payload.header_row : '-'} | 시작행: ${structured && payload.data_start_row != null ? payload.data_start_row : '-'} | 실제 ${actualCount}행`;
     _el('diff-preview-file-info').textContent = info;
     if (payload.has_structured_rows === false) _el('diff-preview-warn').textContent = '헤더를 찾지 못해 행번호를 표시하지 않습니다.';
     else _el('diff-preview-warn').textContent = payload.truncated ? `${displayedCount}행만 표시합니다.` : '';
@@ -331,7 +331,7 @@ const Diff = (() => {
     _el('diff-spin-compare').textContent = '-';
     const chk = _el('chk-재학생');
     if (chk) { chk.checked = false; chk.disabled = true; }
-    _el('diff-preview-file-info').textContent = '파일: - | 시트: - | 헤더행: - | 시작행: -';
+    _el('diff-preview-file-info').textContent = '헤더행: - | 시작행: - | 실제 -행';
     _el('diff-preview-warn').textContent = '파일을 선택하면 전체 미리보기가 표시됩니다.';
     const table = _el('diff-preview-table');
     if (table) {

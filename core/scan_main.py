@@ -405,7 +405,7 @@ def detect_input_layout(xlsx_path: Path, kind: str) -> Dict[str, Any]:
     (병합셀 정보는 read_only 모드에서 불가 — validate에서 스킵됨)
     """
     ensure_xlsx_only(xlsx_path)
-    wb = safe_load_workbook(xlsx_path, data_only=True)
+    wb = safe_load_workbook(xlsx_path, data_only=True, read_only=True)
     ws = get_first_sheet_with_warning(wb, xlsx_path.name)
 
     kind_norm = (kind or "").strip().lower()
@@ -841,7 +841,7 @@ def freshmen_extra_grades(
 
     wb = None
     try:
-        wb = safe_load_workbook(xlsx_path, data_only=True)
+        wb = safe_load_workbook(xlsx_path, data_only=True, read_only=True)
         ws = get_first_sheet_with_warning(wb, xlsx_path.name)
 
         header_row = detect_header_row_freshmen(ws)
@@ -1161,7 +1161,7 @@ def scan_pipeline(
         ]:
             if _fpath:
                 try:
-                    _wb_tmp = safe_load_workbook(_fpath, data_only=True)
+                    _wb_tmp = safe_load_workbook(_fpath, data_only=True, read_only=True)
                     if len(_wb_tmp.worksheets) > 1:
                         sr.events.append(multiple_sheets(_fkey, _flabel))
                     _wb_tmp.close()
@@ -1355,10 +1355,11 @@ def scan_pipeline(
                             f"{joined} 처리는 학생명부 파일 없이는 진행할 수 없습니다."
                         ) from roster_err
                     else:
-                        sr.events.append(roster_not_found(reason="신입생 타학년"))
-                        raise ValueError(
-                            "[ERROR] 학생명부 파일이 없습니다. 학생명부를 추가한 뒤 다시 스캔해 주세요."
-                        ) from roster_err
+                        # 신입생 타학년만 있는 경우 — 명부 없이 학년도 직접 입력으로 대체 가능
+                        from core.events import freshmen_no_roster_manual as _fnrm
+                        sr.events.append(_fnrm())
+                        sr.roster_info = None
+                        log("[INFO] 신입생 타학년 포함 — 명부 추가 또는 학년도 직접 입력 후 실행 가능")
 
                 if roster_ws is not None and roster_path is not None:
                     try:
@@ -1513,27 +1514,35 @@ def scan_pipeline(
         ):
             missing_fields.append("입력 파일 헤더/구조 확인")
 
-        roster_required_strict = bool(need_roster)
-        roster_can_be_replaced_by_manual = False
+        # 신입생 타학년만 있고 명부 없는 경우 → 학년도 수동 입력으로 실행 가능
+        sr.can_execute_after_input = (
+            need_roster_by_freshmen
+            and not need_roster_by_transfer
+            and not need_roster_by_withdraw
+            and sr.roster_info is None
+        )
 
         roster_ok = (not sr.need_roster) or (sr.roster_info is not None)
-        if not roster_ok:
+        if not roster_ok and not sr.can_execute_after_input:
+            # 수동 입력 불가한 케이스만 오류 처리
             missing_fields.append("학생명부")
-            if roster_required_strict:
-                if need_roster_by_transfer and need_roster_by_withdraw:
-                    log("[ERROR] 전입/전출 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
-                elif need_roster_by_transfer:
-                    log("[ERROR] 전입생 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
-                else:
-                    log("[ERROR] 전출생 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
+            if need_roster_by_transfer and need_roster_by_withdraw:
+                log("[ERROR] 전입/전출 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
+            elif need_roster_by_transfer:
+                log("[ERROR] 전입생 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
+            elif need_roster_by_withdraw:
+                log("[ERROR] 전출생 처리를 위해 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
             else:
                 log("[ERROR] 학년도 규칙이 필요한 경우에도 학생명부가 필요합니다. 학생명부를 추가한 뒤 다시 스캔해 주세요.")
 
         sr.missing_fields = missing_fields
         sr.needs_open_date = bool(sr.withdraw_file)
 
-        sr.can_execute_after_input = False
-        sr.can_execute = len(sr.missing_fields) == 0
+        if sr.can_execute_after_input:
+            # grade_year_map 입력 전까지는 실행 불가 — applyManualGradeReady에서 활성화
+            sr.can_execute = False
+        else:
+            sr.can_execute = len(sr.missing_fields) == 0
 
         sr.ok = True
         _tick("스캔 완료 (전체)")

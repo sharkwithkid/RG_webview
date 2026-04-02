@@ -337,12 +337,22 @@ def roster_not_found(reason: str = "") -> CoreEvent:
 
 
 def freshmen_extra_grades_info(grades: list) -> CoreEvent:
-    """신입생 파일에 1학년 외 학년 포함 — INFO 이벤트"""
+    """신입생 파일에 1학년 외 학년 포함 — WARN 이벤트"""
     grade_str = ", ".join(f"{g}학년" for g in grades)
     return CoreEvent(
         code     = "FRESHMEN_EXTRA_GRADES",
-        level    = "info",
-        message  = f"신입생 파일에 {grade_str}이(가) 포함되어 있습니다. 학생 명부가 필요합니다.",
+        level    = "warn",
+        message  = f"신입생 파일에 {grade_str}이(가) 포함되어 있습니다.",
+        file_key = "freshmen",
+    )
+
+
+def freshmen_no_roster_manual() -> CoreEvent:
+    """신입생 타학년 + 명부 없음 → 학년도 직접 입력 안내 (hold)"""
+    return CoreEvent(
+        code     = "FRESHMEN_NO_ROSTER_MANUAL",
+        level    = "hold",
+        message  = "학교 폴더에 명부를 추가하거나, 사이드바에서 학년도 아이디 규칙을 직접 입력하세요.",
         file_key = "freshmen",
     )
 

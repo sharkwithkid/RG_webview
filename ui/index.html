@@ -30,19 +30,19 @@
 
 /* ── 토큰 ─────────────────────────────────────────────── */
 :root {
-  /* ── 베이스 ─ 순수 중성 회색 ── */
-  --bg:            #F4F4F4;
-  --surface:       #FFFFFF;
-  --surface-2:     #EFEFEF;
-  --surface-hover: #E8E8E8;
-  --border:        #E0E0E0;
+  /* ── 베이스 ─ 아이스 블루 화이트 + 대비 복구 ── */
+  --bg:            #EEF3F8;
+  --surface:       #FBFDFF;
+  --surface-2:     #F5F8FC;
+  --surface-hover: #E9F0F7;
+  --border:        #D5DFEA;
   --border-focus:  #5C5C5C;
 
-  /* ── 텍스트 ─ 중성 다크 ── */
-  --text:          #1A1A1A;
-  --text-2:        #555;
-  --muted:         #9E9E9E;
-  --muted-2:       #BDBDBD;
+  /* ── 텍스트 ─ 대비 복구 ── */
+  --text:          #0F1720;
+  --text-2:        #405160;
+  --muted:         #617486;
+  --muted-2:       #91A1B1;
 
   /* ── primary ─ 버튼/선택 (거의 블랙) ── */
   --primary:       #1A1A1A;
@@ -58,12 +58,12 @@
   --ok-bg:  #F0FDF4; --ok-bd:  #BBF7D0; --ok-tx:  #15803D;
   --warn-bg:#FFFBEB; --warn-bd:#FDE68A; --warn-tx:#92400E;
   --err-bg: #FFF1F2; --err-bd: #FECDD3; --err-tx: #DC2626;
-  --run-bg: #F0EFED; --run-bd: #E2E0DC; --run-tx: #1A1A1A;
+  --run-bg: #EEF3F7; --run-bd: #D7E2EC; --run-tx: #1A1A1A;
 
   --radius:      9px;
   --radius-sm:   7px;
   --radius-xs:   5px;
-  --sidebar-w:   210px;
+  --sidebar-w:   236px;
   --nav-w:       52px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -88,20 +88,44 @@ button {
 button:disabled { opacity: .35; cursor: default; }
 
 .btn-primary {
-  background: var(--accent); color: #fff;
+  background: #F27A33;
+  color: #fff;
   padding: 0 16px; height: 32px; font-size: 12px; font-weight: 600;
   border-radius: 16px;
   letter-spacing: -.01em;
+  border: 1px solid rgba(209,108,45,.28);
+  box-shadow:
+    0 1px 2px rgba(17,24,39,.05),
+    0 2px 4px rgba(17,24,39,.04);
 }
-.btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+.btn-primary:hover:not(:disabled) {
+  background: #EA742B;
+  box-shadow:
+    0 1px 2px rgba(17,24,39,.06),
+    0 3px 6px rgba(17,24,39,.05);
+}
 .btn-ghost {
-  background: transparent;
-  border: 1px solid var(--text-2);
+  background: #F8FBFF;
+  border: 1px solid rgba(223,231,239,.95);
   color: var(--text-2); padding: 0 14px; height: 32px; font-size: 12px;
   border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(15,23,42,.04),
+    0 2px 5px rgba(151,165,181,.08);
 }
-.btn-ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--text); color: var(--text); }
-.btn-ghost.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 0.5px rgba(0,0,0,.05); }
+.btn-ghost:hover:not(:disabled) {
+  background: #FBFDFF; color: var(--text);
+  box-shadow:
+    0 1px 2px rgba(15,23,42,.05),
+    0 3px 6px rgba(151,165,181,.09);
+}
+.btn-ghost.active {
+  background: #FBFDFF; color: var(--text); font-weight: 600;
+  border-color: rgba(219,228,237,.98);
+  box-shadow:
+    0 1px 2px rgba(15,23,42,.05),
+    0 3px 6px rgba(151,165,181,.09);
+}
 
 input[type="text"], input[type="date"], textarea, select {
   font-family: inherit; font-size: 13px; color: var(--text);
@@ -116,13 +140,56 @@ textarea:focus, select:focus {
   box-shadow: 0 0 0 3px rgba(234,88,12,.08);
 }
 input::placeholder, textarea::placeholder { color: var(--muted-2); }
-input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+input[type="checkbox"] {
+  -webkit-appearance: none; appearance: none;
+  width: 15px; height: 15px; cursor: pointer; position: relative;
+  border-radius: 5px;
+  border: 1px solid #CFD8E2;
+  background: #F4F7FA;
+  box-shadow:
+    0 1px 2px rgba(146,160,176,.10),
+    0 3px 6px rgba(194,203,213,.08);
+  transition: border-color .12s, box-shadow .12s, background .12s;
+}
+input[type="checkbox"]:hover {
+  border-color: #C4D0DB;
+  background: #F7FAFD;
+  box-shadow:
+    0 1px 2px rgba(146,160,176,.12),
+    0 4px 8px rgba(194,203,213,.10);
+}
+input[type="checkbox"]:checked {
+  border-color: #E6B391;
+  background: #FCE9DB;
+  box-shadow:
+    0 1px 2px rgba(234,88,12,.08),
+    0 3px 6px rgba(234,88,12,.07);
+}
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px; top: 1.5px;
+  width: 4px; height: 8px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(45deg);
+}
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(234,88,12,.10),
+    0 1px 2px rgba(146,160,176,.10);
+}
 
 .card {
   background: var(--surface);
-  border: none;
-  border-radius: 10px;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  border: 1px solid rgba(255,255,255,.84);
+  border-radius: 12px;
+  box-shadow:
+    -5px -5px 10px rgba(255,255,255,.64),
+    7px 7px 16px rgba(163,180,198,.18),
+    inset 1px 1px 0 rgba(255,255,255,.78),
+    inset -1px -1px 0 rgba(215,225,235,.18);
 }
 
 .muted { font-size: 12px; color: var(--muted); line-height: 1.5; }
@@ -140,7 +207,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
 .badge-warn { background: var(--warn-bg); color: var(--warn-tx); }
 .badge-err  { background: var(--err-bg);  color: var(--err-tx); }
 
-.sep { height: 1px; background: var(--border); margin: 8px 0; }
+.sep { height: 1px; background: rgba(214,223,233,.22); margin: 8px 0; }
 
 .spinner {
   display: inline-block; width: 12px; height: 12px;
@@ -158,9 +225,16 @@ input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px;
   flex: 1; overflow-y: auto; display: flex;
   align-items: center; justify-content: center;
   padding: 40px 24px 60px;
-  background: #fff;
+  background: var(--bg);
 }
-.setup-inner { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 28px; }
+.setup-inner {
+  width: 100%; max-width: 460px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.04);
+  padding: 32px 36px 28px;
+  display: flex; flex-direction: column; gap: 24px;
+}
 .page-title   { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -.02em; }
 .page-subtitle{ font-size: 12px; color: var(--muted); margin-top: 3px; }
 .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -275,7 +349,7 @@ input[type="date"] { display: none; }
 .app-header {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  box-shadow: none;
+  box-shadow: 0 1px 6px rgba(0,0,0,.07);
   padding: 0 20px; height: 52px;
   display: flex; align-items: center; gap: 14px; flex-shrink: 0;
 }
@@ -292,65 +366,120 @@ input[type="date"] { display: none; }
 /* ── 본문 레이아웃 ─────────────────────────────────────── */
 .main-body {
   flex: 1; overflow: hidden; display: flex;
+  background: var(--bg);
 }
 
 /* ── 스텝 네비게이션 (세로) ─────────────────────────── */
 .step-bar {
   width: 160px; flex-shrink: 0;
-  background: var(--surface); border-right: 1px solid var(--border);
-  box-shadow: none;
+  background: linear-gradient(180deg, #F7FAFE 0%, #F1F5FA 100%);
+  border-right: 1px solid rgba(221,229,238,.42);
+  box-shadow:
+    inset -1px 0 0 rgba(255,255,255,.72),
+    1px 0 0 rgba(221,230,238,.44);
   border-radius: 0;
   display: flex; flex-direction: column;
-  padding: 16px 8px; gap: 1px; overflow-y: auto;
+  padding: 16px 10px; gap: 6px; overflow-y: auto;
 }
 .step-bar-label {
-  font-size: 10px; font-weight: 500; color: var(--muted-2);
+  font-size: 12px; font-weight: 600; color: #0F1720;
   text-transform: uppercase; letter-spacing: .06em;
   padding: 0 10px; margin-bottom: 4px;
 }
 .step-sep { display: none; }
 .step-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 0 10px; height: 36px; border-radius: var(--radius-sm);
-  cursor: pointer; transition: background .15s;
+  padding: 0 10px; height: 38px; border-radius: 11px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .15s, box-shadow .15s, border-color .15s, transform .15s;
 }
-.step-item:hover { background: rgba(0,0,0,.04); }
-.step-item.active { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 0.5px rgba(0,0,0,.05); }
+.step-item:hover {
+  background: #F8FBFE;
+  border-color: rgba(214,224,234,.82);
+  box-shadow:
+    -3px -3px 8px rgba(255,255,255,.6),
+    4px 4px 10px rgba(174,188,203,.14);
+}
+.step-item.active {
+  background: #FBFDFF;
+  border-color: rgba(255,255,255,.92);
+  border-radius: 11px;
+  box-shadow:
+    -4px -4px 10px rgba(255,255,255,.72),
+    6px 6px 14px rgba(161,178,195,.18),
+    inset 1px 1px 0 rgba(255,255,255,.84),
+    inset -1px -1px 0 rgba(216,225,235,.16);
+}
+.step-item.active .step-label { color: var(--text); font-weight: 600; }
 .step-badge {
-  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 500;
-  background: var(--surface-2); color: var(--muted);
-  border: none;
+  font-size: 10px; font-weight: 600;
+  background: #EDF3F8; color: var(--muted);
+  border: 1px solid rgba(211,222,232,.72);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.72);
 }
-.step-badge.done    { background: var(--ok-bg); color: var(--ok-tx); border-color: var(--ok-bg); }
-.step-badge.active  { background: var(--accent); color: #fff; border-color: var(--accent); width: 18px; height: 18px; }
-.step-badge.warn    { background: var(--warn-bg); color: var(--warn-tx); border-color: var(--warn-bg); }
-.step-label { font-size: 12.5px; font-weight: 400; color: var(--muted); }
-.step-item.active .step-label { color: var(--text); font-weight: 500; }
+.step-badge.done    { background: var(--ok-bg); color: var(--ok-tx); border-color: rgba(187,247,208,.92); box-shadow: none; }
+.step-badge.active  { background: var(--accent); color: #fff; border-color: var(--accent); width: 20px; height: 20px; box-shadow: 0 4px 10px rgba(234,88,12,.18); }
+.step-badge.warn    { background: var(--warn-bg); color: var(--warn-tx); border-color: rgba(253,230,138,.94); box-shadow: none; }
+.step-label { font-size: 13px; font-weight: 600; color: #1F2937; }
+.step-item.active .step-label { color: var(--text); font-weight: 600; }
 .step-item:has(.step-badge.done) .step-label { color: var(--text); font-weight: 500; }
 
 /* ── 사이드바 (학교 정보) ───────────────────────────────── */
 .sidebar {
   width: var(--sidebar-w); flex-shrink: 0;
-  overflow-y: auto; overflow-x: hidden;
-  border-right: 1px solid var(--border);
-  background: var(--surface);
+  overflow-y: auto; overflow-x: visible;
+  border-right: none;
+  background: transparent;
   box-shadow: none;
   border-radius: 0;
-  display: flex; flex-direction: column;
-  padding: 0;
+  display: flex; flex-direction: column; gap: 16px;
+  align-items: center;
+  padding: 16px 6px 16px 14px;
 }
-.sidebar .card { background: none; border: none; border-radius: 0; padding: 0; display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.sidebar .card { background: none; border: none; border-radius: 0; padding: 0; display: contents; min-width: 0; box-shadow: none; }
 
 /* 사이드바 섹션 */
 .sb-section {
-  padding: 14px 16px;
+  width: calc(100% - 12px);
+  max-width: 212px;
+  margin: 0 auto;
+  padding: 12px 16px;
   display: flex; flex-direction: column; gap: 6px;
+  background: #F8FBFF;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.90);
+  box-shadow:
+    -4px -4px 10px rgba(255,255,255,.62),
+    6px 6px 14px rgba(165,181,198,.16),
+    inset 1px 1px 0 rgba(255,255,255,.78),
+    inset -1px -1px 0 rgba(216,225,235,.14);
 }
 .sb-label {
-  font-size: 11px; font-weight: 500; color: var(--muted);
-  padding: 0 0 4px 0; letter-spacing: .03em; text-transform: uppercase;
+  font-size: 12px; font-weight: 600; color: #0F1720;
+  padding: 0 0 2px 0; letter-spacing: -0.005em; text-transform: none;
+}
+
+.sidebar .muted {
+  color: var(--muted);
+}
+#school-status,
+#school-history,
+#last-work,
+.panel-caption,
+.notice-caption,
+.run-caption,
+.diff-caption,
+.helper-caption,
+.card-caption,
+.section-caption,
+.viewer-caption {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  font-weight: 400;
 }
 
 /* 사이드바 내 기존 UI 조정 */
@@ -384,8 +513,13 @@ input[type="date"] { display: none; }
 
 .school-input-row input:focus {
   background: #fff;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(61,58,54,.07);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(234,88,12,.10);
+}
+.school-input-row button {
+  flex: 0 0 auto;
+  min-width: 54px;
+  white-space: nowrap;
 }
 
 .school-input-row button {
@@ -417,7 +551,7 @@ input[type="date"] { display: none; }
 .school-item:hover { background: rgba(0,0,0,.04); }
 .school-item.hl { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 0.5px rgba(0,0,0,.05); }
 
-.current-school-name { font-size: 14px; font-weight: 600; color: var(--text); word-break: keep-all; line-height: 1.3; }
+.current-school-name { font-size: 13px; font-weight: 600; color: var(--text); word-break: keep-all; line-height: 1.35; }
 
 .date-chk-row {
   display: grid;
@@ -454,8 +588,8 @@ input[type="date"] { display: none; }
 
 #school-input.focus-highlight {
   background: #fff !important;
-  border-color: var(--border-focus) !important;
-  box-shadow: 0 0 0 3px rgba(61,58,54,.09);
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(234,88,12,.10);
 }
 
 /* 4. 학년도 박스 — 회색 배경 완전 제거 */
@@ -508,13 +642,22 @@ input[type="date"] { display: none; }
 }
 
 .btn-new-school {
-  width: 100%; height: 32px; padding: 0;
-  background: var(--surface-2); border: none;
-  border-radius: var(--radius-sm); color: var(--text-2);
+  width: 100%; height: 32px; padding: 0 12px;
+  background: #F8FBFF;
+  border: 1px solid rgba(225,232,240,.96);
+  border-radius: 12px; color: var(--text-2);
   cursor: pointer; font-size: 12px; font-weight: 500;
   font-family: inherit; text-align: center;
+  box-shadow:
+    0 1px 2px rgba(15,23,42,.04),
+    0 3px 8px rgba(151,165,181,.10);
 }
-.btn-new-school:hover { background: var(--surface-hover); }
+.btn-new-school:hover {
+  background: #FBFDFF; color: var(--text);
+  box-shadow:
+    0 1px 3px rgba(15,23,42,.05),
+    0 4px 10px rgba(151,165,181,.11);
+}
 
 /* 학년도 버튼은 숨김 처리 */
 #btn-grade-toggle { display: none !important; }
@@ -554,17 +697,24 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 /* ── 콘텐츠 영역 ─────────────────────────────────────── */
 .content-area {
   flex: 1; overflow-y: auto;
-  padding: 0; display: flex; flex-direction: column; gap: 0;
-  background: var(--surface);
+  padding: 18px; display: flex; flex-direction: column; gap: 16px;
+  background: transparent;
 }
 
 /* ── 탭 패널 ─────────────────────────────────────────── */
-.tab-panel { display: none; flex-direction: column; gap: 0; }
+.tab-panel { display: none; flex-direction: column; gap: 16px; }
 .tab-panel.active { display: flex; }
 
 .tab-panel > .card {
   padding: 18px 20px;
-  border-radius: 10px;
+  border-radius: 13px;
+  border: 1px solid rgba(255,255,255,.92);
+  background: #FCFEFF;
+  box-shadow:
+    -5px -5px 12px rgba(255,255,255,.66),
+    8px 8px 18px rgba(157,174,191,.18),
+    inset 1px 1px 0 rgba(255,255,255,.84),
+    inset -1px -1px 0 rgba(215,225,235,.14);
 }
 
 /* 뷰어 카드는 패딩 없이 내부에서 처리 */
@@ -588,18 +738,33 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .scan-table td.file-link { color: var(--accent); cursor: pointer; text-decoration: underline; }
 .scan-table td.file-link:hover { color: var(--accent-h); }
 .scan-table td.file-link.file-link-warn { color: #B45309; font-weight: 700; }
-#scan-tbody tr.scan-row-warn td { background: #FFFBEB; }
-#scan-tbody tr.scan-row-warn td.kind { color: #92400E; }
-#scan-tbody tr.viewer-active td {
-  background: var(--run-bg);
+.viewer-table tr.row-warn td,
+.preview-table tr.row-warn td { background: #FBF5EA; box-shadow: inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(230,220,197,.42); }
+.viewer-table tr.row-error td,
+.preview-table tr.row-error td { background: #F8ECEE; box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -1px 0 rgba(228,206,211,.38); }
+.viewer-table tr.row-dup td,
+.preview-table tr.row-dup td { background: #EDF5F1; box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -1px 0 rgba(206,224,216,.38); }
+
+#scan-tbody tr.scan-row-warn td {
+  background: #FFF8EA;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.36), inset 0 -1px 0 rgba(236,221,188,.56);
 }
-#scan-tbody tr.viewer-active td:first-child { border-left: 2px solid var(--accent); }
+#scan-tbody tr.scan-row-warn td.kind { color: #9A5B16; }
+#scan-tbody tr.viewer-active td {
+  background: #FFF1E5;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.34), inset 0 -1px 0 rgba(236,206,184,.52);
+}
+#scan-tbody tr.viewer-active td.kind { color: #C75A14; font-weight: 700; }
 .spin-cell { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .spin-btn {
-  width: 18px; height: 18px; background: var(--surface-2);
-  border: 1px solid var(--border); border-radius: 4px;
+  width: 18px; height: 18px;
+  background: #F4F7FA;
+  border: 1px solid #D2DCE6; border-radius: 6px;
   font-size: 11px; font-weight: 700; color: var(--text-2);
   display: flex; align-items: center; justify-content: center; padding: 0;
+  box-shadow:
+    0 1px 1px rgba(150,165,181,.08),
+    0 2px 4px rgba(197,206,216,.06);
 }
 .spin-val { font-size: 12px; font-weight: 600; color: var(--muted); width: 22px; text-align: center; }
 .school-kind-warn {
@@ -611,24 +776,29 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .inline-warn-card {
   display: none;
   padding: 10px 14px;
-  background: #FFFBEB;
-  border: 1px solid #FDE68A;
-  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, #FFFDF4 0%, #FFF8E8 100%);
+  border: 1px solid rgba(245,226,173,.95);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.72), 0 2px 6px rgba(223,214,186,.12);
   font-size: 12px;
   font-weight: 600;
-  color: #92400E;
+  color: #9A5B16;
 }
 .inline-warn-card .warn-line + .warn-line { margin-top: 4px; }
 
 .inline-warn-card.error {
-  background: #FEF2F2;
-  border: 1px solid #FECDD3;
-  border-radius: var(--radius-sm);
-  color: #B91C1C;
+  background: linear-gradient(180deg, #FFF8F8 0%, #FFF0F1 100%);
+  border: 1px solid rgba(241,208,213,.95);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.72), 0 2px 6px rgba(231,208,212,.12);
+  color: #BE3E4A;
 }
-.scan-table td.file-link.file-link-error { color: #DC2626; font-weight: 700; }
-#scan-tbody tr.scan-row-error td { background: #FEF2F2; }
-#scan-tbody tr.scan-row-error td.kind { color: #B91C1C; }
+.scan-table td.file-link.file-link-error { color: #CB3A3A; font-weight: 700; }
+#scan-tbody tr.scan-row-error td {
+  background: #FFF1F2;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.34), inset 0 -1px 0 rgba(234,206,210,.52);
+}
+#scan-tbody tr.scan-row-error td.kind { color: #BE3E4A; }
 
 .preview-warn-box { display:block; line-height:1.55; }
 .preview-warn-box .pw-title { color:#92400E; font-weight:700; }
@@ -642,14 +812,23 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .filter-row input { flex: 1; height: 30px; padding: 0 10px; }
 .preview-table-wrap { overflow: auto; max-height: 600px; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
-.data-table th, .data-table td { border-bottom: 1px solid var(--surface-2); padding: 6px 12px; text-align: left; }
-.data-table th { background: var(--surface-2); font-weight: 600; color: var(--text-2); position: sticky; top: 0; z-index: 2; }
-.data-table tr.row-hold td { background: #FFF1F2; }
-.data-table tr.row-warn td { background: #fff7d8; }
-.data-table tr.row-skip td { background: var(--surface-2); }
-.data-table tr.row-dup  td { background: #e3fef6; }
-.data-table tr.row-prestart td { background: #F5F5F5; color: #A3A3A3; }
-.data-table tr.row-prestart td:first-child { color: #B8B8B8; }
+.data-table th, .data-table td { border-bottom: 1px solid rgba(220,228,237,.85); padding: 6px 12px; text-align: left; }
+.data-table th { background: #F1F5FA; font-weight: 600; color: var(--text-2); position: sticky; top: 0; z-index: 2; }
+.data-table tr.row-hold td {
+  background: #FFF1F2;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.34), inset 0 -1px 0 rgba(234,206,210,.50);
+}
+.data-table tr.row-warn td {
+  background: #FFF8EA;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.36), inset 0 -1px 0 rgba(236,221,188,.56);
+}
+.data-table tr.row-skip td { background: #F4F7FA; }
+.data-table tr.row-dup td {
+  background: #EEF9F4;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.34), inset 0 -1px 0 rgba(205,231,221,.50);
+}
+.data-table tr.row-prestart td { background: #F5F6F8; color: #A3AAB3; }
+.data-table tr.row-prestart td:first-child { color: #B8BFC8; }
 
 
 /* ── 실행탭 ──────────────────────────────────────────── */
@@ -673,7 +852,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 /* ── 안내문탭 ─────────────────────────────────────────── */
 .notice-body { display: flex; gap: 0; flex: 1; min-height: 0; }
 .notice-list-wrap { width: 160px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); }
-.notice-list-item { padding: 9px 14px; font-size: 12px; cursor: pointer; border-bottom: none; color: var(--text-2); border-radius: var(--radius-sm); margin: 2px 6px; }
+.notice-list-item { padding: 9px 14px; font-size: 13px; cursor: pointer; border-bottom: none; color: var(--text-2); border-radius: var(--radius-sm); margin: 2px 6px; }
 .notice-list-item:last-child { border-bottom: none; }
 .notice-list-item:hover { background: var(--surface-2); }
 .notice-list-item.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 0.5px rgba(0,0,0,.05); }
@@ -876,7 +1055,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .diff-set-label { font-size:14px; font-weight:700; color:var(--text); line-height:1.3; }
 .diff-set-value { font-size:30px; font-weight:800; color:var(--text); line-height:1; }
 .diff-set-desc { font-size:11px; color:var(--muted); line-height:1.4; }
-.diff-summary-caption { font-size:12px; color:var(--muted); line-height:1.5; margin-top:-2px; }
+.diff-summary-caption { font-size:11px; color:var(--muted); line-height:1.45; margin-top:0; margin-bottom:0; font-weight:400; }
 @media (max-width: 1200px) {
   .diff-set-overview { grid-template-columns:repeat(3, minmax(0,1fr)); }
   .diff-viewer-grid { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
@@ -1029,21 +1208,20 @@ button:not(:disabled), a, [data-action]:not(:disabled),
         <div class="step-badge" id="badge-4">5</div>
         <span class="step-label">안내문</span>
       </div>
-      <div style="margin-top:auto; border-top:1px solid var(--border); display:flex; flex-direction:column;">
+      <div style="margin-top:auto; display:flex; flex-direction:column;">
         <div style="padding:8px 8px 4px;">
           <button class="btn-new-school" data-action="new-school"
-                  style="font-size:11px;height:28px;color:var(--muted)">+ 새 학교 시작</button>
+                  style="font-size:12px;height:30px;color:var(--text-2)">+ 새 학교 시작</button>
         </div>
         <div style="padding:4px 8px 10px;">
           <button class="btn-new-school" data-action="back-to-setup"
-                  style="font-size:11px;height:28px;color:var(--muted)">← 기본 설정으로</button>
+                  style="font-size:12px;height:30px;color:var(--text-2)">← 기본 설정으로</button>
         </div>
       </div>
     </div>
 
     <!-- 사이드바 (학교 정보) -->
     <div class="sidebar">
-      <div class="card">
 
         <!-- 섹션: 학교 검색 -->
         <div class="sb-section">
@@ -1058,7 +1236,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div style="margin-top:10px">
             <div class="current-school-name" id="current-school">-</div>
             <div id="school-history" style="display:none;font-size:11px;color:var(--muted);line-height:1.6;word-break:keep-all;white-space:pre-line;margin-top:4px"></div>
-            <div class="muted" id="school-status" style="margin-top:4px">학교명을 입력해 검색하세요.</div>
+            <div class="muted" id="school-status" style="margin-top:4px;font-size:11px;line-height:1.45">학교명을 입력해 검색하세요.</div>
             <div class="muted" id="last-work" style="display:none;margin-top:2px"></div>
           </div>
         </div>
@@ -1074,7 +1252,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
               <button class="btn-ghost" id="btn-open-roster-map" disabled
                       style="flex:1;height:28px;font-size:12px" data-action="open-roster-map">명부 열기</button>
             </div>
-            <span class="muted" id="roster-map-hint" style="font-size:11px;display:none">학생명부 파일이 없습니다.</span>
+            <span class="muted" id="roster-map-hint" style="font-size:11px;display:none;margin-top:6px">학생명부 파일이 없습니다.</span>
           </div>
           <button id="btn-grade-toggle" data-action="toggle-grade" style="display:none"></button>
         </div>
@@ -1133,9 +1311,6 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           </div>
         </div>
 
-
-
-      </div>
     </div><!-- /sidebar -->
 
     <!-- 콘텐츠 -->
@@ -1147,12 +1322,12 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="scan-head">
             <div class="scan-head-left">
               <div class="card-title">스캔 검수</div>
-              <div class="muted" style="margin-top:2px">입력 파일 구조를 먼저 확인하고, 의심 행을 전체 미리보기에서 검수합니다.</div>
+              <div class="muted panel-caption panel-caption" class="panel-caption">입력 파일 구조를 확인하고, 의심 행을 검수합니다.</div>
             </div>
             <div class="scan-actions">
               <button class="btn-primary" id="btn-scan" disabled data-action="scan-start">파일 내용 스캔</button>
               <button class="btn-ghost"   id="btn-scan-log"  data-action="scan-log">스캔 로그 보기</button>
-              <div class="status-badge badge-idle" id="scan-status-badge">스캔 전</div>
+              <div class="status-badge badge-idle" id="scan-status-badge">대기</div>
               <button class="btn-primary" id="btn-goto-run"
                       style="display:none;width:36px;height:36px;padding:0;font-size:16px"
                       data-action="goto-run">→</button>
@@ -1216,7 +1391,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="viewer-header">
             <div style="flex:1">
               <span class="card-title">선택 파일 전체 검수</span>
-              <div class="muted" id="preview-file-info" style="margin-top:2px;font-size:11px">파일: - | 시트: - | 헤더행: - | 시작행: -</div>
+              <div class="muted" id="preview-file-info" style="margin-top:2px;font-size:11px">헤더행: - | 시작행: -</div>
             </div>
             <button class="btn-ghost" id="btn-toggle-viewer" data-action="toggle-viewer"
                     style="height:28px;font-size:12px;padding:0 10px">펼치기 ▾</button>
@@ -1243,16 +1418,16 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="scan-head">
             <div class="scan-head-left">
               <div class="card-title">실행 / 결과</div>
-              <div class="muted" id="run-info" style="margin-top:2px">스캔을 통과한 후 작업을 실행하고 결과 파일을 확인합니다.</div>
+              <div class="muted run-caption" id="run-info">스캔을 통과한 작업을 실행하고 결과 파일을 확인합니다.</div>
             </div>
             <div class="scan-actions">
               <button class="btn-primary" id="btn-run" disabled data-action="run-start">작업 실행</button>
               <button class="btn-ghost"   id="btn-run-log" data-action="run-log">실행 로그 보기</button>
-              <div class="status-badge badge-idle" id="run-status-badge">실행 전</div>
+              <div class="status-badge badge-idle" id="run-status-badge">대기</div>
               <button class="btn-primary" id="btn-goto-notice" style="display:none;width:36px;height:36px;padding:0;font-size:16px" data-action="goto-notice">→</button>
             </div>
           </div>
-          <textarea id="result-note" placeholder="이번 작업 관련 비고를 적어 주세요." style="height:68px;padding:8px 12px;resize:none"></textarea>
+          <textarea id="result-note" placeholder="이번 작업 관련 비고를 적어 주세요." style="height:68px;padding:8px 12px;resize:vertical;min-height:42px;max-height:160px"></textarea>
           <div id="run-hold-warn" class="inline-warn-card"></div>
         </div>
 
@@ -1320,15 +1495,15 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="scan-head">
             <div class="scan-head-left">
               <div class="card-title">스캔 검수</div>
-              <div class="muted" style="margin-top:2px">재학생 명단 파일 구조를 먼저 확인하고, 시작행을 검수합니다.</div>
+              <div class="muted diff-caption">재학생 명단 파일 구조를 확인하고, 시작행을 검수합니다.</div>
             </div>
             <div class="scan-actions">
               <button class="btn-primary" id="btn-scan-diff" disabled data-action="diff-scan-start">파일 내용 스캔</button>
               <button class="btn-ghost" id="btn-diff-log" data-action="diff-log">스캔 로그 보기</button>
-              <div class="status-badge badge-idle" id="diff-scan-status-badge">스캔 전</div>
+              <div class="status-badge badge-idle" id="diff-scan-status-badge">대기</div>
             </div>
           </div>
-          <div class="muted" id="diff-scan-message" style="display:block">재학생 파일 구조를 먼저 확인해 주세요.</div>
+          <div class="muted helper-caption" id="diff-scan-message">재학생 파일 구조를 먼저 확인해 주세요.</div>
           <div class="inline-warn-card" id="diff-scan-warn-card"></div>
           <table class="scan-table">
             <thead><tr>
@@ -1358,7 +1533,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="viewer-header">
             <div style="flex:1">
               <span class="card-title">선택 파일 전체 검수</span>
-              <div class="muted" id="diff-preview-file-info" style="margin-top:2px;font-size:11px">파일: - | 시트: - | 헤더행: - | 시작행: -</div>
+              <div class="muted" id="diff-preview-file-info" style="margin-top:2px;font-size:11px">헤더행: - | 시작행: -</div>
             </div>
             <button class="btn-ghost" id="btn-toggle-diff-viewer" data-action="toggle-diff-viewer" style="height:28px;font-size:12px;padding:0 10px">펼치기 ▾</button>
           </div>
@@ -1376,12 +1551,12 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="scan-head">
             <div class="scan-head-left">
               <div class="card-title">실행 / 결과</div>
-              <div class="muted" id="diff-run-info" style="margin-top:2px">스캔을 통과한 후 명단 비교를 실행하고 결과를 확인합니다.</div>
+              <div class="muted diff-caption" id="diff-run-info">스캔을 통과한 후 명단 비교를 실행하고 결과를 확인합니다.</div>
             </div>
             <div class="scan-actions">
               <button class="btn-primary" id="btn-run-diff" disabled data-action="diff-start">명부 비교 실행</button>
               <button class="btn-ghost" id="btn-diff-run-log" data-action="diff-log">실행 로그 보기</button>
-              <div class="status-badge badge-idle" id="diff-run-status-badge">실행 전</div>
+              <div class="status-badge badge-idle" id="diff-run-status-badge">대기</div>
             </div>
           </div>
           <div class="card" style="padding:0;border:none;">
@@ -1427,7 +1602,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
         <div class="card" style="display:flex;flex-direction:column;gap:10px">
           <div class="card-title">비교 결과</div>
-          <div class="diff-summary-caption" id="diff-summary">스캔을 통과한 후 명단 비교를 실행하고 결과를 확인합니다.</div>
+          <div class="diff-summary-caption diff-caption" id="diff-summary">스캔을 통과한 후 명단 비교를 실행하고 결과를 확인합니다.</div>
           <div class="diff-viewer-grid">
             <div>
               <div class="diff-col-head">
@@ -1528,14 +1703,14 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 <script src="app_state.js"></script>
 <script src="ui_common.js"></script>
 <script src="app_runtime.js"></script>
-<script src="main.js"></script>
 <script src="col_map_dialog.js"></script>
 <script src="setup.js"></script>
 <script src="status_panel.js"></script>
-<script src="scan_tab.js"></script>
+<script src="scan_tab.js?v=1775111732"></script>
 <script src="run_tab.js"></script>
 <script src="diff_tab.js"></script>
 <script src="notice_tab.js"></script>
+<script src="main.js"></script>
 <script>
 // ── UI 패치 ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

@@ -86,6 +86,7 @@ const Scan = (() => {
     _el('btn-scan').disabled = false;
     _lastScanData = data;
 
+
     if (!data.ok) {
       const status = data.status || null;
       const events = data.events || [];
@@ -106,10 +107,9 @@ const Scan = (() => {
       if (errMsgsAll.length) {
         _showScanWarnCard(errMsgsAll, 'error', status);
       } else {
-          const statusErrs = UICommon.getStatusMessages(status, ['error']);
-          if (statusErrs.length) _showScanWarnCard(statusErrs, 'error', status);
-          else _showScanWarnCard(['예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.'], 'error', status);
-        }
+        const statusErrs = UICommon.getStatusMessages(status, ['error']);
+        if (statusErrs.length) _showScanWarnCard(statusErrs, 'error', status);
+        else _showScanWarnCard(['예기치 못한 오류가 발생했습니다. 스캔 로그를 확인해 주세요.'], 'error', status);
       }
       return;
     }
@@ -130,14 +130,11 @@ const Scan = (() => {
     const errMsgs  = events.filter(e => e.level === 'error').map(e => e.message);
     const holdMsgs = events.filter(e => e.level === 'hold').map(e => e.message);
     const warnMsgs = events.filter(e => e.level === 'warn').map(e => e.message);
-    if (errMsgs.length)       _showScanWarnCard(errMsgs,  'error', status);
-    else if (holdMsgs.length) _showScanWarnCard(holdMsgs, 'warn',  status);
-    else if (warnMsgs.length) _showScanWarnCard(warnMsgs, 'warn',  status);
-      else                      _hideScanWarnCard();
-    }
-
-    // 행 색칠 — data.row_marks 하나만 본다
-    _applyRowMarkStyles(data.row_marks || []);
+    // warn + hold 함께 있으면 합쳐서 표시 (경고 먼저, 보류 뒤)
+    const combinedMsgs = [...warnMsgs, ...holdMsgs];
+    if (errMsgs.length)           _showScanWarnCard(errMsgs,        'error', status);
+    else if (combinedMsgs.length) _showScanWarnCard(combinedMsgs,   'warn',  null);
+    else                          _hideScanWarnCard();
 
     // 학년도 아이디 규칙 갱신 + 명부 버튼 상태
     _updateGradeMap(data);
@@ -392,7 +389,6 @@ const Scan = (() => {
     const actualCount = Number.isFinite(data.actual_count) ? data.actual_count : (data.rows || []).length;
     const displayedCount = Number.isFinite(data.displayed_count) ? data.displayed_count : (data.rows || []).length;
     _el('preview-file-info').textContent =
-      `파일: ${data.source_file || '-'} | 시트: ${data.sheet_name || '-'}` +
       headerInfo + startInfo +
       ` | 실제 ${actualCount}행` +
       (data.truncated ? ` · ${displayedCount}행만 표시` : '');
@@ -533,14 +529,17 @@ function _syncPreviewWarn(kind, meta = {}) {
 }
 
 function _refreshWarnUI() {
-  // status 하나만 본다 — logs 파싱 없음
+  // events + status 둘 다 본다 — hold 포함
   const status = _lastScanData?.status || null;
+  const events = _lastScanData?.events || [];
   StatusUI.renderBadge('scan-status-badge', status?.badge, '완료');
-  const errMsgs  = (status?.messages || []).filter(m => m.level === 'error');
-  const warnMsgs = (status?.messages || []).filter(m => m.level === 'warn');
-  if (errMsgs.length)       _showScanWarnCard(errMsgs.map(m => m.text),  'error', status);
-  else if (warnMsgs.length) _showScanWarnCard(warnMsgs.map(m => m.text), 'warn',  status);
-  else                      _hideScanWarnCard();
+  const errMsgs  = events.filter(e => e.level === 'error').map(e => e.message);
+  const holdMsgs = events.filter(e => e.level === 'hold').map(e => e.message);
+  const warnMsgs = events.filter(e => e.level === 'warn').map(e => e.message);
+  const combinedMsgs = [...warnMsgs, ...holdMsgs];
+  if (errMsgs.length)           _showScanWarnCard(errMsgs,        'error', status);
+  else if (combinedMsgs.length) _showScanWarnCard(combinedMsgs,   'warn',  null);
+  else                          _hideScanWarnCard();
   _applyRowMarkStyles(_lastScanData?.row_marks || []);
 }
 
@@ -847,7 +846,9 @@ function toggleFilter(key) {
     if (!_lastScanData || !_lastScanData.can_execute_after_input) return false;
 
     const statusMsgs = UICommon.collectMessages({ status: _lastScanData?.status, events: _lastScanData?.events || [] });
-    const hasStrictRosterError = statusMsgs.some(msg => String(msg || '').includes('학생명부가 필요합니다.'));
+    // FRESHMEN_NO_ROSTER_MANUAL 케이스는 수동 입력으로 대체 가능 — 차단하지 않음
+    const isFreshmenManualMode = (_lastScanData?.events || []).some(e => e.code === 'FRESHMEN_NO_ROSTER_MANUAL');
+    const hasStrictRosterError = !isFreshmenManualMode && statusMsgs.some(msg => String(msg || '').includes('학생명부가 필요합니다.'));
     if (hasStrictRosterError) return false;
 
     _lastScanData.grade_year_map = {
@@ -908,7 +909,7 @@ function toggleFilter(key) {
 
     // 뷰어
     if (_viewerOpen) toggleViewer();
-    _el('preview-file-info').textContent = '파일: - | 시트: - | 헤더행: - | 시작행: -';
+    _el('preview-file-info').textContent = '헤더행: - | 시작행: - | 실제 -행';
     _el('preview-warn').textContent      = '학교를 선택하고 스캔을 실행해 주세요.';
     const table = _el('preview-table');
     if (table) { table.querySelector('thead').innerHTML = ''; table.querySelector('tbody').innerHTML = ''; }
