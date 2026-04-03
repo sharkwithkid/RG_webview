@@ -482,7 +482,7 @@ const Run = (() => {
     _noticeTeacherDupRows = new Set();
 
     _setBadge('idle', '실행 전');
-    _el('run-info').textContent = '스캔을 통과한 후 작업을 실행하고 결과 파일을 확인합니다.';
+    _el('run-info').textContent = '스캔을 통과한 작업을 실행하고 결과 파일을 확인합니다.';
     _el('run-hold-warn').style.display = 'none';
     _el('btn-goto-notice').style.display = 'none';
     _el('btn-run').disabled             = true;

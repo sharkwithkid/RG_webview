@@ -1274,7 +1274,7 @@ def scan_pipeline(
                 log(f"[TIMER] {kind_label} 구조 분석: {_time.perf_counter() - _t_file:.2f}s")
 
                 data_start = layout["data_start_row"]
-                issue_row_idxs = [r - data_start for r in issue_rows if r >= data_start]
+                issue_row_idxs = [r for r in issue_rows if r >= data_start]
 
                 return {
                     "file_name": file_path.name,

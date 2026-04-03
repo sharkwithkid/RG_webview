@@ -1,0 +1,1702 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>리딩게이트 반이동 자동화</title>
+<style>
+/* ── Pretendard 로컬 폰트 ──────────────────────────────── */
+@font-face {
+  font-family: 'Pretendard';
+  src: url('fonts/Pretendard-Regular.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Pretendard';
+  src: url('fonts/Pretendard-Medium.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Pretendard';
+  src: url('fonts/Pretendard-SemiBold.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Pretendard';
+  src: url('fonts/Pretendard-Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: block;
+}
+
+/* ── 토큰 ─────────────────────────────────────────────── */
+:root {
+  /* ── 베이스 ─ 아이스 블루 화이트 + 대비 복구 ── */
+  --bg:            #EEF3F8;
+  --surface:       #FBFDFF;
+  --surface-2:     #F5F8FC;
+  --surface-hover: #E9F0F7;
+  --border:        #D5DFEA;
+  --border-focus:  #5C5C5C;
+
+  /* ── 텍스트 ─ 대비 복구 ── */
+  --text:          #0F1720;
+  --text-2:        #405160;
+  --muted:         #617486;
+  --muted-2:       #91A1B1;
+
+  /* ── primary ─ 버튼/선택 (거의 블랙) ── */
+  --primary:       #1A1A1A;
+  --primary-h:     #000000;
+
+  /* ── 액센트 ─ 오렌지 (로고·뱃지·포인트만) ── */
+  --accent:        #EA580C;
+  --accent-h:      #C2410C;
+  --accent-bg:     #FFF7ED;
+  --accent-bd:     #FED7AA;
+
+  /* ── 시맨틱 ── */
+  --ok-bg:  #F0FDF4; --ok-bd:  #BBF7D0; --ok-tx:  #15803D;
+  --warn-bg:#FFFBEB; --warn-bd:#FDE68A; --warn-tx:#92400E;
+  --err-bg: #FFF1F2; --err-bd: #FECDD3; --err-tx: #DC2626;
+  --run-bg: #EEF3F7; --run-bd: #D7E2EC; --run-tx: #1A1A1A;
+
+  --radius:      9px;
+  --radius-sm:   7px;
+  --radius-xs:   5px;
+  --sidebar-w:   236px;
+  --nav-w:       52px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Pretendard', 'Pretendard Variable', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden;
+  -webkit-font-smoothing: subpixel-antialiased;
+  text-rendering: geometricPrecision;
+  font-feature-settings: "kern" 1;
+}
+
+/* ── 공통 컴포넌트 ─────────────────────────────────────── */
+button {
+  cursor: pointer; border: none; font-family: inherit;
+  font-size: 11px; font-weight: 500; border-radius: var(--radius-sm);
+  transition: background .1s, opacity .1s;
+}
+button:disabled { opacity: .35; cursor: default; }
+
+.btn-primary {
+  background: #F27A33;
+  color: #fff;
+  padding: 0 14px; height: 28px; font-size: 11px; font-weight: 600;
+  border-radius: 14px;
+  letter-spacing: -.01em;
+  border: 1px solid rgba(194,100,38,.35);
+  box-shadow: none;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #EA742B;
+  box-shadow: none;
+}
+.btn-ghost {
+  background: #F8FBFF;
+  border: 1px solid rgba(207,218,229,.90);
+  color: var(--text-2); padding: 0 12px; height: 28px; font-size: 11px;
+  border-radius: 14px;
+  box-shadow: none;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: #FBFDFF; color: var(--text);
+  box-shadow: none;
+}
+.btn-ghost.active {
+  background: #FBFDFF; color: var(--text); font-weight: 600;
+  border-color: rgba(207,218,229,.90);
+  box-shadow: none;
+}
+
+input[type="text"], input[type="date"], textarea, select {
+  font-family: inherit; font-size: 13px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); outline: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+input[type="text"]:focus, input[type="date"]:focus,
+textarea:focus, select:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(234,88,12,.08);
+}
+input::placeholder, textarea::placeholder { color: var(--muted-2); }
+input[type="checkbox"] {
+  -webkit-appearance: none; appearance: none;
+  width: 15px; height: 15px; cursor: pointer; position: relative;
+  border-radius: 5px;
+  border: 1px solid rgba(207,218,229,.90);
+  background: #F4F7FA;
+  box-shadow: none;
+  transition: border-color .12s, box-shadow .12s, background .12s;
+}
+input[type="checkbox"]:hover {
+  border-color: rgba(190,205,218,.95);
+  background: #F7FAFD;
+  box-shadow: none;
+}
+input[type="checkbox"]:checked {
+  border-color: rgba(207,140,90,.50);
+  background: #FCE9DB;
+  box-shadow: none;
+}
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px; top: 1.5px;
+  width: 4px; height: 8px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(45deg);
+}
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(234,88,12,.12);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid rgba(213,223,234,.90);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.muted { font-size: 12px; color: var(--muted); line-height: 1.5;}
+.card-title { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.2; margin-top: 1px; margin-bottom: 4px; }
+.card-title + .muted { margin-top: 2; }
+
+.status-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 8px; height: 24px; border-radius: 99px;
+  font-size: 11px; font-weight: 500;
+}
+.badge-idle { background: var(--surface-2); color: var(--muted); }
+.badge-running { background: var(--accent-bg); color: var(--accent); }
+.badge-ok   { background: var(--ok-bg);   color: var(--ok-tx); }
+.badge-warn { background: var(--warn-bg); color: var(--warn-tx); }
+.badge-err  { background: var(--err-bg);  color: var(--err-tx); }
+
+.sep { height: 1px; background: rgba(214,223,233,.22); margin: 8px 0; }
+
+.spinner {
+  display: inline-block; width: 12px; height: 12px;
+  border: 1.5px solid var(--border); border-top-color: var(--text-2);
+  border-radius: 50%; animation: spin .6s linear infinite;
+  vertical-align: middle; margin-right: 5px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 앱 레이아웃 ───────────────────────────────────────── */
+#app { height: 100vh; display: flex; flex-direction: column; }
+
+/* ── SetupPage ─────────────────────────────────────────── */
+#page-setup {
+  flex: 1; overflow-y: auto; display: flex;
+  align-items: center; justify-content: center;
+  padding: 40px 24px 60px;
+  background: var(--bg);
+}
+.setup-inner {
+  width: 100%; max-width: 460px;
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid rgba(213,223,234,.90);
+  box-shadow: none;
+  padding: 32px 36px 28px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.page-title   { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -.02em; }
+.page-subtitle{ font-size: 12px; color: var(--muted); margin-top: 3px; }
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stat-card {
+  padding: 14px 16px; min-height: 72px;
+  display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid rgba(213,223,234,.85); border-radius: var(--radius);
+  box-shadow: none;
+}
+.stat-card .label { font-size: 11px; color: var(--muted); font-weight: 500; }
+.stat-card .value { font-size: 20px; font-weight: 600; color: var(--text); margin-top: auto; letter-spacing: -.03em; }
+.setup-form { padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field-label { font-size: 12px; color: var(--muted); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.input-row { display: flex; gap: 8px; }
+.input-row input[type="text"] { flex: 1; height: 34px; padding: 0 12px; }
+.date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+input[type="date"] { display: none; }
+
+/* 커스텀 날짜 피커 */
+.date-picker-wrap { position: relative; }
+.date-picker-input {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 34px; padding: 0 10px 0 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-2); cursor: pointer; user-select: none;
+  font-size: 13px; color: var(--text);
+  transition: border-color .12s;
+}
+
+.date-picker-input:hover { border-color: #aaa; background: #fff; }
+.date-picker-input.open { border-color: var(--border-focus); background: #fff; box-shadow: 0 0 0 3px rgba(61,58,54,.07); }
+.date-picker-input .dp-placeholder { color: var(--muted-2); }
+.date-picker-input .dp-icon { flex-shrink: 0; margin-left: 6px; opacity: .35; }
+.date-picker-input:hover .dp-icon { opacity: .6; }
+
+.date-picker-sm .date-picker-input {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.date-picker-sm .dp-icon {
+  display: block;
+}
+
+.dp-popup {
+  display: none; position: absolute; z-index: 9999;
+  top: calc(100% + 6px); left: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.06);
+  padding: 12px; min-width: 260px;
+}
+.dp-popup.open { display: block; }
+.dp-popup.up { top: auto; bottom: calc(100% + 6px); }
+
+.dp-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.dp-nav-btn {
+  width: 28px; height: 28px; border: none; background: none;
+  border-radius: 6px; cursor: pointer; font-size: 14px; color: #555;
+  display: flex; align-items: center; justify-content: center;
+}
+.dp-nav-btn:hover { background: var(--surface-2); }
+.dp-nav-label { font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.dp-nav-label:hover { background: var(--surface-2); }
+
+.dp-weekdays { display: grid; grid-template-columns: repeat(7,1fr); margin-bottom: 4px; }
+.dp-weekday { text-align: center; font-size: 10px; font-weight: 600; color: var(--muted-2); padding: 2px 0; }
+.dp-days { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+.dp-day {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; border-radius: 6px; cursor: pointer; color: #3C3C43;
+  border: none; background: none;
+}
+.dp-day:hover { background: var(--accent-bg); color: var(--accent); }
+.dp-day.today { font-weight: 700; color: var(--accent); }
+.dp-day.selected { background: var(--accent); color: #fff; font-weight: 700; }
+.dp-day.other-month { color: #C7C7CC; }
+.dp-day.other-month:hover { background: var(--surface-2); color: var(--muted-2); }
+
+.dp-year-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; }
+.dp-month-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; }
+.dp-year-btn, .dp-month-btn {
+  padding: 6px 4px; font-size: 12px; border: none; background: none;
+  border-radius: 6px; cursor: pointer; color: #3C3C43; text-align: center;
+}
+.dp-year-btn:hover, .dp-month-btn:hover { background: var(--accent-bg); color: var(--accent); }
+.dp-year-btn.selected, .dp-month-btn.selected { background: var(--accent); color: #fff; font-weight: 700; }
+
+.setup-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.sub-btns { display: flex; gap: 8px; }
+.btn-start { height: 34px; padding: 0 28px; font-size: 13px; border-radius: 16px; }
+
+.file-badge {
+  font-size: 10px; font-weight: 600; padding: 2px 7px;
+  border-radius: 99px; background: var(--surface-2); color: var(--muted);
+}
+.file-badge.ok   { background: var(--ok-bg);   color: var(--ok-tx); }
+.file-badge.warn { background: var(--warn-bg);  color: var(--warn-tx); }
+
+.banner {
+  padding: 10px 14px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 600; display: none;
+}
+.banner.show { display: block; }
+.banner.ok   { background: var(--ok-bg);   border: 1px solid var(--ok-bd);   color: var(--ok-tx); }
+.banner.warn { background: var(--warn-bg); border: 1px solid var(--warn-bd); color: var(--warn-tx); }
+.banner.err  { background: var(--err-bg);  border: 1px solid var(--err-bd);  color: var(--err-tx); }
+
+/* ══ MainPage ══════════════════════════════════════════ */
+#page-main { flex: 1; overflow: hidden; display: none; flex-direction: column; }
+
+/* ── 헤더 ─────────────────────────────────────────────── */
+.app-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+  padding: 0 20px; height: 52px;
+  display: flex; align-items: center; gap: 14px; flex-shrink: 0;
+}
+.app-header .app-name { font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: -.02em; }
+.app-header .work-date { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.mode-btns { display: flex; gap: 0; margin-left: auto; background: var(--surface-2); border-radius: 999px; padding: 3px; }
+.btn-mode {
+  height: 26px; padding: 0 14px; background: transparent;
+  border-radius: 999px; color: var(--muted); font-weight: 500; font-size: 12px;
+  transition: background .2s, color .2s;
+}
+.btn-mode.active { background: var(--surface); color: var(--text); font-weight: 600;
+  box-shadow: none; }
+
+/* ── 본문 레이아웃 ─────────────────────────────────────── */
+.main-body {
+  flex: 1; overflow: hidden; display: flex;
+  background: var(--bg);
+}
+
+/* ── 스텝 네비게이션 (세로) ─────────────────────────── */
+.step-bar {
+  width: 160px; flex-shrink: 0;
+  background: #F3F7FB;
+  border-right: 1px solid rgba(207,218,229,.60);
+  box-shadow: none;
+  border-radius: 0;
+  display: flex; flex-direction: column;
+  padding: 10px 6px; gap: 5px; overflow-y: auto;
+}
+.step-bar-label {
+  font-size: 11px; font-weight: 600; color: #0F1720;
+  text-transform: uppercase; letter-spacing: .06em;
+  padding: 0 10px; margin-bottom: 4px;
+}
+.step-sep { display: none; }
+.step-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 6px; height: 32px; border-radius: 7px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .15s, box-shadow .15s, border-color .15s, transform .15s;
+}
+.step-item:hover {
+  background: #F8FBFE;
+  border-color: rgba(207,218,229,.90);
+  box-shadow: none;
+}
+.step-item.active {
+  background: #FBFDFF;
+  border-color: rgba(207,218,229,.90);
+  border-radius: 11px;
+  box-shadow: none;
+}
+.step-item.active .step-label { color: var(--text); font-weight: 600; }
+.step-badge {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600;
+  background: #EDF3F8; color: var(--muted);
+  border: 1px solid rgba(211,222,232,.72);
+  box-shadow: none;
+}
+.step-badge.done    { background: var(--ok-bg); color: var(--ok-tx); border-color: rgba(187,247,208,.92); box-shadow: none; }
+.step-badge.active  { background: var(--accent); color: #fff; border-color: var(--accent); width: 20px; height: 20px;
+  box-shadow: none; }
+.step-badge.warn    { background: var(--warn-bg); color: var(--warn-tx); border-color: rgba(253,230,138,.94); box-shadow: none; }
+.step-label { font-size: 12px; font-weight: 600; color: #1F2937; }
+.step-item.active .step-label { color: var(--text); font-weight: 600; }
+.step-item:has(.step-badge.done) .step-label { color: var(--text); font-weight: 500; }
+
+/* ── 사이드바 (학교 정보) ───────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w); flex-shrink: 0;
+  overflow-y: auto; overflow-x: visible;
+  border-right: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  display: flex; flex-direction: column; gap: 12px;
+  align-items: center;
+  padding: 12px 8px 12px 15px;
+}
+.sidebar .card { background: none; border: none; border-radius: 0; padding: 0; display: contents; min-width: 0; box-shadow: none; }
+
+/* 사이드바 섹션 */
+.sb-section {
+  width: calc(100% - 12px);
+  max-width: 205px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+  background: #F8FBFF;
+  border-radius: 12px;
+  border: 1px solid rgba(213,223,234,.90);
+  box-shadow: none;
+}
+.sb-label {
+  font-size: 11px; font-weight: 600; color: #0F1720;
+  padding: 0 0 2px 0; letter-spacing: .04em; text-transform: uppercase;
+}
+
+.sidebar .muted {
+  color: var(--muted);
+}
+#school-status,
+#school-history,
+#last-work,
+.panel-caption,
+.notice-caption,
+.run-caption,
+.diff-caption,
+.helper-caption,
+.card-caption,
+.section-caption,
+.viewer-caption {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* 사이드바 내 기존 UI 조정 */
+.school-search-wrap { position: relative; }
+
+.school-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.school-input-row input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.school-input-row input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  font-size: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color .12s, box-shadow .12s, background .12s;
+}
+
+.school-input-row input:focus {
+  background: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(234,88,12,.10);
+}
+.school-input-row button {
+  flex: 0 0 auto;
+  min-width: 54px;
+  white-space: nowrap;
+}
+
+.school-input-row button {
+  flex: 0 0 52px;
+  width: 52px;
+  white-space: nowrap;
+  height: 28px;
+  padding: 0;
+  font-size: 11px;
+}
+
+.school-dropdown {
+  position: absolute; top: 100%; left: 0; z-index: 100;
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: 0 4px 16px rgba(0,0,0,.08);
+  max-height: 180px; overflow-y: auto; display: none;
+  /* 인풋 박스 너비만큼 — 적용 버튼 제외 */
+  right: 46px;
+}
+.school-dropdown::-webkit-scrollbar { width: 3px; }
+.school-dropdown::-webkit-scrollbar-track { background: transparent; }
+.school-dropdown::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 99px; }
+.school-dropdown.open { display: block; }
+.school-item {
+  padding: 7px 12px; font-size: 12px; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.school-item:last-child { border-bottom: none; }
+.school-item:hover { background: rgba(0,0,0,.04); }
+.school-item.hl { background: var(--surface); box-shadow: none; }
+
+.current-school-name { font-size: 13px; font-weight: 600; color: var(--text); word-break: keep-all; line-height: 1.35; }
+
+.date-chk-row {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.date-chk-row label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  width: 45px;
+}
+
+.date-chk-row .date-picker-wrap {
+  width: 100%;
+}
+
+.date-chk-row .date-picker-input {
+  width: 100%;
+}
+
+.date-picker-input .dp-text {
+  text-align: left;
+  flex: 1;
+}
+
+.btn-full { height: 28px; font-size: 11px; align-self: flex-start; }
+
+#school-input.focus-highlight {
+  background: #fff !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(234,88,12,.10);
+}
+
+/* 4. 학년도 박스 — 회색 배경 완전 제거 */
+.grade-map-body {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 0; background: none; border-radius: 0;
+}
+#grade-map-body { display: flex !important; }
+
+/* 학년도 숫자 인풋 — 안정화 버전 */
+.grade-row-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 1px 0;
+}
+
+
+.grade-row-item label {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.grade-row-item input[type="number"] {
+  width: 60px;
+  min-width: 60px;
+  height: 22px;
+  padding: 0 2px;
+  border: none;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  font-family: inherit;
+  background: transparent;
+  color: var(--text);
+  text-align: center;
+
+  /* 핵심 */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+/* 스피너 제거 (크롬/웹뷰) */
+.grade-row-item input[type="number"]::-webkit-outer-spin-button,
+.grade-row-item input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.btn-new-school {
+  width: 100%; height: 32px; padding: 0 12px;
+  background: #F8FBFF;
+  border: 1px solid rgba(207,218,229,.95);
+  border-radius: 12px; color: var(--text-2);
+  cursor: pointer; font-size: 12px; font-weight: 500;
+  font-family: inherit; text-align: center;
+  box-shadow: none;
+}
+.btn-new-school:hover {
+  background: #FBFDFF; color: var(--text);
+  box-shadow: none;
+}
+
+/* 학년도 버튼은 숨김 처리 */
+#btn-grade-toggle { display: none !important; }
+
+.roster-btns { display: flex; gap: 6px; }
+.roster-btns button { flex: 1; height: 28px; font-size: 11px; padding: 0; text-align: center; }
+
+/* ── 스크롤바 전체 ───────────────────────────────────── */
+* { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,.15) transparent; }
+*::-webkit-scrollbar { width: 3px; height: 3px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 99px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.25); }
+
+/* cursor:pointer 전역 */
+button:not(:disabled), a, [data-action]:not(:disabled),
+.file-link, .step-item, .sheet-tab, .output-file-name,
+.notice-list-item, .dp-nav-btn, .dp-day, .dp-month-btn,
+.dp-year-btn, .dp-nav-label { cursor: pointer; }
+
+/* ── 플로팅 다음 버튼 ───────────────────────────────────── */
+.floating-next, .floating-back {
+  position: fixed; bottom: 24px; z-index: 8000;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: none; font-size: 18px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s, transform .15s, opacity .2s;
+  opacity: .2; cursor: default; pointer-events: none;
+}
+.floating-next { right: 24px; background: var(--accent); color: #fff;
+  box-shadow: none; }
+.floating-back { right: 76px; background: var(--surface-2); color: var(--text-2);
+  box-shadow: none; }
+.floating-next.active { opacity: 1; cursor: pointer; pointer-events: auto; }
+.floating-back.active { opacity: 1; cursor: pointer; pointer-events: auto; }
+.floating-next.active:hover { background: var(--accent-h); transform: scale(1.06); }
+.floating-back.active:hover { background: var(--surface-hover); transform: scale(1.08); }
+
+/* ── 콘텐츠 영역 ─────────────────────────────────────── */
+.content-area {
+  flex: 1; overflow-y: auto;
+  padding: 10px 12px 10px 8px; display: flex; flex-direction: column; gap: 6px;
+  background: transparent;
+}
+
+/* ── 탭 패널 ─────────────────────────────────────────── */
+.tab-panel { display: none; flex-direction: column; gap: 12px; }
+.tab-panel.active { display: flex; }
+
+.tab-panel > .card {
+  padding: 14px 16px;
+  border-radius: 13px;
+  border: 1px solid rgba(213,223,234,.90);
+  background: #FCFEFF;
+  box-shadow: none;
+}
+
+/* 뷰어 카드는 패딩 없이 내부에서 처리 */
+.tab-panel > .card:has(.viewer-header) {
+  padding: 0;
+}
+
+/* ── 스캔탭 ──────────────────────────────────────────── */
+.scan-head { display: flex; align-items: flex-start; gap: 8px; }
+.scan-head-left { flex: 1; }
+.scan-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.scan-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.scan-table th, .scan-table td {
+  border-bottom: 1px solid var(--border); padding: 6px 12px; text-align: left;
+}
+.scan-table tbody tr { border-bottom: none; }
+.scan-table tbody tr:last-child { border-bottom: none; }
+.scan-table tbody tr:hover td { background: var(--surface-2); }
+.scan-table th { background: transparent; font-weight: 500; color: var(--muted); border-top: none; font-size: 11px; letter-spacing: .02em; }
+.scan-table td.kind { color: var(--text); font-weight: 600; }
+.scan-table td.file-link { color: var(--accent); cursor: pointer; text-decoration: underline; }
+.scan-table td.file-link:hover { color: var(--accent-h); }
+.scan-table td.file-link.file-link-warn { color: #B45309; font-weight: 700; }
+.viewer-table tr.row-warn td,
+.preview-table tr.row-warn td { background: #FBF5EA; }
+.viewer-table tr.row-error td,
+.preview-table tr.row-error td { background: #F8ECEE; }
+.viewer-table tr.row-dup td,
+.preview-table tr.row-dup td { background: #EDF5F1; }
+
+#scan-tbody tr.scan-row-warn td {
+  background: #FFF8EA;
+}
+#scan-tbody tr.scan-row-warn td.kind { color: #9A5B16; }
+#scan-tbody tr.viewer-active td {
+  background: #FFF1E5;
+}
+#scan-tbody tr.viewer-active td.kind { color: #C75A14; font-weight: 700; }
+.spin-cell { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.spin-btn {
+  width: 18px; height: 18px;
+  background: #F4F7FA;
+  border: 1px solid rgba(207,218,229,.95); border-radius: 6px;
+  font-size: 11px; font-weight: 700; color: var(--text-2);
+  display: flex; align-items: center; justify-content: center; padding: 0;
+  box-shadow: none;
+}
+.spin-val { font-size: 12px; font-weight: 600; color: var(--muted); width: 22px; text-align: center; }
+.school-kind-warn {
+  padding: 8px 12px; background: var(--warn-bg);
+  border-left: 3px solid var(--warn-tx);
+  font-size: 12px; font-weight: 500; color: var(--warn-tx);
+  display: none;
+}
+.inline-warn-card {
+  display: none;
+  padding: 10px 14px;
+  background: #FFFBEE;
+  border: 1px solid rgba(240,215,150,.80);
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9A5B16;
+}
+.inline-warn-card .warn-line + .warn-line { margin-top: 4px; }
+
+.inline-warn-card.error {
+  background: #FFF3F4;
+  border: 1px solid rgba(241,200,205,.80);
+  border-radius: 10px;
+  box-shadow: none;
+  color: #BE3E4A;
+}
+.scan-table td.file-link.file-link-error { color: #CB3A3A; font-weight: 700; }
+#scan-tbody tr.scan-row-error td {
+  background: #FFF1F2;
+}
+#scan-tbody tr.scan-row-error td.kind { color: #BE3E4A; }
+
+.preview-warn-box { display:block; line-height:1.55; font-size:11px; }
+.preview-warn-box { display:block; line-height:1.55; }
+.preview-warn-box .pw-title { color:#92400E; font-weight:700; }
+.preview-warn-box .pw-item { color:#92400E; margin-top:2px; }
+.preview-warn-box .pw-meta { color:var(--muted); margin-top:2px; }
+
+/* ── 뷰어 ────────────────────────────────────────────── */
+.viewer-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: none; }
+.viewer-body { padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 6px; }
+.filter-row { display: flex; gap: 8px; align-items: center; }
+.filter-row input { flex: 1; height: 30px; padding: 0 10px; }
+.preview-table-wrap { overflow: auto; max-height: 600px; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.data-table th, .data-table td { border-bottom: 1px solid rgba(220,228,237,.85); padding: 4px 10px; text-align: left; }
+.data-table th { background: #F1F5FA; font-weight: 600; color: var(--text-2); position: sticky; top: 0; z-index: 2; }
+.data-table tr.row-hold td {
+  background: #FFF1F2;
+}
+.data-table tr.row-warn td {
+  background: #FFF8EA;
+}
+.data-table tr.row-skip td { background: #F4F7FA; }
+.data-table tr.row-dup td {
+  background: #EEF9F4;
+}
+.data-table tr.row-prestart td { background: #F5F6F8; color: #A3AAB3; }
+.data-table tr.row-prestart td:first-child { color: #B8BFC8; }
+
+
+/* ── 실행탭 ──────────────────────────────────────────── */
+.run-summary-grid { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 4px 12px; font-size: 12px; }
+.run-summary-grid .lbl { color: var(--muted); }
+.run-summary-grid .val { font-weight: 600; color: var(--text); }
+.output-file-item {
+  display: flex; align-items: center; gap: 6px; padding: 4px 0;
+  font-size: 12px;
+}
+.output-file-name { flex: 1; color: var(--accent); cursor: pointer; }
+.output-file-name:hover { text-decoration: underline; }
+.sheet-tabs { display: flex; gap: 1px; flex-wrap: wrap; margin-bottom: 10px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 3px; width: fit-content; }
+.sheet-tab {
+  padding: 4px 12px; border-radius: 5px; font-size: 12px;
+  font-weight: 400; cursor: pointer; background: transparent; color: var(--muted);
+  border: none; font-family: inherit; transition: background .1s, color .1s;
+}
+.sheet-tab.active { background: #fff; color: var(--text); font-weight: 500; box-shadow: none; }
+
+/* ── 안내문탭 ─────────────────────────────────────────── */
+.notice-body { display: flex; gap: 0; flex: 1; min-height: 0; }
+.notice-list-wrap { width: 160px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); }
+.notice-list-item { padding: 9px 14px; font-size: 13px; cursor: pointer; border-bottom: none; color: var(--text-2); border-radius: var(--radius-sm); margin: 2px 6px; }
+.notice-list-item:last-child { border-bottom: none; }
+.notice-list-item:hover { background: var(--surface-2); }
+.notice-list-item.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: none; }
+.notice-right { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 10px; }
+.notice-text { flex: 1; resize: none; padding: 10px 12px; font-size: 13px; min-height: 320px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+
+/* ── diff 모드 ─────────────────────────────────────────── */
+.diff-year-row { display: flex; align-items: center; gap: 10px; }
+.diff-year-row input[type="number"] {
+  width: 100px; height: 30px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; font-family: inherit;
+}
+
+.diff-result-stack { display:flex; flex-direction:column; gap:8px; }
+.diff-map-card {
+  border:1px solid rgba(213,223,234,.90); border-radius:var(--radius);
+  background:#FCFEFF;
+  box-shadow: none;
+  padding:10px;
+  display:flex; flex-direction:column; gap:8px;
+}
+.diff-map-sources {
+  display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:center;
+}
+.diff-map-source {
+  height:32px; border:1px solid var(--border); border-radius:999px;
+  background:var(--surface-2); color:var(--text-2); font-size:12px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+}
+.diff-map-source.right { justify-self:end; width:100%; }
+.diff-map-lane {
+  display:grid; grid-template-columns:1fr 1.18fr 1fr; gap:10px; align-items:stretch;
+}
+.diff-map-node {
+  border:1px solid var(--border); border-radius:16px;
+  background:#fff; min-height:116px; padding:14px 14px 12px;
+  display:flex; flex-direction:column; justify-content:space-between; gap:6px;
+}
+.diff-map-node.center {
+  background:#F0F6FF;
+  border-color:#C8DCFF;
+  box-shadow: none;
+}
+.diff-map-mini { font-size:11px; color:var(--muted); font-weight:700; }
+.diff-map-count { font-size:28px; line-height:1; font-weight:800; color:var(--text); letter-spacing:-.04em; }
+.diff-map-title { font-size:13px; font-weight:700; color:#0F172A; }
+.diff-map-desc { font-size:11px; color:var(--muted); line-height:1.45; }
+.diff-map-footer {
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+}
+.diff-unresolved-badge {
+  display:inline-flex; align-items:center; gap:8px;
+  min-height:32px; padding:0 12px; border-radius:999px;
+  background:var(--warn-bg); border:1px solid var(--warn-bd); color:var(--warn-tx);
+  font-size:12px; font-weight:700;
+}
+.diff-unresolved-count { font-size:14px; font-weight:800; }
+.diff-unresolved-note { font-size:12px; color:var(--muted); }
+.diff-viewer-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; }
+.diff-col-head { display:flex; flex-direction:column; gap:2px; margin-bottom:6px; }
+.diff-col-title { font-size:13px; font-weight:700; color:#0F172A; }
+.diff-col-desc { font-size:11px; color:var(--muted); line-height:1.45; }
+.diff-table-wrap { border:1px solid var(--border); border-radius:var(--radius-sm); overflow:auto; max-height:280px; }
+.diff-table-wrap.compact { max-height:140px; }
+.diff-empty { padding:14px 12px; font-size:12px; color:var(--muted); }
+.diff-summary-box {
+  padding:10px 12px; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); font-size:12px; color:var(--text-2); line-height:1.6;
+  white-space:pre-line;
+}
+@media (max-width: 1200px) {
+  .diff-map-sources { grid-template-columns:1fr; }
+  .diff-map-lane { grid-template-columns:1fr; }
+  .diff-viewer-grid { grid-template-columns:1fr; }
+}
+
+/* ── 커스텀 확인 모달 ──────────────────────────────────── */
+.confirm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: rgba(0,0,0,.18);
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm-modal {
+  background: #fff; border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 40px rgba(0,0,0,.14), 0 2px 8px rgba(0,0,0,.06);
+  padding: 20px; width: 400px; max-width: 92%;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.confirm-modal-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.confirm-modal-body  { font-size: 12px; color: var(--text-2); line-height: 1.55; word-break: keep-all; }
+.confirm-modal-options { display: flex; flex-direction: column; gap: 6px; }
+.confirm-modal-option {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--surface-2); cursor: pointer;
+  transition: background .1s;
+  border: 1.5px solid transparent;
+}
+.confirm-modal-option:hover { background: var(--surface-hover); }
+.confirm-modal-option input[type="radio"] { margin-top: 1px; accent-color: var(--accent); flex-shrink: 0; }
+.confirm-modal-option.selected { background: var(--surface); border-color: var(--border); box-shadow: none; }
+.confirm-modal-option-label { font-size: 13px; font-weight: 500; color: var(--text); }
+.confirm-modal-option-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.confirm-modal-footer { display: flex; justify-content: flex-end; gap: 6px; }
+
+
+#page-main .date-picker-sm .date-picker-input {
+  height: 30px;
+  padding: 0 10px 0 12px;
+  font-size: 11px;
+}
+
+#page-main .date-picker-sm .dp-icon {
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+}
+
+
+
+.diff-result-stack { display:flex; flex-direction:column; gap:14px; }
+.diff-set-overview {
+  display:grid; grid-template-columns:1fr 1.15fr 1fr auto; gap:6px; align-items:stretch;
+}
+.diff-set-node {
+  border:1px solid var(--border); border-radius:10px; background:#fff; padding:10px 12px;
+  display:flex; flex-direction:column; gap:3px; min-height:72px; justify-content:center;
+}
+.diff-set-node.center { background:rgba(109,99,255,.04); }
+.diff-set-label { font-size:12px; color:var(--muted); }
+.diff-set-value { font-size:22px; font-weight:700; color:var(--text); }
+.diff-set-desc { font-size:11px; color:var(--muted); }
+.diff-alert-badge {
+  border:1px solid var(--border); border-radius:12px; padding:12px 14px; background:#fff8f2;
+  display:flex; flex-direction:column; justify-content:center; min-width:120px;
+}
+.diff-alert-badge .diff-set-label { color:#9a5b16; }
+.diff-alert-badge .diff-set-value { color:#9a5b16; }
+.diff-viewer-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
+.diff-col-head { display:flex; flex-direction:column; gap:2px; margin-bottom:6px; }
+.diff-col-title { font-size:12px; font-weight:700; color:var(--text); }
+.diff-col-desc { font-size:11px; color:var(--muted); }
+.diff-table-wrap { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#fff; }
+.diff-table-wrap.compact table td, .diff-table-wrap.compact table th { font-size:12px; }
+.diff-empty { padding:14px 12px; font-size:12px; color:var(--muted); }
+.diff-summary-box {
+  border:1px solid var(--border); border-radius:10px; background:#fafafe;
+  padding:10px 12px; font-size:12px; color:var(--text); white-space:pre-line;
+}
+@media (max-width: 1200px) { .diff-set-overview, .diff-viewer-grid { grid-template-columns:1fr; } .diff-alert-badge { min-width:0; } }
+
+
+.diff-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.diff-scan-wrap { display:flex; flex-direction:column; gap:10px; }
+.diff-scan-viewer { border-top:1px solid var(--border); padding-top:10px; display:none; }
+.diff-scan-viewer.is-visible { display:block; }
+.diff-preview-table-wrap { border:1px solid var(--border); border-radius:10px; overflow:auto; max-height:260px; background:#fff; }
+.diff-compare-link { cursor:pointer; }
+.diff-compare-link:hover { color:var(--accent); text-decoration:underline; }
+.diff-result-pre { font-size:11px; color:var(--muted); margin-top:0; margin-bottom:0; }
+.diff-output-link { display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; }
+.diff-output-link .lbl { font-size:12px; color:var(--muted); font-weight:700; }
+.diff-output-link .lnk { font-size:13px; font-weight:700; color:var(--accent); cursor:pointer; }
+.diff-output-link .lnk:hover { text-decoration:underline; }
+
+.diff-result-body { display:none; flex-direction:column; gap:6px; }
+.diff-result-body.is-visible { display:flex; }
+.diff-set-overview {
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap:14px; align-items:stretch;
+}
+.diff-set-node {
+  min-height:170px; border:1px solid var(--border); border-radius:12px; background:#fafafa; padding:16px 14px;
+  display:flex; flex-direction:column; justify-content:flex-start; align-items:center; text-align:center; gap:8px;
+}
+.diff-set-node.center { background:#f3f3f3; }
+.diff-set-icon { width:28px; height:28px; opacity:.88; color:var(--text-2); }
+.diff-set-label { font-size:18px; font-weight:700; color:var(--text); }
+.diff-set-value { font-size:26px; font-weight:800; color:var(--text); line-height:1; }
+.diff-set-desc { font-size:11px; color:var(--muted); line-height:1.45; }
+.diff-alert-row {
+  border:1px solid var(--border); border-radius:10px; background:#f6f6f6; padding:14px 16px;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+}
+.diff-alert-row-left { display:flex; flex-direction:column; gap:4px; }
+.diff-alert-title { font-size:18px; font-weight:700; color:var(--text); }
+.diff-alert-desc { font-size:11px; color:var(--muted); }
+.diff-alert-value { font-size:24px; font-weight:800; color:var(--text); }
+.diff-viewer-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+.diff-table-wrap { border:1px solid var(--border); border-radius:10px; overflow:auto; background:#fff; max-height:320px; }
+.diff-table-wrap.compact { max-height:180px; }
+.diff-set-overview { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; align-items:stretch; }
+.diff-set-node {
+  min-height:92px; border:1px solid var(--border); border-radius:12px; background:#fafafa; padding:14px 12px;
+  display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; gap:6px;
+}
+.diff-set-node.center { background:#f4f4f4; }
+.diff-set-label { font-size:14px; font-weight:700; color:var(--text); line-height:1.3; }
+.diff-set-value { font-size:30px; font-weight:800; color:var(--text); line-height:1; }
+.diff-set-desc { font-size:11px; color:var(--muted); line-height:1.4; }
+.diff-summary-caption { font-size:11px; color:var(--muted); line-height:1.45; margin-top:0; margin-bottom:0; font-weight:400; }
+@media (max-width: 1200px) {
+  .diff-set-overview { grid-template-columns:repeat(3, minmax(0,1fr)); }
+  .diff-viewer-grid { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
+}
+
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══ SetupPage ══════════════════════════════════════════ -->
+<div id="page-setup">
+<div class="setup-inner">
+
+  <div>
+    <div class="page-title">리딩게이트 새학기 반편성</div>
+    <div class="page-subtitle">작업 폴더와 기본 정보를 입력하고 시작하세요.</div>
+  </div>
+
+  <div class="banner" id="setup-banner"></div>
+
+  <div class="setup-form">
+    <div class="field">
+      <label class="field-label">
+        작업 폴더
+        <span id="work-root-badge" class="file-badge"></span>
+      </label>
+      <div class="input-row">
+        <input type="text" id="work-root" placeholder="작업 폴더를 선택하거나 직접 입력하세요">
+        <button class="btn-ghost" data-action="pick-folder">찾아보기</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">
+        학교 전체 명단 파일 (xlsx)
+        <span class="file-badge warn" id="col-map-badge">열 매핑 필요</span>
+      </label>
+      <div class="input-row">
+        <input type="text" id="roster-log" placeholder="학교전체명단 .xlsx 파일을 선택하세요" readonly>
+        <button class="btn-ghost" data-action="pick-roster">찾아보기</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">작업자</label>
+      <input type="text" id="worker" placeholder="작업자 이름" style="height:34px;padding:0 12px;">
+    </div>
+
+    <div class="date-row">
+      <div class="field">
+        <label class="field-label">개학일</label>
+        <div class="date-picker-wrap" id="dp-school-start-date">
+          <input type="date" id="school-start-date">
+          <div class="date-picker-input" data-dp="school-start-date">
+            <span class="dp-text dp-placeholder">날짜 선택</span>
+            <svg class="dp-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
+              <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
+              <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
+              <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+            </svg>
+          </div>
+          <div class="dp-popup" id="dp-popup-school-start-date"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">작업일</label>
+        <div class="date-picker-wrap" id="dp-work-date">
+          <input type="date" id="work-date">
+          <div class="date-picker-input" data-dp="work-date">
+            <span class="dp-text dp-placeholder">날짜 선택</span>
+            <svg class="dp-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
+              <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
+              <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
+              <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+            </svg>
+          </div>
+          <div class="dp-popup" id="dp-popup-work-date"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="setup-actions">
+    <div class="sub-btns">
+      <button class="btn-ghost" data-action="save-defaults">기본 설정 저장</button>
+      <button class="btn-ghost" data-action="load-defaults">기본 설정 불러오기</button>
+    </div>
+    <button class="btn-primary btn-start" id="btn-start" disabled data-action="start">
+      작업 시작 →
+    </button>
+  </div>
+
+</div>
+</div><!-- /page-setup -->
+
+
+<!-- ══ MainPage ════════════════════════════════════════════ -->
+<div id="page-main">
+
+  <!-- 헤더 -->
+  <div class="app-header">
+    <div>
+      <div class="app-name">리딩게이트 반이동 자동화</div>
+      <div class="work-date" id="header-work-date">작업일 -</div>
+    </div>
+    <div class="mode-btns">
+      <button class="btn-mode active" id="btn-mode-main" data-action="mode-main">새학기 반편성</button>
+      <button class="btn-mode"        id="btn-mode-diff" data-action="mode-diff">재학생 명단 비교</button>
+    </div>
+  </div>
+
+  <!-- 본문 -->
+  <div class="main-body">
+
+    <!-- 스텝 네비게이션 (세로) -->
+    <div class="step-bar" id="step-bar">
+      <div class="step-bar-label">작업 단계</div>
+      <div class="step-item active" data-step="0">
+        <div class="step-badge active" id="badge-0">1</div>
+        <span class="step-label">기본 설정</span>
+      </div>
+      <div class="step-sep"></div>
+      <div class="step-item" data-step="1">
+        <div class="step-badge" id="badge-1">2</div>
+        <span class="step-label">학교 선택</span>
+      </div>
+      <div class="step-sep"></div>
+      <div class="step-item" data-step="2">
+        <div class="step-badge" id="badge-2">3</div>
+        <span class="step-label">스캔</span>
+      </div>
+      <div class="step-sep"></div>
+      <div class="step-item" data-step="3">
+        <div class="step-badge" id="badge-3">4</div>
+        <span class="step-label">실행·결과</span>
+      </div>
+      <div class="step-sep"></div>
+      <div class="step-item" data-step="4">
+        <div class="step-badge" id="badge-4">5</div>
+        <span class="step-label">안내문</span>
+      </div>
+      <div style="margin-top:auto; display:flex; flex-direction:column;">
+        <div style="padding:8px 8px 4px;">
+          <button class="btn-new-school" data-action="new-school"
+                  style="font-size:11px;height:28px;color:var(--text-2)">+ 새 학교 시작</button>
+        </div>
+        <div style="padding:4px 8px 10px;">
+          <button class="btn-new-school" data-action="back-to-setup"
+                  style="font-size:11px;height:28px;color:var(--text-2)">← 기본 설정으로</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 사이드바 (학교 정보) -->
+    <div class="sidebar">
+
+        <!-- 섹션: 학교 검색 -->
+        <div class="sb-section">
+          <div class="sb-label">학교 선택</div>
+          <div class="school-search-wrap">
+            <div class="school-input-row">
+              <input type="text" id="school-input" placeholder="학교명 검색" autocomplete="off">
+              <button class="btn-primary" id="btn-apply-school" disabled data-action="apply-school">적용</button>
+            </div>
+            <div class="school-dropdown" id="school-dropdown"></div>
+          </div>
+          <div style="margin-top:10px">
+            <div class="current-school-name" id="current-school">-</div>
+            <div id="school-history" style="display:none;font-size:11px;color:var(--muted);line-height:1.6;word-break:keep-all;white-space:pre-line;margin-top:4px"></div>
+            <div class="muted" id="school-status" style="margin-top:4px;font-size:10px;line-height:1.45">학교명을 입력해 검색하세요.</div>
+            <div class="muted" id="last-work" style="display:none;margin-top:2px"></div>
+          </div>
+        </div>
+
+        <!-- 섹션: 학년도 아이디 규칙 + 학생명부 -->
+        <div class="sb-section">
+          <div class="sb-label">학년도 아이디 규칙</div>
+          <div class="grade-map-body open" id="grade-map-body">
+            <span class="muted" style="font-size:11px">스캔 후 자동 감지 · 직접 수정 가능</span>
+            <div id="grade-rows"></div>
+            <div style="display:flex;gap:6px;margin-top:4px">
+              <button class="btn-primary" style="flex:1;height:28px;font-size:11px" data-action="apply-grade">적용</button>
+              <button class="btn-ghost" id="btn-open-roster-map" disabled
+                      style="flex:1;height:28px;font-size:11px" data-action="open-roster-map">명부 열기</button>
+            </div>
+            <span class="muted" id="roster-map-hint" style="font-size:11px;display:none;margin-top:6px">학생명부 파일이 없습니다.</span>
+          </div>
+          <button id="btn-grade-toggle" data-action="toggle-grade" style="display:none"></button>
+        </div>
+
+        <!-- 섹션: 메일 기록 -->
+        <div class="sb-section">
+          <div class="sb-label">메일 기록</div>
+          <div class="date-chk-row">
+            <label><input type="checkbox" id="chk-arrived"> 도착일</label>
+            <div class="date-picker-wrap date-picker-sm" style="flex:1">
+              <input type="date" id="arrived-date">
+              <div class="date-picker-input" data-dp="arrived-date">
+                <span class="dp-text dp-placeholder" style="font-size:11px">날짜 선택</span>
+                <svg class="dp-icon" width="13" height="13" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
+                  <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
+                  <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
+                  <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                </svg>
+              </div>
+              <div class="dp-popup" id="dp-popup-arrived-date"></div>
+            </div>
+          </div>
+          <div class="date-chk-row">
+            <label><input type="checkbox" id="chk-sent"> 발송일</label>
+            <div class="date-picker-wrap date-picker-sm" style="flex:0 0 115px">
+              <input type="date" id="sent-date">
+              <div class="date-picker-input" data-dp="sent-date">
+                <span class="dp-text dp-placeholder" style="font-size:11px">날짜 선택</span>
+                <svg class="dp-icon" width="13" height="13" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
+                  <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
+                  <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
+                  <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                </svg>
+              </div>
+              <div class="dp-popup" id="dp-popup-sent-date"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 섹션: 전체 명단 (DB) -->
+        <div class="sb-section">
+          <div class="sb-label">전체 명단 (DB)</div>
+          <div class="roster-btns">
+            <button class="btn-ghost" id="btn-record-roster" disabled data-action="record-roster">명단 반영</button>
+            <button class="btn-ghost" id="btn-open-roster"   disabled data-action="open-roster">파일 열기</button>
+          </div>
+        </div>
+
+    </div><!-- /sidebar -->
+
+    <!-- 콘텐츠 -->
+    <div class="content-area">
+
+      <!-- 스캔 탭 -->
+      <div class="tab-panel active" id="tab-scan">
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <div class="scan-head">
+            <div class="scan-head-left">
+              <div class="card-title">스캔 검수</div>
+              <div class="muted panel-caption panel-caption" class="panel-caption">입력 파일 구조를 확인하고, 의심 행을 검수합니다.</div>
+            </div>
+            <div class="scan-actions">
+              <button class="btn-primary" id="btn-scan" disabled data-action="scan-start">파일 내용 스캔</button>
+              <button class="btn-ghost"   id="btn-scan-log"  data-action="scan-log">스캔 로그 보기</button>
+              <div class="status-badge badge-idle" id="scan-status-badge">대기</div>
+              <button class="btn-primary" id="btn-goto-run"
+                      style="display:none;width:36px;height:36px;padding:0;font-size:16px"
+                      data-action="goto-run">→</button>
+            </div>
+          </div>
+
+          <div class="muted" id="scan-message" style="display:block"></div>
+          <div class="inline-warn-card" id="scan-warn-card"></div>
+
+          <table class="scan-table">
+            <thead><tr>
+              <th style="width:68px">구분</th>
+              <th>파일명</th>
+              <th style="width:88px">시트</th>
+              <th style="width:88px">시작행</th>
+              <th style="width:48px">확인</th>
+            </tr></thead>
+            <tbody id="scan-tbody">
+              <tr data-kind="신입생"><td class="kind">신입생</td><td></td><td></td>
+                <td><div class="spin-cell">
+                  <button class="spin-btn" data-spin-kind="신입생" data-spin-delta="-1">−</button>
+                  <span class="spin-val" id="spin-신입생">-</span>
+                  <button class="spin-btn" data-spin-kind="신입생" data-spin-delta="1">+</button>
+                </div></td>
+                <td style="text-align:center"><input type="checkbox" id="chk-신입생"></td></tr>
+              <tr data-kind="전입생"><td class="kind">전입생</td><td></td><td></td>
+                <td><div class="spin-cell">
+                  <button class="spin-btn" data-spin-kind="전입생" data-spin-delta="-1">−</button>
+                  <span class="spin-val" id="spin-전입생">-</span>
+                  <button class="spin-btn" data-spin-kind="전입생" data-spin-delta="1">+</button>
+                </div></td>
+                <td style="text-align:center"><input type="checkbox" id="chk-전입생"></td></tr>
+              <tr data-kind="전출생"><td class="kind">전출생</td><td></td><td></td>
+                <td><div class="spin-cell">
+                  <button class="spin-btn" data-spin-kind="전출생" data-spin-delta="-1">−</button>
+                  <span class="spin-val" id="spin-전출생">-</span>
+                  <button class="spin-btn" data-spin-kind="전출생" data-spin-delta="1">+</button>
+                </div></td>
+                <td style="text-align:center"><input type="checkbox" id="chk-전출생"></td></tr>
+              <tr data-kind="교직원"><td class="kind">교직원</td><td></td><td></td>
+                <td><div class="spin-cell">
+                  <button class="spin-btn" data-spin-kind="교직원" data-spin-delta="-1">−</button>
+                  <span class="spin-val" id="spin-교직원">-</span>
+                  <button class="spin-btn" data-spin-kind="교직원" data-spin-delta="1">+</button>
+                </div></td>
+                <td style="text-align:center"><input type="checkbox" id="chk-교직원"></td></tr>
+            </tbody>
+          </table>
+
+          <div class="school-kind-warn" id="school-kind-warn">⚠ 학교 구분을 자동으로 판별하지 못했습니다. 직접 선택한 뒤 실행해 주세요.</div>
+          <div id="school-kind-row" style="display:none;align-items:center;gap:8px;margin-top:6px">
+            <span class="muted">학교 구분</span>
+            <select id="school-kind-select" style="height:28px;padding:0 8px;width:130px">
+              <option>초등부</option><option>중등부</option><option>고등부</option><option>기타(빈칸)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 뷰어 -->
+        <div class="card">
+          <div class="viewer-header">
+            <div style="flex:1">
+              <span class="card-title">선택 파일 전체 검수</span>
+              <div class="muted" id="preview-file-info" style="margin-top:3px;font-size:11px">헤더행: - | 시작행: -</div>
+            </div>
+            <button class="btn-ghost" id="btn-toggle-viewer" data-action="toggle-viewer"
+                    style="height:28px;font-size:11px;padding:0 10px">펼치기 ▾</button>
+          </div>
+          <div id="viewer-body" style="display:none">
+            <div class="viewer-body">
+              <div class="filter-row">
+                <input type="text" id="preview-search" placeholder="이름, 반, 학년 등 검색">
+                <button class="btn-ghost" id="btn-issue-only" data-filter="issue" style="height:28px;font-size:11px">의심 행만</button>
+                <button class="btn-ghost"        id="btn-dup-only"   data-filter="dup"   style="height:28px;font-size:11px">동명이인만</button>
+              </div>
+              <div class="muted preview-warn-box" id="preview-warn">검수할 파일을 위 표에서 선택하세요.</div>
+              <div class="preview-table-wrap">
+                <table class="data-table" id="preview-table"><thead></thead><tbody></tbody></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-scan -->
+
+      <!-- 실행·결과 탭 -->
+      <div class="tab-panel" id="tab-run">
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <div class="scan-head">
+            <div class="scan-head-left">
+              <div class="card-title">실행 / 결과</div>
+              <div class="muted run-caption" id="run-info">스캔을 통과한 작업을 실행하고 결과 파일을 확인합니다.</div>
+            </div>
+            <div class="scan-actions">
+              <button class="btn-primary" id="btn-run" disabled data-action="run-start">작업 실행</button>
+              <button class="btn-ghost"   id="btn-run-log" data-action="run-log">실행 로그 보기</button>
+              <div class="status-badge badge-idle" id="run-status-badge">대기</div>
+              <button class="btn-primary" id="btn-goto-notice" style="display:none;width:36px;height:36px;padding:0;font-size:16px" data-action="goto-notice">→</button>
+            </div>
+          </div>
+          <textarea id="result-note" placeholder="이번 작업 관련 비고를 적어 주세요." style="height:68px;padding:8px 12px;resize:vertical;min-height:42px;max-height:160px"></textarea>
+          <div id="run-hold-warn" class="inline-warn-card"></div>
+        </div>
+
+        <div class="card" style="">
+          <div class="card-title" style="margin-bottom:8px">상태 요약</div>
+          <div class="run-summary-grid">
+            <span class="lbl">학교</span>       <span class="val" id="sum-school">-</span>
+            <span class="lbl">학년도</span>     <span class="val" id="sum-year">-</span>
+            <span class="lbl">신입생 입력</span><span class="val" id="sum-freshmen">-</span>
+            <span class="lbl">교사 입력</span>  <span class="val" id="sum-teacher">-</span>
+            <span class="lbl">전입 처리</span>  <span class="val" id="sum-transfer">-</span>
+            <span class="lbl">전출 처리</span>  <span class="val" id="sum-withdraw">-</span>
+            <span class="lbl">전입 합계</span>  <span class="val" id="sum-transfer-check">-</span>
+            <span class="lbl">전출 합계</span>  <span class="val" id="sum-withdraw-check">-</span>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="card-title" style="flex:1">출력 파일</span>
+            <button class="btn-ghost" style="height:28px;font-size:11px" data-action="open-folder">폴더 열기</button>
+          </div>
+          <div id="output-file-list"><span class="muted">실행 전</span></div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+          <div>
+            <div class="card-title">파일 뷰어</div>
+            <div class="muted" id="run-preview-info" style="margin-top:2px;font-size:11px">시트: - | 행 수: -</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="run-search" placeholder="현재 시트에서 검색" style="flex:1;height:30px;padding:0 10px">
+            <button class="btn-ghost" id="btn-run-dup" data-action="run-dup" style="height:28px;font-size:11px">동명이인만</button>
+          </div>
+          <div class="sheet-tabs" id="sheet-tabs"></div>
+          <div class="preview-table-wrap">
+            <table class="data-table" id="run-table"><thead></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </div><!-- /tab-run -->
+
+      <!-- 안내문 탭 -->
+      <div class="tab-panel" id="tab-notice">
+        <div class="card" style="flex:1;display:flex;flex-direction:column;gap:12px">
+          <div>
+            <div class="card-title">안내문</div>
+            <div class="muted" style="margin-top:4px">학교명·학년도·개학일·홈페이지 주소가 자동으로 반영되는 안내문 초안입니다.</div>
+          </div>
+          <div class="notice-body">
+            <div class="notice-list-wrap" id="notice-list"></div>
+            <div class="notice-right">
+              <textarea class="notice-text" id="notice-text">실행 완료 후 안내문이 자동으로 채워집니다.&#10;&#10;학교명·학년도·개학일·홈페이지 주소가 자동으로 반영됩니다.</textarea>
+              <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn-ghost" data-action="notice-copy">복사</button>
+                <button class="btn-ghost" data-action="notice-reset">초기화</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-notice -->
+
+      <!-- diff 탭 -->
+      <div class="tab-panel" id="tab-diff">
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <div class="scan-head">
+            <div class="scan-head-left">
+              <div class="card-title">스캔 검수</div>
+              <div class="muted diff-caption">재학생 명단과 명부를 비교합니다.</div>
+            </div>
+            <div class="scan-actions">
+              <button class="btn-primary" id="btn-scan-diff" disabled data-action="diff-scan-start">파일 내용 스캔</button>
+              <button class="btn-ghost" id="btn-diff-log" data-action="diff-log">스캔 로그 보기</button>
+              <div class="status-badge badge-idle" id="diff-scan-status-badge">대기</div>
+            </div>
+          </div>
+          <div class="inline-warn-card" id="diff-scan-warn-card"></div>
+          <table class="scan-table">
+            <thead><tr>
+              <th style="width:68px">구분</th>
+              <th>파일명</th>
+              <th style="width:88px">시트</th>
+              <th style="width:88px">시작행</th>
+              <th style="width:48px">확인</th>
+            </tr></thead>
+            <tbody>
+              <tr data-kind="재학생" id="diff-compare-row">
+                <td class="kind">재학생</td>
+                <td class="diff-compare-link" id="diff-compare-file-name">-</td>
+                <td id="diff-compare-sheet">-</td>
+                <td><div class="spin-cell">
+                  <button class="spin-btn" id="diff-spin-minus" type="button">−</button>
+                  <span class="spin-val" id="diff-spin-compare">-</span>
+                  <button class="spin-btn" id="diff-spin-plus" type="button">+</button>
+                </div></td>
+                <td style="text-align:center"><input type="checkbox" id="chk-재학생" disabled></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="viewer-header">
+            <div style="flex:1">
+              <span class="card-title">선택 파일 전체 검수</span>
+              <div class="muted" id="diff-preview-file-info" style="margin-top:2px;font-size:11px">헤더행: - | 시작행: -</div>
+            </div>
+            <button class="btn-ghost" id="btn-toggle-diff-viewer" data-action="toggle-diff-viewer" style="height:28px;font-size:11px;padding:0 10px">펼치기 ▾</button>
+          </div>
+          <div id="diff-viewer-body" style="display:none">
+            <div class="viewer-body">
+              <div class="muted preview-warn-box" id="diff-preview-warn">파일을 선택하면 전체 미리보기가 표시됩니다.</div>
+              <div class="preview-table-wrap">
+                <table class="data-table" id="diff-preview-table"><thead></thead><tbody></tbody></table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <div class="scan-head">
+            <div class="scan-head-left">
+              <div class="card-title">실행 / 결과</div>
+              <div class="muted diff-caption" id="diff-run-info">재학생 명단과 명부를 비교합니다.</div>
+            </div>
+            <div class="scan-actions">
+              <button class="btn-primary" id="btn-run-diff" disabled data-action="diff-start">명부 비교 실행</button>
+              <button class="btn-ghost" id="btn-diff-run-log" data-action="diff-log">실행 로그 보기</button>
+              <div class="status-badge badge-idle" id="diff-run-status-badge">대기</div>
+            </div>
+          </div>
+          <div class="card" style="padding:0;border:none;">
+            <div class="card-title" style="margin-bottom:8px">상태 요약</div>
+            <div class="diff-set-overview" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+              <div class="diff-set-node" style="min-height:72px;padding:10px 12px">
+                <div class="diff-set-label" style="font-size:11px">전출 후보</div>
+                <div class="diff-set-value" id="diff-stat-roster-only" style="font-size:22px">-</div>
+                <div class="diff-set-desc" style="font-size:10px">명부 있음 · 명단 없음</div>
+              </div>
+              <div class="diff-set-node center" style="min-height:72px;padding:10px 12px">
+                <div class="diff-set-label" style="font-size:11px">명부·명단 중복</div>
+                <div class="diff-set-value" id="diff-stat-matched" style="font-size:22px">-</div>
+                <div class="diff-set-desc" style="font-size:10px">양쪽 모두 있음</div>
+              </div>
+              <div class="diff-set-node" style="min-height:72px;padding:10px 12px">
+                <div class="diff-set-label" style="font-size:11px">전입 후보</div>
+                <div class="diff-set-value" id="diff-stat-compare-only" style="font-size:22px">-</div>
+                <div class="diff-set-desc" style="font-size:10px">명단 있음 · 명부 없음</div>
+              </div>
+              <div class="diff-set-node" style="min-height:72px;padding:10px 12px;background:var(--warn-bg);border-color:var(--warn-bd)">
+                <div class="diff-set-label" style="font-size:11px;color:var(--warn-tx)">판정 불가</div>
+                <div class="diff-set-value" id="diff-stat-unresolved" style="font-size:22px;color:var(--warn-tx)">-</div>
+                <div class="diff-set-desc" style="font-size:10px">수동 확인 필요</div>
+              </div>
+            </div>
+            <div style="display:none">
+              <span id="diff-stat-transfer-in">-</span>
+              <span id="diff-stat-transfer-out">-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="card-title" style="flex:1">출력 파일</span>
+            <button class="btn-ghost" id="btn-diff-open-folder" disabled
+                    style="height:28px;font-size:11px"
+                    onclick="if(this._path) bridge.openFolder(this._path)">폴더 열기</button>
+          </div>
+          <div id="diff-output-files"><span class="muted">실행 전</span></div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+          <div>
+            <div class="card-title">비교 결과</div>
+            <div class="diff-summary-caption diff-caption" id="diff-summary">재학생 명단과 명부를 비교합니다.</div>
+          </div>
+          <div class="diff-viewer-grid">
+            <div>
+              <div class="diff-col-head">
+                <div class="diff-col-title">전출 후보</div>
+                <div class="diff-col-desc">명부에는 있으나 재학생 명단에는 없는 대상</div>
+              </div>
+              <div class="diff-table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>학년</th><th>반</th><th>이름</th></tr></thead>
+                  <tbody id="diff-tbody-roster-only"><tr><td colspan="3" class="diff-empty">실행 후 결과가 표시됩니다.</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <div class="diff-col-head">
+                <div class="diff-col-title">전입 후보</div>
+                <div class="diff-col-desc">재학생 명단에는 있으나 명부에는 없는 대상</div>
+              </div>
+              <div class="diff-table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>학년</th><th>반</th><th>이름</th></tr></thead>
+                  <tbody id="diff-tbody-compare-only"><tr><td colspan="3" class="diff-empty">실행 후 결과가 표시됩니다.</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="diff-col-head">
+              <div class="diff-col-title">확인 필요</div>
+              <div class="diff-col-desc">자동 판정이 어려워 직접 확인이 필요한 항목</div>
+            </div>
+            <div class="diff-table-wrap compact">
+              <table class="data-table">
+                <thead><tr><th>학년</th><th>반</th><th>이름</th><th>사유</th></tr></thead>
+                <tbody id="diff-tbody-unresolved"><tr><td colspan="4" class="diff-empty">실행 후 결과가 표시됩니다.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-diff -->
+
+    </div><!-- /content-area -->
+  </div><!-- /main-body -->
+
+  <!-- 플로팅 다음 버튼 (fixed라 page-main 내 어디든 OK) -->
+  <button class="floating-back" id="btn-floating-back" data-action="floating-back">←</button>
+  <button class="floating-next" id="btn-floating-next" data-action="floating-next">→</button>
+
+</div><!-- /page-main -->
+
+<!-- ══ 열 매핑 다이얼로그 ═══════════════════════════════════ -->
+<div id="col-map-dialog" style="
+  display:none;position:fixed;inset:0;z-index:9999;
+  background:rgba(0,0,0,.2);align-items:center;justify-content:center;
+  backdrop-filter:blur(6px);
+">
+  <div style="
+    width:860px;max-width:96vw;max-height:88vh;
+    border-radius:12px;overflow:hidden;
+    box-shadow:0 24px 64px rgba(0,0,0,.15), 0 4px 16px rgba(0,0,0,.08);
+    background:#fff;display:flex;flex-direction:column;
+  ">
+  <div style="padding:18px 24px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
+    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:3px">명단 열 매핑 설정</div>
+    <div class="muted">열 머리글을 클릭해서 각 항목의 열을 지정하세요.</div>
+  </div>
+  <div style="padding:12px 24px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:16px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="muted">시트:</span>
+      <select id="cm-sheet" style="height:28px;padding:0 8px;min-width:160px"></select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="muted">헤더 행:</span>
+      <input type="number" id="cm-header-row" min="1" max="30" value="1"
+             style="width:56px;height:28px;padding:0 8px;text-align:center">
+    </div>
+  </div>
+  <div id="cm-role-btns" style="padding:10px 24px;border-bottom:1px solid var(--border);display:flex;gap:4px;flex-wrap:nowrap;flex-shrink:0"></div>
+  <div id="cm-guide" style="padding:6px 24px;font-size:12px;font-weight:600;color:var(--primary);flex-shrink:0"></div>
+  <div style="flex:1;overflow:auto;padding:0 24px 8px">
+    <table id="cm-preview-table" class="data-table" style="min-width:100%">
+      <thead></thead><tbody></tbody>
+    </table>
+  </div>
+  <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;flex-shrink:0">
+    <button class="btn-ghost" data-action="cm-skip">이 항목 건너뛰기</button>
+    <button class="btn-ghost" data-action="cm-cancel">취소</button>
+    <button class="btn-primary" data-action="cm-confirm">설정 완료</button>
+  </div>
+</div>
+
+
+</div><!-- /app -->
+
+<!-- ── JS 로드 순서 ─────────────────────────────────────── -->
+<script src="qwebchannel.js"></script>
+<script src="date_picker.js"></script>
+<script src="app_state.js"></script>
+<script src="ui_common.js"></script>
+<script src="app_runtime.js"></script>
+<script src="col_map_dialog.js"></script>
+<script src="setup.js"></script>
+<script src="status_panel.js"></script>
+<script src="scan_tab.js?v=1775111732"></script>
+<script src="run_tab.js"></script>
+<script src="diff_tab.js"></script>
+<script src="notice_tab.js"></script>
+<script src="main.js"></script>
+<script>
+// ── UI 패치 ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+
+  // 1. btn-open-roster (파일 열기) — open-folder와 동일 액션으로 폴백
+  const btnOpenRoster = document.getElementById('btn-open-roster');
+  if (btnOpenRoster) {
+    btnOpenRoster.addEventListener('click', () => {
+      // open-roster 액션이 없을 경우 open-folder로 대체 시도
+      const ev = new CustomEvent('action', { detail: { action: 'open-roster' }, bubbles: true });
+      btnOpenRoster.dispatchEvent(ev);
+    });
+  }
+
+  // 2. 새 학교 시작(초기화) 시 grade-rows 인풋 값도 비우기
+  const btnNewSchool = document.querySelector('[data-action="new-school"]');
+  if (btnNewSchool) {
+    btnNewSchool.addEventListener('click', () => {
+      setTimeout(() => {
+        document.querySelectorAll('#grade-rows input[type="number"]').forEach(el => {
+          el.value = '';
+        });
+      }, 100);
+    });
+  }
+
+});
+</script>
+</body>
+</html>

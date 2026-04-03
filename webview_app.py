@@ -46,8 +46,9 @@ QApplication.setHighDpiScaleFactorRoundingPolicy(
 HTML_PATH = _BUNDLE_DIR / "ui" / "index.html"
 WINDOW_TITLE = "리딩게이트 반이동 자동화"
 
-WINDOW_W, WINDOW_H = 1040, 800
-MIN_WINDOW_W, MIN_WINDOW_H = 1040, 800
+WINDOW_W, WINDOW_H = 1050, 820
+MIN_WINDOW_W, MIN_WINDOW_H = 1050, 820
+DEFAULT_ZOOM = 1.1
 
 
 def main():
@@ -70,6 +71,7 @@ def main():
     
     view.resize(WINDOW_W, WINDOW_H)
     view.setMinimumSize(MIN_WINDOW_W, MIN_WINDOW_H)
+    view.setZoomFactor(DEFAULT_ZOOM)
 
     # ── index.html 로드 ──────────────────────────
     if not HTML_PATH.exists():

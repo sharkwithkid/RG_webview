@@ -526,5 +526,41 @@
     },
     "run_completed": true,
     "master_recorded": false
+  },
+  "성남영성중": {
+    "last_date": "2026-04-03",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 58,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 30
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남금빛초": {
+    "last_date": "2026-04-03",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 13,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 0
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남중": {
+    "last_date": "2026-04-03",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 64,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 36
+    },
+    "run_completed": true,
+    "master_recorded": false
   }
 }

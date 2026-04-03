@@ -374,7 +374,7 @@ const Diff = (() => {
     _setScanBadge('idle', '대기');
     _setRunBadge('idle', '대기');
     _setScanMessage('재학생 파일 구조를 먼저 확인해 주세요.');
-    _setRunInfo('스캔을 통과한 후 명단 비교를 실행하고 결과를 확인합니다.');
+    _setRunInfo('재학생 명단과 명부를 비교합니다.');
     _hideWarnCard('diff-scan-warn-card');
     _hideWarnCard('diff-run-warn-card');
     _setSummary('명단 비교 실행 버튼을 눌러 주세요.');

@@ -392,7 +392,10 @@ class Bridge(QObject):
         worker.failed.connect(on_failed)
         worker.finished.connect(thread.quit)
         worker.failed.connect(thread.quit)
+        # thread가 완전히 종료된 뒤에 Qt가 순서대로 정리
+        # worker.deleteLater는 thread.finished 이후 — thread 위에서 worker가 먼저 사라지면 크래시
         thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(worker.deleteLater)
         thread.start()
 
     # ──────────────────────────────────────────
@@ -642,6 +645,8 @@ class Bridge(QObject):
         self._is_scanning = False
         if self._scan_worker is not None:
             self._last_scan_result = getattr(self._scan_worker, "scan_result", None)
+        # _scan_worker/_scan_thread 참조는 thread.finished → deleteLater 이후 Qt가 정리
+        # 여기서 None 할당하면 Python GC가 먼저 개입해 크래시 유발
         self.scanFinished.emit(payload)
 
     def _on_scan_failed(self, payload: str):
@@ -864,17 +869,19 @@ class Bridge(QObject):
             from core.common import safe_load_workbook as _safe_wb
             wb = _safe_wb(Path(str(xlsx_path)), data_only=True, read_only=True)
 
-            sheets = wb.sheetnames
-            target = sheet_name if (sheet_name and sheet_name in sheets) else sheets[0]
-            ws = wb[target]
+            try:
+                sheets = wb.sheetnames
+                target = sheet_name if (sheet_name and sheet_name in sheets) else sheets[0]
+                ws = wb[target]
 
-            h_idx = max(0, header_row - 1)   # 0-based
-            rows_raw = []
-            for i, row in enumerate(ws.iter_rows(values_only=True)):
-                rows_raw.append([str(v) if v is not None else "" for v in row])
-                if i >= h_idx + 15:           # 헤더 + 데이터 15행까지
-                    break
-            wb.close()
+                h_idx = max(0, header_row - 1)   # 0-based
+                rows_raw = []
+                for i, row in enumerate(ws.iter_rows(values_only=True)):
+                    rows_raw.append([str(v) if v is not None else "" for v in row])
+                    if i >= h_idx + 15:           # 헤더 + 데이터 15행까지
+                        break
+            finally:
+                wb.close()
 
             headers = rows_raw[h_idx] if h_idx < len(rows_raw) else []
             preview  = rows_raw[h_idx + 1: h_idx + 11]  # 데이터 10행
