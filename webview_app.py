@@ -44,11 +44,11 @@ QApplication.setHighDpiScaleFactorRoundingPolicy(
 
 
 HTML_PATH = _BUNDLE_DIR / "ui" / "index.html"
-WINDOW_TITLE = "리딩게이트 반이동 자동화"
+WINDOW_TITLE = "ReadingGate"
 
-WINDOW_W, WINDOW_H = 1050, 820
-MIN_WINDOW_W, MIN_WINDOW_H = 1050, 820
-DEFAULT_ZOOM = 1.1
+WINDOW_W, WINDOW_H = 950, 750
+MIN_WINDOW_W, MIN_WINDOW_H = 950, 750
+DEFAULT_ZOOM = 1.0
 
 
 def main():

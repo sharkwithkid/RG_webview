@@ -545,10 +545,10 @@ const StatusUI = (() => {
     if (!lines.length && !status?.summary_text) return null;
     const eventCodes = (status?.messages || []).map(m => m?.code).filter(Boolean);
     const skipSummary = eventCodes.length > 0 && eventCodes.every(c => NO_SUMMARY_CODES.has(c));
-    const head = skipSummary ? '' : esc(status?.summary_text || `${mode === 'error' ? '오류' : '경고'} ${lines.length}건이 있습니다.`);
+    const head = skipSummary ? '' : `<div class="warn-line warn-line-head">${esc(status?.summary_text || `${mode === 'error' ? '오류' : '경고'} ${lines.length}건이 있습니다.`)}</div>`;
     const body = lines.map(msg => `<div class="warn-line">• ${esc(msg.replace(/필수값/g, '값'))}</div>`).join('');
     const action = status?.action_text ? `<div class="warn-line">${esc(status.action_text)}</div>` : '';
-    return (head ? head + body : body) + action || null;
+    return (head + body + action) || null;
   }
 
   function renderWarnCard(elOrId, messages, mode='warn', status=null) {

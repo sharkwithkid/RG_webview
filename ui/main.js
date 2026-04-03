@@ -25,7 +25,7 @@ function toast(msg, type = 'info', duration = 3000) {
   const container = _getOrCreateToastContainer();
   const el = document.createElement('div');
   el.style.cssText = `
-    padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
     max-width: 380px; word-break: keep-all; line-height: 1.5;
     box-shadow: 0 4px 16px rgba(0,0,0,.12);
     animation: toast-in .2s ease;
@@ -556,13 +556,14 @@ function showLogDialog(title, logs) {
   if (!dlg) {
     dlg = document.createElement('div');
     dlg.id = 'log-dialog';
-    dlg.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);align-items:center;justify-content:center;';
+    dlg.className = 'confirm-modal-backdrop';
+    dlg.style.cssText = 'display:none;';
     dlg.innerHTML = `
-      <div style="width:640px;max-width:96vw;max-height:80vh;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);background:#fff;display:flex;flex-direction:column;">
-        <div style="padding:16px 20px;border-bottom:1px solid #E5E7EB;font-weight:800;font-size:15px;color:#0F172A;flex-shrink:0" id="log-dlg-title"></div>
-        <pre id="log-dlg-body" style="flex:1;overflow-y:auto;padding:16px 20px;font-family:Consolas,'D2Coding',monospace;font-size:12px;line-height:1.6;background:#F8FAFC;white-space:pre-wrap;word-break:break-all;margin:0;max-height:60vh"></pre>
-        <div style="padding:12px 20px;border-top:1px solid #E5E7EB;display:flex;justify-content:flex-end;flex-shrink:0">
-          <button id="log-dlg-close" style="padding:0 16px;height:34px;background:#2563EB;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit">닫기</button>
+      <div class="confirm-modal" style="width:660px;max-width:96vw;max-height:82vh;display:flex;flex-direction:column;padding:20px 24px;gap:14px;overflow:hidden;">
+        <div class="confirm-modal-title" id="log-dlg-title"></div>
+        <pre id="log-dlg-body" style="flex:1;overflow-y:auto;padding:14px 16px;font-family:Consolas,'D2Coding',monospace;font-size:12px;line-height:1.65;background:var(--surface-2);border-radius:var(--radius);white-space:pre-wrap;word-break:break-all;margin:0;max-height:64vh;color:var(--text-2);border:1px solid var(--border);"></pre>
+        <div style="display:flex;justify-content:flex-end;">
+          <button id="log-dlg-close" class="btn-ghost">닫기</button>
         </div>
       </div>`;
     document.body.appendChild(dlg);

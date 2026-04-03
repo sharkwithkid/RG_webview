@@ -152,6 +152,7 @@ const Scan = (() => {
 
     // 스캔 표 갱신
     _applyScanTable(data.items || []);
+    _applyRowMarkStyles(data.row_marks || []);
 
     // 뷰어 자동 펼침 + 첫 행 미리보기 요청
     _openViewer();
@@ -198,19 +199,25 @@ const Scan = (() => {
       tr.classList.toggle('scan-row-error', kindError);
 
       if (cells[1]) {
-        cells[1].className = kindWarn ? 'file-link file-link-warn' : 'file-link';
+        cells[1].className = kindWarn ? 'file-link file-link-warn' : kindError ? 'file-link file-link-error' : 'file-link';
         cells[1].textContent = item.file_name || '';
         cells[1].title = kindWarn
           ? `경고 있음 · 클릭: 뷰어로 보기 · 더블클릭: 파일 열기`
           : '클릭: 뷰어로 보기 · 더블클릭: 파일 열기';
-        cells[1].onclick = () => {
-          document.querySelectorAll('#scan-tbody tr.viewer-active')
-            .forEach(r => r.classList.remove('viewer-active'));
-          tr.classList.add('viewer-active');
-          _requestPreview(item.kind);
-        };
-        cells[1].ondblclick = () => { if (item.file_path) bridge.openFile(item.file_path); };
       }
+      tr.style.cursor = 'pointer';
+      tr.onclick = (e) => {
+        // 체크박스·스핀버튼 클릭은 제외
+        if (e.target.matches('input, button')) return;
+        document.querySelectorAll('#scan-tbody tr.viewer-active')
+          .forEach(r => r.classList.remove('viewer-active'));
+        tr.classList.add('viewer-active');
+        _requestPreview(item.kind);
+      };
+      tr.ondblclick = (e) => {
+        if (e.target.matches('input, button')) return;
+        if (item.file_path) bridge.openFile(item.file_path);
+      };
       if (cells[2]) cells[2].textContent = item.sheet_name || '';
 
       const spinVal = _el(`spin-${item.kind}`);
@@ -384,7 +391,7 @@ const Scan = (() => {
     if (!data) return;
 
     const structured = data.has_structured_rows !== false;
-    const headerInfo = ` | 헤더행: ${structured && data.header_row != null ? data.header_row : '-'}`;
+    const headerInfo = `헤더행: ${structured && data.header_row != null ? data.header_row : '-'}`;
     const startInfo  = ` | 시작행: ${structured && data.data_start_row != null ? data.data_start_row : '-'}`;
     const actualCount = Number.isFinite(data.actual_count) ? data.actual_count : (data.rows || []).length;
     const displayedCount = Number.isFinite(data.displayed_count) ? data.displayed_count : (data.rows || []).length;
@@ -544,25 +551,31 @@ function _refreshWarnUI() {
 }
 
   function _applyRowMarkStyles(rowMarks) {
-    // row_marks 기반으로 파일별 error/warn 여부 계산 — logs 파싱 없음
     const kindError = new Set();
     const kindWarn  = new Set();
     const FILE_KEY_TO_KIND = {
       freshmen: '신입생', transfer_in: '전입생',
       transfer_out: '전출생', teachers: '교직원',
     };
+    // item.severity 기반 — _applyScanTable이 이미 처리했으므로 현재 tr 클래스 기준으로 수집
+    Object.keys(KIND_ROW).forEach(kind => {
+      const tr = document.querySelector(`#scan-tbody tr[data-kind="${kind}"]`);
+      if (!tr) return;
+      if (tr.classList.contains('scan-row-error')) kindError.add(kind);
+      else if (tr.classList.contains('scan-row-warn')) kindWarn.add(kind);
+    });
+    // row_marks + events로 추가 보완 (기존에 없는 kind만)
     (rowMarks || []).forEach(m => {
       const kind = FILE_KEY_TO_KIND[m.file_key];
       if (!kind) return;
-      if (m.level === 'error') kindError.add(kind);
-      else if (m.level === 'warn') kindWarn.add(kind);
+      if (m.level === 'error' && !kindError.has(kind)) kindError.add(kind);
+      else if (m.level === 'warn' && !kindError.has(kind) && !kindWarn.has(kind)) kindWarn.add(kind);
     });
-    // events 기반으로 파일별 blocking error 보완
     (_lastScanData?.events || []).forEach(e => {
       const kind = FILE_KEY_TO_KIND[e.file_key];
       if (!kind) return;
-      if (e.level === 'error') kindError.add(kind);
-      else if (e.level === 'warn') kindWarn.add(kind);
+      if (e.level === 'error' && !kindError.has(kind)) kindError.add(kind);
+      else if (e.level === 'warn' && !kindError.has(kind) && !kindWarn.has(kind)) kindWarn.add(kind);
     });
 
     Object.keys(KIND_ROW).forEach(kind => {
@@ -688,7 +701,7 @@ function toggleFilter(key) {
           </label>
         </div>
         <div class="confirm-modal-footer">
-          <button class="btn-primary" id="school-kind-modal-ok" style="height:36px;padding:0 20px">선택 후 다시 스캔</button>
+          <button class="btn-primary" id="school-kind-modal-ok" >선택 후 다시 스캔</button>
         </div>
       </div>`;
     document.body.appendChild(bd);
@@ -769,7 +782,7 @@ function toggleFilter(key) {
           </label>
         </div>
         <div class="confirm-modal-footer">
-          <button class="btn-primary" id="cm-date-confirm" style="height:36px;padding:0 20px">확인</button>
+          <button class="btn-primary" id="cm-date-confirm" >확인</button>
         </div>
       </div>`;
 
@@ -901,6 +914,9 @@ function toggleFilter(key) {
         cells[1].ondblclick = null;
         cells[1].title = '';
       }
+      tr.onclick = null;
+      tr.ondblclick = null;
+      tr.style.cursor = '';
       const spinVal = _el(`spin-${kind}`);
       if (spinVal) { spinVal.textContent = '-'; spinVal.style.color = '#94A3B8'; }
       const chk = _el(`chk-${kind}`);
