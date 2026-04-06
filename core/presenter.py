@@ -32,7 +32,7 @@ def logs_from_result(result: Any) -> list[dict]:
 def _badge_for_level(level: str) -> dict:
     mapping = {
         'error': {'type': 'err', 'text': '오류'},
-        'hold': {'type': 'hold', 'text': '보류'},
+        'hold': {'type': 'warn', 'text': '경고'},
         'warn': {'type': 'warn', 'text': '경고'},
         'ok': {'type': 'ok', 'text': '완료'},
     }
@@ -43,7 +43,7 @@ def _summary_for_level(level: str, count: int, ok_text: str = '완료') -> str:
     if level == 'error':
         return f'오류 {count}건이 있습니다.'
     if level == 'hold':
-        return f'보류 {count}건이 있습니다.'
+        return f'경고 {count}건이 있습니다.'
     if level == 'warn':
         return f'경고 {count}건이 있습니다.'
     return ok_text

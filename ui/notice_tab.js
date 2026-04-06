@@ -134,13 +134,7 @@ const Notice = (() => {
     const text = el?.value || '';
     if (!text) { toast('복사할 내용이 없습니다.', 'info'); return; }
     await bridge.copyToClipboard(text);
-    // 짧은 피드백 (버튼 텍스트 변경)
-    const btn = document.querySelector('[onclick="Notice.copy()"]');
-    if (btn) {
-      const orig = btn.textContent;
-      btn.textContent = '복사됨 ✓';
-      setTimeout(() => { btn.textContent = orig; }, 1200);
-    }
+    toast('클립보드에 복사되었습니다.', 'ok');
   }
 
   // ──────────────────────────────────────────────

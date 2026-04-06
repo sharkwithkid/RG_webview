@@ -116,6 +116,9 @@ class RosterInfo:
     prefix_mode_by_roster_grade: Dict[int, int] = field(default_factory=dict)
     name_count_by_roster_grade: Dict[int, Any] = field(default_factory=dict)
     roster_names_by_grade: Dict[int, List[str]] = field(default_factory=dict)
+    # {명부학년(int): {정규화이름(str): 반(str)}}
+    # 학년+이름 일치 시 반까지 비교해 완전일치 여부를 판단하는 데 사용
+    roster_class_by_grade_name: Dict[int, Dict[str, str]] = field(default_factory=dict)
 
 
 
@@ -679,7 +682,10 @@ def resolve_transfer_name_conflicts(
 
     반환 리스트의 각 항목:
       name_out        — suffix가 반영된 최종 이름 (예: 김지우B)
-      dup_with_roster — 명부에 동명이인이 있으면 True
+      dup_with_roster — 명부에 동명이인이 있으면 True (하위호환 유지)
+      roster_match    — 명부 매치 유형: None | "exact" | "partial"
+                        "exact"   : 학년 + 반 + 이름 모두 일치
+                        "partial" : 학년 + 이름만 일치 (반 다름)
       needs_highlight — 등록 파일에서 노란 하이라이트 표시가 필요하면 True
                         (명부 중복 또는 전입생끼리 중복인 경우)
 
@@ -696,6 +702,7 @@ def resolve_transfer_name_conflicts(
     """
     shift = int(roster_info.ref_grade_shift or 0)
     roster_names_by_grade = roster_info.roster_names_by_grade or {}
+    roster_class_by_grade_name = roster_info.roster_class_by_grade_name or {}
 
     used_suffixes = defaultdict(set)
     total_transfer = defaultdict(int)
@@ -731,20 +738,34 @@ def resolve_transfer_name_conflicts(
         dup_total = total_transfer[key]
         occupied = used_suffixes[key]
 
+        # 명부 매치 유형 판단
+        # occupied(suffix 점유)가 있으면 학년+이름이 명부에 있다는 뜻
         if occupied:
+            g_roster = g_cur + shift if g_cur is not None else None
+            roster_cls = roster_class_by_grade_name.get(g_roster, {}).get(
+                normalize_name_key(original_name)
+            )
+            transfer_cls = str(row.get("class", "")).strip()
+            if roster_cls is not None and transfer_cls and roster_cls == transfer_cls:
+                roster_match = "exact"   # 학년 + 반 + 이름 모두 일치
+            else:
+                roster_match = "partial" # 학년 + 이름만 일치
             next_idx = max(occupied) + assigned_count[key]
             name_out = original_name + dedup_suffix_letters(next_idx)
             dup_with_roster = True
         elif dup_total <= 1:
             name_out = original_name
             dup_with_roster = False
+            roster_match = None
         else:
             name_out = original_name + dedup_suffix_letters(assigned_count[key])
             dup_with_roster = False
+            roster_match = None
 
         results.append({
             "name_out": name_out,
             "dup_with_roster": dup_with_roster,
+            "roster_match": roster_match,
             "needs_highlight": dup_with_roster or dup_total >= 2,
         })
 

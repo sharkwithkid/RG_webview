@@ -574,5 +574,17 @@
     },
     "run_completed": true,
     "master_recorded": false
+  },
+  "성남대일초": {
+    "last_date": "2026-04-06",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 29,
+      "전입생": 1,
+      "전출생": 0,
+      "교직원": 39
+    },
+    "run_completed": true,
+    "master_recorded": false
   }
 }

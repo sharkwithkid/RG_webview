@@ -56,6 +56,7 @@ from core.common import (
     _build_header_slot_map,
     _detect_header_row_generic,
     normalize_name,
+    normalize_name_key,
     load_roster_sheet,
     parse_class_str,
     extract_id_prefix4,
@@ -762,6 +763,7 @@ def analyze_roster_once(roster_ws, input_year: int) -> Dict:
 
     prefixes_by_grade = defaultdict(list)
     name_counter_by_grade = defaultdict(Counter)
+    class_by_grade_name: dict = defaultdict(dict)  # {학년: {정규화이름: 반문자열}}
 
     # iter_rows + 연속 빈 행 조기종료 (max_row 오염 대응)
     MAX_BLANK = 20
@@ -790,6 +792,14 @@ def analyze_roster_once(roster_ws, input_year: int) -> Dict:
             continue
         name_counter_by_grade[g][nm] += 1
 
+        # 동명이인이 없는 경우에만 반 정보 저장 (중복이면 반 비교 의미 없음)
+        nm_key = normalize_name_key(nm) if hasattr(nm, "__str__") else nm
+        if nm_key not in class_by_grade_name[g]:
+            class_by_grade_name[g][nm_key] = str(_cls).strip()
+        else:
+            # 동명이인 → 반 정보 신뢰 불가, None으로 표시
+            class_by_grade_name[g][nm_key] = None
+
         p4 = extract_id_prefix4(idv)
         if p4 is not None:
             prefixes_by_grade[g].append(p4)
@@ -815,6 +825,7 @@ def analyze_roster_once(roster_ws, input_year: int) -> Dict:
         prefix_mode_by_roster_grade=prefix_mode_by_grade,
         name_count_by_roster_grade=name_counter_by_grade,
         roster_names_by_grade=roster_names_by_grade,
+        roster_class_by_grade_name=dict(class_by_grade_name),
     )
 
 def freshmen_need_roster(

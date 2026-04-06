@@ -1054,7 +1054,9 @@ def write_withdraw_to_register(wb, done_rows: List[Dict], hold_rows: List[Dict])
     if hold_rows:
         hold_rows = sorted(hold_rows, key=lambda r: (str(r.get("학년", "")), str(r.get("반", "")), str(r.get("성명", ""))))
         ws_hold = wb["퇴원_보류"] if "퇴원_보류" in wb.sheetnames else wb.create_sheet("퇴원_보류")
-        clear_sheet_rows(ws_hold, 2)
+        ws_hold.delete_rows(1, ws_hold.max_row)
+        for i, h in enumerate(["학년", "반", "성명", "보류사유"], 1):
+            write_text_cell(ws_hold, 1, i, h)
         r = 2
         for row in hold_rows:
             write_text_cell(ws_hold, r, 1, row.get("학년", ""))
@@ -1747,11 +1749,15 @@ def execute_pipeline(
                 transfer_rows=transfer_rows, roster_info=scan.roster_info,
                 input_year=year_int, freshmen_rows=freshmen_rows,
             )
-            # 명부에 이미 존재하는 전입생 → hold로 분리 (엑셀 스펙: 완전일치/학년+이름 일치 둘 다 hold)
+            # 명부에 이미 존재하는 전입생 → hold로 분리
+            # roster_match 유형에 따라 보류사유 메시지 구분
             _roster_dup_rows = [r for r in transfer_done_rows if r.get("dup_with_roster")]
             transfer_done_rows = [r for r in transfer_done_rows if not r.get("dup_with_roster")]
             for _rd in _roster_dup_rows:
-                _rd["보류사유"] = "학생명부에 이미 존재하는 학생입니다."
+                if _rd.get("roster_match") == "exact":
+                    _rd["보류사유"] = "학생명부에 이미 존재하는 학생입니다."
+                else:
+                    _rd["보류사유"] = "학생명부에 동일인으로 의심되는 학생이 있습니다. 수동 확인이 필요합니다."
             transfer_hold_rows = transfer_hold_rows + _roster_dup_rows
             log(f"[OK] 전입 ID 매칭 완료 | 완료 {len(transfer_done_rows)}명, 보류 {len(transfer_hold_rows)}명")
         else:
