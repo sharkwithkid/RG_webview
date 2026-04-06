@@ -562,5 +562,17 @@
     },
     "run_completed": true,
     "master_recorded": false
+  },
+  "성남복정초": {
+    "last_date": "2026-04-06",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 26,
+      "전입생": 3,
+      "전출생": 30,
+      "교직원": 35
+    },
+    "run_completed": true,
+    "master_recorded": false
   }
 }

@@ -111,6 +111,11 @@ const Run = (() => {
       _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
       _renderRunStatusCard({ ...status, detail_messages: detailMessages }, data);
       App.setStepState(3, 'warn');
+    } else if (level === 'hold') {
+      if (!status?.badge) _setBadge('warn', '보류');
+      _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
+      _renderRunStatusCard({ ...status, detail_messages: detailMessages }, data);
+      App.setStepState(3, 'warn');
     } else {
       if (!status?.badge) _setBadge('ok', '완료');
       _el('run-info').textContent = '작업이 완료되었습니다.';

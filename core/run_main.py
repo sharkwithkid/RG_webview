@@ -1080,7 +1080,7 @@ def write_withdraw_to_register(wb, done_rows: List[Dict], hold_rows: List[Dict])
 
 
 def write_transfer_hold_sheet(wb, hold_rows: List[Dict]):
-    sn = "전입생_보류"
+    sn = "전입_보류"
     ws = wb[sn] if sn in wb.sheetnames else wb.create_sheet(sn)
     ws.delete_rows(1, ws.max_row)
     for i, h in enumerate(["학년", "반", "번호", "성명", "보류사유"], 1):
