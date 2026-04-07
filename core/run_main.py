@@ -309,7 +309,7 @@ def read_freshmen_rows(
                 ws, header_row=header_row, name_col=col_name
             )
 
-        issues, _, _, _ = validate_input_sheet_structure(
+        issues, _issue_rows, _evts, _marks = validate_input_sheet_structure(
             ws=ws,
             kind="신입생",
             header_row=header_row,
@@ -317,8 +317,9 @@ def read_freshmen_rows(
             required_cols={"grade": col_grade, "class": col_class, "name": col_name},
             allow_blank_class_for_kindergarten=True,
         )
-        if issues:
-            raise ValueError("\n".join(issues[:20]))
+        _errors = [i for i in issues if "[ERROR]" in i]
+        if _errors:
+            raise ValueError("\n".join(_errors))
 
         out: List[Dict[str, Any]] = []
         row = data_start_row
@@ -406,7 +407,7 @@ def read_freshmen_rows(
             return (sg, _safe_int(r["class"]), r["name"])
 
         out.sort(key=_sort_key)
-        return out
+        return out, _evts, _marks
 
     finally:
         wb.close()
@@ -444,7 +445,7 @@ def read_transfer_rows(
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
-        issues, _, _, _ = validate_input_sheet_structure(
+        issues, _issue_rows, _evts, _marks = validate_input_sheet_structure(
             ws=ws,
             kind="전입생",
             header_row=header_row,
@@ -453,11 +454,9 @@ def read_transfer_rows(
             allow_blank_class_for_kindergarten=True,
         )
 
-        errors = [i for i in issues if "[ERROR]" in i]
-        warns  = [i for i in issues if "[WARN]" in i]
-
-        if errors or warns:
-            raise ValueError("\n".join(errors + warns))
+        _errors = [i for i in issues if "[ERROR]" in i]
+        if _errors:
+            raise ValueError("\n".join(_errors))
         out: List[Dict[str, Any]] = []
         row = data_start_row
         while True:
@@ -509,7 +508,7 @@ def read_transfer_rows(
             })
             row += 1
 
-        return out
+        return out, _evts, _marks
     finally:
         wb.close()
 
@@ -539,15 +538,16 @@ def read_teacher_rows(
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
-        issues, _, _, _ = validate_input_sheet_structure(
+        issues, _issue_rows, _evts, _marks = validate_input_sheet_structure(
             ws=ws,
             kind="교사",
             header_row=header_row,
             data_start_row=data_start_row,
             required_cols={"name": col_name},
         )
-        if issues:
-            raise ValueError("\n".join(issues[:20]))
+        _errors = [i for i in issues if "[ERROR]" in i]
+        if _errors:
+            raise ValueError("\n".join(_errors))
 
         out: List[Dict[str, Any]] = []
         row = data_start_row
@@ -579,7 +579,7 @@ def read_teacher_rows(
             })
             row += 1
 
-        return out
+        return out, _evts, _marks
     finally:
         wb.close()
 
@@ -615,7 +615,7 @@ def read_withdraw_rows(
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
-        issues, _, _, _ = validate_input_sheet_structure(
+        issues, _issue_rows, _evts, _marks = validate_input_sheet_structure(
             ws=ws,
             kind="전출생",
             header_row=header_row,
@@ -623,8 +623,9 @@ def read_withdraw_rows(
             required_cols={"grade": col_grade, "class": col_class, "name": col_name},
             allow_blank_class_for_kindergarten=True,
         )
-        if issues:
-            raise ValueError("\n".join(issues[:20]))
+        _errors = [i for i in issues if "[ERROR]" in i]
+        if _errors:
+            raise ValueError("\n".join(_errors))
 
         out: List[Dict[str, Any]] = []
         row = data_start_row
@@ -674,7 +675,7 @@ def read_withdraw_rows(
             out.append({"grade": grade_i, "class": cls_s, "name": name_n})
             row += 1
 
-        return out
+        return out, _evts, _marks
     finally:
         wb.close()
 
@@ -1682,11 +1683,14 @@ def execute_pipeline(
 
         # 신입생
         freshmen_rows: List[Dict] = []
+        _run_evts: list = []
+        _run_marks: list = []
+
         if freshmen_path:
             h, s = _extract_layout(layout_overrides, "freshmen", 2, scan_meta=scan.freshmen)
             log(f"[DEBUG] 신입생 layout: header_row={h}, data_start_row={s or 'auto'}")
 
-            freshmen_rows = read_freshmen_rows(
+            freshmen_rows, _evts, _marks = read_freshmen_rows(
             freshmen_path,
             input_year=year_int,
             header_row=h,
@@ -1695,7 +1699,7 @@ def execute_pipeline(
             school_name=scan.school_name,
                 manual_grade_year_map=grade_year_map,
             )
-            
+            _run_evts.extend(_evts); _run_marks.extend(_marks)
             log(f"[OK] 신입생 {len(freshmen_rows)}명 로드")
         else:
             log("[INFO] 신입생 파일 없음 → 신입생 등록은 스킵합니다.")
@@ -1710,7 +1714,8 @@ def execute_pipeline(
                 )
             
             log(f"[DEBUG] 교사 layout: header_row={h}, data_start_row={s or 'auto'}")
-            teacher_rows = read_teacher_rows(teacher_path, header_row=h, data_start_row=s)
+            teacher_rows, _evts, _marks = read_teacher_rows(teacher_path, header_row=h, data_start_row=s)
+            _run_evts.extend(_evts); _run_marks.extend(_marks)
             log(f"[OK] 교사 신청 {len(teacher_rows)}건 로드")
             _teacher_no_id_warn = teacher_rows and not any(
                 r.get("admin_apply") or r.get("learn_apply") for r in teacher_rows
@@ -1723,7 +1728,8 @@ def execute_pipeline(
         if transfer_path:
             h, s = _extract_layout(layout_overrides, "transfer", 2, scan_meta=scan.transfer_in)
             log(f"[DEBUG] 전입생 layout: header_row={h}, data_start_row={s or 'auto'}")
-            transfer_rows = read_transfer_rows(transfer_path, header_row=h, data_start_row=s)
+            transfer_rows, _evts, _marks = read_transfer_rows(transfer_path, header_row=h, data_start_row=s)
+            _run_evts.extend(_evts); _run_marks.extend(_marks)
             log(f"[OK] 전입생 {len(transfer_rows)}명 로드")
         else:
             transfer_rows = []; log("[INFO] 전입생 파일 없음 → 전입 처리 스킵")
@@ -1732,7 +1738,8 @@ def execute_pipeline(
         if withdraw_path:
             h, s = _extract_layout(layout_overrides, "withdraw", 2, scan_meta=scan.transfer_out)
             log(f"[DEBUG] 전출생 layout: header_row={h}, data_start_row={s or 'auto'}")
-            withdraw_rows = read_withdraw_rows(withdraw_path, header_row=h, data_start_row=s)
+            withdraw_rows, _evts, _marks = read_withdraw_rows(withdraw_path, header_row=h, data_start_row=s)
+            _run_evts.extend(_evts); _run_marks.extend(_marks)
             log(f"[OK] 전출생 {len(withdraw_rows)}명 로드")
         else:
             withdraw_rows = []; log("[INFO] 전출생 파일 없음 → 전출 처리 스킵")
@@ -1897,6 +1904,10 @@ def execute_pipeline(
                 "withdraw_total_match": withdraw_total_match,
             },
         }
+
+        # ===== 검증 경고 이벤트 (validate_input_sheet_structure → CoreEvent) =====
+        pr.events.extend(_run_evts)
+        pr.row_marks.extend(_run_marks)
 
         # ===== events 생성 (hold/dup → CoreEvent) =====
         # bridge/UI는 events만 참조하므로 여기서 모두 생성

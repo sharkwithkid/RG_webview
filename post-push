@@ -1,0 +1,17 @@
+#!/bin/sh
+# .git/hooks/post-push
+# release 브랜치에 push 완료 후 자동으로 build.py 실행
+#
+# 설치: install_hook.bat 실행
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+if [ "$BRANCH" = "release" ]; then
+    echo ""
+    echo "================================================"
+    echo " release 브랜치 push 감지 → 배포 빌드 시작"
+    echo "================================================"
+    python build.py
+else
+    echo "[hook] 브랜치: $BRANCH — 빌드 스킵"
+fi

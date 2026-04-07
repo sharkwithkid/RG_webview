@@ -5,11 +5,11 @@
 #   pip install pyinstaller
 #   pyinstaller RG_webview.spec
 #
-# 결과: dist/RG_webview/RG_webview.exe  (폴더 배포) 또는
-#        dist/RG_webview.exe             (onefile 배포)
+# 결과: dist/ClassMate/ClassMate.exe  (폴더 배포) 또는
+#        dist/ClassMate.exe             (onefile 배포)
 #
 # 현재 설정: onedir 모드 (--onedir)
-#   → dist/RG_webview/ 폴더째로 배포
+#   → dist/ClassMate/ 폴더째로 배포
 #   → onefile보다 시작이 빠르고 WebEngine 호환성 좋음
 
 import sys
@@ -64,7 +64,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="RG_webview",
+    name="ClassMate",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -75,7 +75,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # icon="ui/icon.ico",  # 아이콘 파일 있으면 주석 해제
+    icon="ClassMate.ico",
 )
 
 coll = COLLECT(
@@ -85,5 +85,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="RG_webview",
+    name="ClassMate",
 )
