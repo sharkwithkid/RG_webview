@@ -20,7 +20,8 @@ ROOT = Path(SPEC).parent  # spec 파일이 있는 폴더 = 앱 루트
 # ── 번들에 포함할 데이터 파일 ─────────────────────────────────────────
 datas = [
     # (원본 경로,  번들 내 대상 폴더)
-    (str(ROOT / "ui"),   "ui"),    # index.html, *.js, fonts/
+    (str(ROOT / "ui"), "ui"),                 # index.html, *.js, fonts/
+    (str(ROOT / "ClassMate.ico"), "."),       # 런타임 window/taskbar icon 로드용
 ]
 
 # ── Hidden imports ─────────────────────────────────────────────────────

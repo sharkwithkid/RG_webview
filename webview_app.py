@@ -12,9 +12,11 @@ webview_app.py — WebView 버전 진입점
 
 import sys
 import os
+import ctypes
 from pathlib import Path
 
 from PyQt6.QtCore import QUrl, Qt
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
@@ -44,17 +46,43 @@ QApplication.setHighDpiScaleFactorRoundingPolicy(
 
 
 HTML_PATH = _BUNDLE_DIR / "ui" / "index.html"
+ICON_PATH = _BUNDLE_DIR / "ClassMate.ico"
 WINDOW_TITLE = "ClassMate"
+APP_ID = "ReadingGate.ClassMate"
 
 WINDOW_W, WINDOW_H = 930, 750
 MIN_WINDOW_W, MIN_WINDOW_H = 930, 750
 DEFAULT_ZOOM = 1.0
 
 
+def _set_windows_appusermodelid(app_id: str) -> None:
+    """작업표시줄 아이콘/그룹화에 쓰이는 Windows AppUserModelID 설정."""
+    if os.name != "nt":
+        return
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+    except Exception:
+        pass
+
+
+def _load_app_icon() -> QIcon:
+    """번들/개발 환경 공통 아이콘 로드."""
+    if ICON_PATH.exists():
+        return QIcon(str(ICON_PATH))
+    return QIcon()
+
+
 def main():
+    _set_windows_appusermodelid(APP_ID)
+
     app = QApplication(sys.argv)
     app.setApplicationName(WINDOW_TITLE)
+    app.setDesktopFileName(APP_ID)
     # AA_UseHighDpiPixmaps는 PyQt6에서 제거됨 — 기본으로 활성화됨
+
+    app_icon = _load_app_icon()
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
 
     # ── Bridge 생성 ──────────────────────────────
     bridge = Bridge()
@@ -68,7 +96,9 @@ def main():
     view = QWebEngineView()
     view.page().setWebChannel(channel)
     view.setWindowTitle(WINDOW_TITLE)
-    
+    if not app_icon.isNull():
+        view.setWindowIcon(app_icon)
+
     view.resize(WINDOW_W, WINDOW_H)
     view.setMinimumSize(MIN_WINDOW_W, MIN_WINDOW_H)
     view.setZoomFactor(DEFAULT_ZOOM)
