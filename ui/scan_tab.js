@@ -116,7 +116,6 @@ const Scan = (() => {
 
     // 스텝 상태
     App.setStepState(2, 'done');
-    state.school_kind_override = null;  // 스캔 성공 시 override 초기화
 
     // 학교 구분 선택 필요 여부 (ok=True로 오는 경우는 현재 없지만 안전 처리)
     if (data.school_kind_needs_choice) { state.isScanning = false; _el('btn-scan').disabled = false; _showSchoolKindModal(); return; }
@@ -283,9 +282,14 @@ const Scan = (() => {
 
   // 학교 구분 오버라이드 (학교 구분 자동 판별 실패 시)
   function getSchoolKindOverride() {
+    const stateValue = (state.school_kind_override || '').trim();
+    if (stateValue) return stateValue;
+
     const row = _el('school-kind-row');
     if (!row || row.style.display === 'none') return null;
-    return _el('school-kind-select')?.value || null;
+
+    const selectValue = (_el('school-kind-select')?.value || '').trim();
+    return selectValue || null;
   }
 
   // ──────────────────────────────────────────────
@@ -869,11 +873,55 @@ function toggleFilter(key) {
       ...(overrides || {}),
     };
     _lastScanData.can_execute = true;
+    _lastScanData.can_execute_after_input = false;
 
-    const _gradeStatus = _lastScanData?.status;
-    const _gradeLevel  = _gradeStatus?.level;
-    const _gradeHasWarn = _gradeLevel === 'warn' || _gradeLevel === 'hold';
-    _setBadge(_gradeHasWarn ? 'warn' : 'ok', _gradeHasWarn ? '경고' : '완료');
+    const removedCode = 'FRESHMEN_NO_ROSTER_MANUAL';
+    const removedMessage = '학교 폴더에 명부를 추가하거나, 사이드바에서 학년도 아이디 규칙을 직접 입력하세요.';
+
+    const nextEvents = Array.isArray(_lastScanData.events)
+      ? _lastScanData.events.filter(e => e?.code !== removedCode && String(e?.message || '').trim() !== removedMessage)
+      : [];
+    _lastScanData.events = nextEvents;
+
+    const prevStatus = _lastScanData?.status || {};
+    const nextStatusMessages = Array.isArray(prevStatus.messages)
+      ? prevStatus.messages.filter(m => m?.code !== removedCode && String(m?.text || '').trim() !== removedMessage)
+      : [];
+
+    const hasError = nextStatusMessages.some(m => m?.level === 'error') || nextEvents.some(e => e?.level === 'error');
+    const hasHold = nextStatusMessages.some(m => m?.level === 'hold') || nextEvents.some(e => e?.level === 'hold');
+    const hasWarn = nextStatusMessages.some(m => m?.level === 'warn') || nextEvents.some(e => e?.level === 'warn');
+    const nextLevel = hasError ? 'error' : hasHold ? 'hold' : hasWarn ? 'warn' : 'ok';
+    const nextBadge = nextLevel === 'error'
+      ? { type: 'err', text: '오류' }
+      : nextLevel === 'hold'
+        ? { type: 'warn', text: '보류' }
+        : nextLevel === 'warn'
+          ? { type: 'warn', text: '경고' }
+          : { type: 'ok', text: '완료' };
+    const nextSummary = nextLevel === 'error'
+      ? `오류 ${nextStatusMessages.length}건이 있습니다.`
+      : nextLevel === 'hold'
+        ? `보류 ${nextStatusMessages.length}건이 있습니다.`
+        : nextLevel === 'warn'
+          ? `경고 ${nextStatusMessages.length}건이 있습니다.`
+          : '완료';
+
+    _lastScanData.status = {
+      ...prevStatus,
+      level: nextLevel,
+      badge: nextBadge,
+      messages: nextStatusMessages,
+      detail_messages: nextStatusMessages.map(m => String(m?.text || '').trim()).filter(Boolean),
+      summary_text: nextSummary,
+      action_text: nextLevel === 'ok' ? '' : (prevStatus.action_text || ''),
+    };
+
+    if (nextLevel === 'error') _showScanWarnCard(nextStatusMessages.map(m => m?.text || ''), 'error', _lastScanData.status);
+    else if (nextLevel === 'hold' || nextLevel === 'warn') _showScanWarnCard(nextStatusMessages.map(m => m?.text || ''), 'warn', _lastScanData.status);
+    else _hideScanWarnCard();
+
+    _setBadge(nextBadge.type, nextBadge.text);
     _setMessage('학년도 아이디 규칙이 적용되었습니다. 바로 실행할 수 있습니다.');
     _el('btn-run').disabled = false;
     App.setFloatingNext(true, 'run');
@@ -883,6 +931,7 @@ function toggleFilter(key) {
       previewWarn.textContent = '';
     }
 
+    _updateGradeMap(_lastScanData);
     return true;
   }
 

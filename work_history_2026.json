@@ -562,5 +562,41 @@
     },
     "run_completed": true,
     "master_recorded": false
+  },
+  "성남매송중": {
+    "last_date": "2026-04-08",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 118,
+      "전입생": 4,
+      "전출생": 12,
+      "교직원": 24
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "평택현덕초광덕분교": {
+    "last_date": "2026-04-08",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 48,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 14
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "성남양지초": {
+    "last_date": "2026-04-08",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 19,
+      "전입생": 1,
+      "전출생": 0,
+      "교직원": 4
+    },
+    "run_completed": true,
+    "master_recorded": false
   }
 }

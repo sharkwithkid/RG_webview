@@ -111,6 +111,11 @@ const Run = (() => {
       _el('run-info').textContent = '실행 로그와 결과 카드를 확인해 주세요.';
       _renderRunStatusCard({ ...status, detail_messages: detailMessages }, data);
       App.setStepState(3, 'warn');
+    } else if (level === 'hold') {
+      if (!status?.badge) _setBadge('warn', '보류');
+      _el('run-info').textContent = '보류 항목을 확인해 주세요.';
+      _renderRunStatusCard({ ...status, detail_messages: detailMessages }, data);
+      App.setStepState(3, 'warn');
     } else {
       if (!status?.badge) _setBadge('ok', '완료');
       _el('run-info').textContent = '작업이 완료되었습니다.';
@@ -225,7 +230,7 @@ const Run = (() => {
     const holdWarn = _el('run-hold-warn');
     if (!holdWarn) return;
 
-    const level = status?.level === 'error' ? 'error' : 'warn';
+    const level = status?.level === 'error' ? 'error' : (status?.level === 'hold' ? 'warn' : 'warn');
     const details = Array.from(new Set(((status?.detail_messages || []).length
       ? (status?.detail_messages || [])
       : _collectStatusMessages(data, status)).map(v => String(v || '').trim()).filter(Boolean)));
@@ -250,14 +255,25 @@ const Run = (() => {
     _el('sum-year').textContent           = s(state.school_start_date?.slice(0, 4));
     _el('sum-freshmen').textContent       = s(data.freshmen_count);
     _el('sum-teacher').textContent        = s(data.teacher_count);
-    _el('sum-transfer').textContent       = s(data.transfer_in_done);
+    const inDup = data.transfer_in_dup || 0;
+    const inHold  = data.transfer_in_hold  || 0;
+    const outHold = data.transfer_out_hold || 0;
+    _el('sum-transfer').textContent       = s(
+      inDup > 0
+        ? `${data.transfer_in_done} (신입생중복 ${inDup}건 보류)`
+        : inHold > 0
+          ? `${data.transfer_in_done} (보류 ${inHold}건)`
+          : data.transfer_in_done
+    );
     _el('sum-withdraw').textContent       = s(
       autoSkip > 0
         ? `${data.transfer_out_done} (자동제외 ${autoSkip}건)`
-        : data.transfer_out_done
+        : outHold > 0
+          ? `${data.transfer_out_done} (보류 ${outHold}건)`
+          : data.transfer_out_done
     );
-    _el('sum-transfer-check').textContent = s(data.transfer_in_done);
-    _el('sum-withdraw-check').textContent = s(data.transfer_out_done);
+    _el('sum-transfer-check').textContent = s(inHold > 0 ? data.transfer_in_done + inHold : data.transfer_in_done);
+    _el('sum-withdraw-check').textContent = s(outHold > 0 ? data.transfer_out_done + outHold : data.transfer_out_done);
   }
 
   // ──────────────────────────────────────────────

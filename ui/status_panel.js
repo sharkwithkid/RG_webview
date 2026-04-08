@@ -441,12 +441,17 @@ const Panel = (() => {
   function applyGrade() {
     const overrides = getGradeOverrides();
     if (!Object.keys(overrides).length) {
+      toast('수정된 값이 없습니다.', 'info');
       return;
     }
 
+    let applied = false;
     if (typeof Scan !== 'undefined' && Scan.applyManualGradeReady) {
-      Scan.applyManualGradeReady(overrides);
+      applied = !!Scan.applyManualGradeReady(overrides);
     }
+
+    if (applied) toast('학년도 아이디 규칙이 적용되었습니다.', 'ok');
+    else toast('지금은 학년도 아이디 규칙을 적용할 수 없습니다.', 'warn');
   }
 
   // ──────────────────────────────────────────────

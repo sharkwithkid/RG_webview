@@ -135,7 +135,7 @@ const Notice = (() => {
     if (!text) { toast('복사할 내용이 없습니다.', 'info'); return; }
     await bridge.copyToClipboard(text);
     // 짧은 피드백 (버튼 텍스트 변경)
-    const btn = document.querySelector('[onclick="Notice.copy()"]');
+    const btn = document.querySelector('[data-action="notice-copy"]');
     if (btn) {
       const orig = btn.textContent;
       btn.textContent = '복사됨 ✓';

@@ -63,12 +63,12 @@
   --radius:      9px;
   --radius-sm:   7px;
   --radius-xs:   5px;
-  --sidebar-w:   236px;
+  --sidebar-w:   220px;
   --nav-w:       52px;
 
   /* ── 타이포 토큰 ── */
-  --fs-xs:  11px;
-  --fs-sm:  11px;
+  --fs-xs:  12px;
+  --fs-sm:  12px;
   --fs-md: 12px;
   --fs-lg: 12px;
   --fs-xl: 12px;
@@ -347,7 +347,7 @@ input[type="date"] { display: none; }
 .btn-start { height: 40px; padding: 0 32px; font-size: 13px; border-radius: 20px; }
 
 .file-badge {
-  font-size: 11px; font-weight: 600; padding: 2px 7px;
+  font-size: 12px; font-weight: 600; padding: 2px 7px;
   border-radius: 99px; background: var(--surface-2); color: var(--muted);
 }
 .file-badge.ok   { background: var(--ok-bg);   color: var(--ok-tx); }
@@ -392,13 +392,13 @@ input[type="date"] { display: none; }
 
 /* ── 스텝 네비게이션 (세로) ─────────────────────────── */
 .step-bar {
-  width: 160px; flex-shrink: 0;
+  width: 148px; flex-shrink: 0;
   background: #F3F7FB;
   border-right: 1px solid rgba(207,218,229,.60);
   box-shadow: none;
   border-radius: 0;
   display: flex; flex-direction: column;
-  padding: 15px 6px 10px; gap: 5px; overflow-y: auto;
+  padding: 15px 4px 10px; gap: 5px; overflow-y: auto;
 }
 .step-bar-label {
   font-size: 12px; font-weight: 600; color: #0F1720;
@@ -449,19 +449,19 @@ input[type="date"] { display: none; }
   background: transparent;
   box-shadow: none;
   border-radius: 0;
-  display: flex; flex-direction: column; gap: 12px;
+  display: flex; flex-direction: column; gap: 11px;
   align-items: center;
-  padding: 15px 3px 5px 7px;
+  padding: 15px 1px 5px 5px;
 }
 .sidebar .card { background: none; border: none; border-radius: 0; padding: 0; display: contents; min-width: 0; box-shadow: none; }
 
 /* 사이드바 섹션 */
 .sb-section {
   width: calc(100% - 12px);
-  max-width: 205px;
+  max-width: 190px;
   margin: 0 auto;
-  padding: 12px 16px;
-  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
   background: #F8FBFF;
   border-radius: 12px;
   border: 1px solid rgba(213,223,234,.90);
@@ -470,16 +470,14 @@ input[type="date"] { display: none; }
 .sb-label {
   font-size: var(--fs-md); font-weight: 600; color: #0F1720;
   padding: 0 0 2px 0; text-transform: uppercase;
+  margin-top: 4px;
 }
 
 .sidebar .muted {
   color: var(--muted);
 }
 #school-status,
-#school-history,
-#last-work,
 #roster-map-hint,
-.grade-hint,
 .panel-caption,
 .notice-caption,
 .run-caption,
@@ -492,6 +490,23 @@ input[type="date"] { display: none; }
   line-height: var(--lh-base);
   color: var(--muted);
   font-weight: 400;
+}
+
+#school-history,
+#last-work {
+  font-size: 11px;
+  line-height: var(--lh-base);
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.grade-hint {
+  font-size: 12px;
+  line-height: var(--lh-base);
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: -4px;
+  margin-bottom: 3px;
 }
 
 /* 사이드바 내 기존 UI 조정 */
@@ -554,10 +569,9 @@ input[type="date"] { display: none; }
 .current-school-name { font-size: 13px; font-weight: 600; color: var(--text); word-break: keep-all; line-height: 1.35; }
 
 .date-chk-row {
-  display: grid;
-  grid-template-columns: 58px 1fr;
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .date-chk-row label {
@@ -565,18 +579,19 @@ input[type="date"] { display: none; }
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  color: var(--text-2);
+  color: var(--muted);
   cursor: pointer;
   white-space: nowrap;
-  width: 55px;
+  flex-shrink: 0;
 }
 
 .date-chk-row .date-picker-wrap {
-  width: 100%;
+  width: auto;
 }
 
 .date-chk-row .date-picker-input {
-  width: 100%;
+  width: auto;
+  min-width: 90px;
 }
 
 .date-picker-input .dp-text {
@@ -601,11 +616,11 @@ input[type="date"] { display: none; }
 
 /* 학년도 숫자 인풋 — 안정화 버전 */
 .grade-row-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  justify-content: space-between;
   min-width: 0;
-  padding: 1px 0;
+  padding: 1px 4px;
 }
 
 
@@ -616,18 +631,19 @@ input[type="date"] { display: none; }
 }
 
 .grade-row-item input[type="number"] {
-  width: 60px;
-  min-width: 60px;
+  width: 56px;
+  min-width: 56px;
   height: 22px;
   padding: 0 2px;
   border: none;
   border-radius: 3px;
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 600;
   font-family: inherit;
   background: transparent;
   color: var(--text);
   text-align: center;
+  padding-right: 4px;
 
   /* 핵심 */
   appearance: textfield;
@@ -695,7 +711,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 /* ── 콘텐츠 영역 ─────────────────────────────────────── */
 .content-area {
   flex: 1; overflow-y: auto;
-  padding: 15px 20px 5px 6px; display: flex; flex-direction: column; gap: 6px;
+  padding: 15px 18px 5px 4px; display: flex; flex-direction: column; gap: 6px;
   background: transparent;
 }
 
@@ -744,9 +760,9 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 }
 #scan-tbody tr.scan-row-warn td.kind { color: #9A5B16; }
 #scan-tbody tr.viewer-active td {
-  background: #EFF6FF;
+  background: #F1F5F9;
 }
-#scan-tbody tr.viewer-active td.kind { color: #1D4ED8; font-weight: 700; }
+#scan-tbody tr.viewer-active td.kind { color: #475569; font-weight: 700; }
 .spin-cell { display: flex; align-items: center; justify-content: center; gap: 2px; }
 .spin-btn {
   width: 18px; height: 18px;
@@ -826,7 +842,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
   display: flex; align-items: center; gap: 6px; padding: 4px 0;
   font-size: 12px;
 }
-.output-file-name { flex: 1; color: var(--accent); cursor: pointer; }
+.output-file-name { flex: 1; color: var(--accent); cursor: pointer; font-size: 12px; }
 .output-file-name:hover { text-decoration: underline; }
 .sheet-tabs { display: flex; gap: 1px; flex-wrap: wrap; margin-bottom: 10px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 3px; width: fit-content; }
 .sheet-tab {
@@ -837,14 +853,14 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .sheet-tab.active { background: #fff; color: var(--text); font-weight: 500; box-shadow: none; }
 
 /* ── 안내문탭 ─────────────────────────────────────────── */
-.notice-body { display: flex; gap: 0; flex: 1; min-height: 0; }
-.notice-list-wrap { width: 160px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); }
-.notice-list-item { padding: 9px 14px; font-size: 12px; cursor: pointer; border-bottom: none; color: var(--text-2); border-radius: var(--radius-sm); margin: 2px 6px; }
+.notice-body { display: flex; gap: 10px; }
+.notice-list-wrap { width: 160px; flex-shrink: 0; overflow-y: auto; height: 325px; border: 1px solid #FCFEFF; border-radius: var(--radius); background: var(--surface); }
+.notice-list-item { padding: 8px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); color: var(--text-2); border-radius: 0; margin: 0; line-height: 1.4; }
 .notice-list-item:last-child { border-bottom: none; }
-.notice-list-item:hover { background: var(--surface-2); }
-.notice-list-item.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: none; }
-.notice-right { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 10px; }
-.notice-text { flex: 1; resize: none; padding: 10px 12px; font-size: 12px; min-height: 320px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.notice-list-item:hover { background: var(--surface-2); color: var(--text); }
+.notice-list-item.active { background: var(--surface-2); color: var(--text); font-weight: 600; }
+.notice-right { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; padding: 0; }
+.notice-text { flex: 1; resize: none; padding: 10px 12px; font-size: 12px; height: 440px; border: 1px solid var(--border); border-radius: var(--radius); }
 
 /* ── diff 모드 ─────────────────────────────────────────── */
 .diff-year-row { display: flex; align-items: center; gap: 10px; }
@@ -930,11 +946,11 @@ button:not(:disabled), a, [data-action]:not(:disabled),
   border: 1px solid var(--border);
   box-shadow: 0 8px 40px rgba(0,0,0,.14), 0 2px 8px rgba(0,0,0,.06);
   padding: 20px; width: 400px; max-width: 92%;
-  display: flex; flex-direction: column; gap: 12px;
+  display: flex; flex-direction: column;
 }
 .confirm-modal-title { font-size: 13px; font-weight: 600; color: var(--text); }
-.confirm-modal-body  { font-size: 12px; color: var(--text-2); line-height: 1.55; word-break: keep-all; }
-.confirm-modal-options { display: flex; flex-direction: column; gap: 6px; }
+.confirm-modal-body  { font-size: 12px; color: var(--text-2); line-height: 1.55; word-break: keep-all; margin-top: 4px; }
+.confirm-modal-options { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
 .confirm-modal-option {
   display: flex; align-items: flex-start; gap: 10px;
   padding: 10px 12px; border-radius: var(--radius-sm);
@@ -947,12 +963,16 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .confirm-modal-option.selected { background: var(--surface); border-color: var(--border); box-shadow: none; }
 .confirm-modal-option-label { font-size: 12px; font-weight: 500; color: var(--text); }
 .confirm-modal-option-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.confirm-modal-footer { display: flex; justify-content: flex-end; gap: 6px; }
+.confirm-modal-footer { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }
+.confirm-modal-footer button {
+  height: 28px; padding: 0 14px; font-size: 12px; font-weight: 500;
+  border-radius: 14px !important;
+}
 
 
 #page-main .date-picker-sm .date-picker-input {
-  height: 30px;
-  padding: 0 10px 0 12px;
+  height: 24px;
+  padding: 0 8px;
   font-size: 12px;
 }
 
@@ -1003,7 +1023,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 .diff-set-icon { width:28px; height:28px; opacity:.88; color:var(--text-2); }
 .diff-set-label { font-size:var(--fs-sm); color:var(--muted); font-weight:400; }
 .diff-set-value { font-size:var(--fs-sm); font-weight:700; color:var(--text); line-height:1; }
-.diff-set-desc { font-size:var(--fs-sm); color:var(--muted); line-height:var(--lh-base); }
+.diff-set-desc { font-size: 11px; color:var(--muted); line-height:var(--lh-base); }
 
 /* ── diff 경고 행 ── */
 .diff-alert-row {
@@ -1218,7 +1238,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
               <button class="btn-primary btn-sm" style="flex:1" data-action="apply-grade">적용</button>
               <button class="btn-ghost btn-sm" id="btn-open-roster-map" disabled style="flex:1" data-action="open-roster-map">명부 열기</button>
             </div>
-            <span class="grade-hint" id="roster-map-hint" style="display:none;margin-top:6px">학생명부 파일이 없습니다.</span>
+            <span class="grade-hint" id="roster-map-hint" style="display:none;margin-top:9px">학생명부 파일이 없습니다.</span>
           </div>
           <button id="btn-grade-toggle" data-action="toggle-grade" style="display:none"></button>
         </div>
@@ -1232,36 +1252,16 @@ button:not(:disabled), a, [data-action]:not(:disabled),
               <input type="date" id="arrived-date">
               <div class="date-picker-input" data-dp="arrived-date">
                 <span class="dp-text dp-placeholder">날짜 선택</span>
-                <svg class="dp-icon" width="13" height="13" viewBox="0 0 16 16" fill="none">
-                  <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
-                  <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
-                  <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
-                  <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                  <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                  <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                  <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                  <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                </svg>
               </div>
               <div class="dp-popup" id="dp-popup-arrived-date"></div>
             </div>
           </div>
           <div class="date-chk-row">
             <label><input type="checkbox" id="chk-sent"> 발송일</label>
-            <div class="date-picker-wrap date-picker-sm" style="flex:0 0 115px">
+            <div class="date-picker-wrap date-picker-sm" style="flex:1">
               <input type="date" id="sent-date">
               <div class="date-picker-input" data-dp="sent-date">
                 <span class="dp-text dp-placeholder">날짜 선택</span>
-                <svg class="dp-icon" width="13" height="13" viewBox="0 0 16 16" fill="none">
-                  <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
-                  <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
-                  <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
-                  <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                  <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                  <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                  <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                  <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
-                </svg>
               </div>
               <div class="dp-popup" id="dp-popup-sent-date"></div>
             </div>
@@ -1288,7 +1288,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="scan-head">
             <div class="scan-head-left">
               <div class="card-title">스캔 검수</div>
-              <div class="muted panel-caption panel-caption" class="panel-caption">입력 파일 구조를 확인하고, 의심 행을 검수합니다.</div>
+              <div class="muted panel-caption panel-caption" class="panel-caption">입력 파일 구조를 확인합니다.</div>
             </div>
             <div class="scan-actions">
               <button class="btn-primary" id="btn-scan" disabled data-action="scan-start">파일 내용 스캔</button>
@@ -1410,7 +1410,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           </div>
         </div>
 
-        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+        <div class="card" style="display:flex;flex-direction:column;gap:4px">
           <div style="display:flex;align-items:center;gap:8px">
             <span class="card-title" style="flex:1">출력 파일</span>
             <button class="btn-ghost btn-sm" data-action="open-folder">폴더 열기</button>
@@ -1436,20 +1436,20 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
       <!-- 안내문 탭 -->
       <div class="tab-panel" id="tab-notice">
-        <div class="card" style="flex:1;display:flex;flex-direction:column;gap:12px">
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
           <div>
             <div class="card-title">안내문</div>
             <div class="muted" style="margin-top:4px">학교명·학년도·개학일·홈페이지 주소가 자동으로 반영되는 안내문 초안입니다.</div>
           </div>
-          <div class="notice-body">
+          <div class="notice-body" style="flex:1;min-height:0">
             <div class="notice-list-wrap" id="notice-list"></div>
             <div class="notice-right">
               <textarea class="notice-text" id="notice-text">실행 완료 후 안내문이 자동으로 채워집니다.&#10;&#10;학교명·학년도·개학일·홈페이지 주소가 자동으로 반영됩니다.</textarea>
-              <div style="display:flex;justify-content:flex-end;gap:8px">
-                <button class="btn-ghost" data-action="notice-copy">복사</button>
-                <button class="btn-ghost" data-action="notice-reset">초기화</button>
-              </div>
             </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button class="btn-ghost" data-action="notice-copy">복사</button>
+            <button class="btn-ghost" data-action="notice-reset">초기화</button>
           </div>
         </div>
       </div><!-- /tab-notice -->
@@ -1460,7 +1460,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           <div class="scan-head">
             <div class="scan-head-left">
               <div class="card-title">스캔 검수</div>
-              <div class="muted diff-caption">재학생 명단과 명부를 비교합니다.</div>
+              <div class="muted diff-caption">재학생 명단 구조를 확인합니다.</div>
             </div>
             <div class="scan-actions">
               <button class="btn-primary" id="btn-scan-diff" disabled data-action="diff-scan-start">파일 내용 스캔</button>
@@ -1554,7 +1554,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
           </div>
         </div>
 
-        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+        <div class="card" style="display:flex;flex-direction:column;gap:4px">
           <div style="display:flex;align-items:center;gap:8px">
             <span class="card-title" style="flex:1">출력 파일</span>
             <button class="btn-ghost btn-sm" id="btn-diff-open-folder" disabled

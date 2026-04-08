@@ -400,7 +400,7 @@ def execute_diff_pipeline(
             compare_only_rows=compare_only_rows,
             unresolved_rows=unresolved_rows,
         )
-        log(f"[OK] 명단 비교 결과 생성 완료: {out_compare.name}")
+        log(f"[INFO] 명단 비교 결과 생성 완료: {out_compare.name}")
 
         pr = DiffPipelineResult(
             ok=True,

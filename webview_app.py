@@ -46,8 +46,8 @@ QApplication.setHighDpiScaleFactorRoundingPolicy(
 HTML_PATH = _BUNDLE_DIR / "ui" / "index.html"
 WINDOW_TITLE = "ClassMate"
 
-WINDOW_W, WINDOW_H = 950, 750
-MIN_WINDOW_W, MIN_WINDOW_H = 950, 750
+WINDOW_W, WINDOW_H = 930, 750
+MIN_WINDOW_W, MIN_WINDOW_H = 930, 750
 DEFAULT_ZOOM = 1.0
 
 

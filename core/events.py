@@ -396,7 +396,7 @@ def transfer_in_hold(name: str, reason: str) -> CoreEvent:
     return CoreEvent(
         code     = "TRANSFER_IN_HOLD",
         level    = "hold",
-        message  = f"전입 보류: {name} — {reason}",
+        message  = f"전입생 보류: {name} — {reason}",
         file_key = "transfer_in",
     )
 
@@ -405,7 +405,7 @@ def transfer_out_hold(name: str, reason: str) -> CoreEvent:
     return CoreEvent(
         code     = "TRANSFER_OUT_HOLD",
         level    = "hold",
-        message  = f"전출 보류: {name} — {reason}",
+        message  = f"전출생 보류: {name} — {reason}",
         file_key = "transfer_out",
     )
 
@@ -426,11 +426,15 @@ def freshmen_transfer_dup(name: str, grade: int = 0, class_: str = "") -> CoreEv
 
 
 def roster_duplicate_transfer(name: str, reason: str) -> CoreEvent:
+    if "동일인으로 의심" in reason:
+        detail = "명부에 같은 학년·이름의 학생이 있으나 반이 다릅니다. 동일인인지 확인 후 처리해 주세요."
+    else:
+        detail = "이미 명부에 존재하는 학생입니다. 확인 후 처리해 주세요."
     return CoreEvent(
         code     = "ROSTER_DUPLICATE_TRANSFER",
         level    = "hold",
-        message  = f"명부 존재 전입생 보류: {name} — {reason}",
-        detail   = "이미 명부에 존재하는 학생입니다. 확인 후 처리해 주세요.",
+        message  = f"전입생 보류: {name} — {reason}",
+        detail   = detail,
         file_key = "transfer_in",
     )
 
@@ -526,7 +530,7 @@ def diff_transfer_in_hold(name: str, reason: str) -> CoreEvent:
     return CoreEvent(
         code     = "DIFF_TRANSFER_IN_HOLD",
         level    = "hold",
-        message  = f"전입 보류: {name} — {reason}",
+        message  = f"전입생 보류: {name} — {reason}",
         file_key = "transfer_in",
     )
 
@@ -535,7 +539,7 @@ def diff_transfer_out_hold(name: str, reason: str) -> CoreEvent:
     return CoreEvent(
         code     = "DIFF_TRANSFER_OUT_HOLD",
         level    = "hold",
-        message  = f"전출 보류: {name} — {reason}",
+        message  = f"전출생 보류: {name} — {reason}",
         file_key = "transfer_out",
     )
 

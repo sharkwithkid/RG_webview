@@ -98,6 +98,7 @@ class PipelineResult:
 
     transfer_in_done: int = 0
     transfer_in_hold: int = 0
+    transfer_in_dup:  int = 0  # 신입생 중복 보류 건수
     transfer_out_done: int = 0
     transfer_out_hold: int = 0
     transfer_out_auto_skip: int = 0
@@ -1081,9 +1082,10 @@ def write_withdraw_to_register(wb, done_rows: List[Dict], hold_rows: List[Dict])
 
 
 def write_transfer_hold_sheet(wb, hold_rows: List[Dict]):
-    sn = "전입생_보류"
+    sn = "전입_보류"
     ws = wb[sn] if sn in wb.sheetnames else wb.create_sheet(sn)
     ws.delete_rows(1, ws.max_row)
+    ws.sheet_properties.tabColor = "7FFFD4"
     for i, h in enumerate(["학년", "반", "번호", "성명", "보류사유"], 1):
         write_text_cell(ws, 1, i, h)
     for i, row in enumerate(hold_rows, 2):
@@ -1228,6 +1230,25 @@ def fill_register(
             running_no += 1
             write_row += 1
 
+        transfer_hold_write_rows = list(transfer_hold_rows or [])
+        transfer_hold_excel_rows: List[int] = []
+        for tr in transfer_hold_write_rows:
+            transfer_hold_excel_rows.append(write_row)
+            write_student_row(
+                write_row,
+                running_no,
+                tr["name"],
+                tr["id"],
+                tr["grade"],
+                make_register_class_name(tr["grade"], tr["class"]),
+            )
+            running_no += 1
+            write_row += 1
+
+        for r in transfer_hold_excel_rows:
+            for c in range(1, col_class + 1):
+                ws_students.cell(row=r, column=c).fill = FILL_TRANSFER_HOLD
+
         teachers_learn = [t for t in teacher_rows if t["learn_apply"]]
         t_names_sfx = apply_suffix_for_duplicates([t["name"] for t in teachers_learn])
         for j, t in enumerate(teachers_learn):
@@ -1235,6 +1256,11 @@ def fill_register(
             write_student_row(write_row + j, running_no, nm_sfx, f"{nm_sfx}1", 1, "선생님반")
             running_no += 1
         write_row += len(teachers_learn)
+
+        try:
+            ws_staff.sheet_properties.tabColor = None
+        except Exception:
+            pass
 
         hm2 = _require_headers(
             ws_staff,
@@ -1351,12 +1377,20 @@ def _parse_grade_class_from_register(raw: Any) -> Tuple[Optional[int], str]:
 
 
 FILL_TRANSFER = PatternFill("solid", fgColor="F8CBAD")
+FILL_TRANSFER_HOLD = PatternFill("solid", fgColor="7FFFD4")
 FILL_DUP      = PatternFill("solid", fgColor="FFFF00")
 FILL_GREY     = PatternFill("solid", fgColor="D9D9D9")
 
 
-def build_notice_student_sheet(ws_notice, register_students_ws, transfer_ids: set, transfer_highlight_ids: set) -> List[int]:
+def build_notice_student_sheet(
+    ws_notice,
+    register_students_ws,
+    transfer_ids: set,
+    transfer_highlight_ids: set,
+    transfer_hold_ids: Optional[set] = None,
+) -> List[int]:
     """동명이인 행 번호(1-based, running_no 기준) 리스트를 반환한다."""
+    transfer_hold_ids = transfer_hold_ids or set()
 
     hm_r = _require_headers(
         register_students_ws,
@@ -1398,7 +1432,8 @@ def build_notice_student_sheet(ws_notice, register_students_ws, transfer_ids: se
         key = (grade, nk)
         tmp_rows.append({"grade": g_disp, "class_disp": cls_disp, "name": nm_s, "id": uid_s,
                           "key": key, "is_transfer": uid_s in transfer_ids,
-                          "is_transfer_highlight": uid_s in transfer_highlight_ids})
+                          "is_transfer_highlight": uid_s in transfer_highlight_ids,
+                          "is_transfer_hold": uid_s in transfer_hold_ids})
         if grade is not None and nk:
             name_counter[key] += 1
 
@@ -1417,10 +1452,15 @@ def build_notice_student_sheet(ws_notice, register_students_ws, transfer_ids: se
             write_text_cell(ws_notice, cur_row, 5, rec["id"]),
             write_text_cell(ws_notice, cur_row, 6, "1234"),
         ]
-        if rec["is_transfer"]:
-            for c in cells: c.fill = FILL_TRANSFER
+        if rec.get("is_transfer_hold"):
+            for c in range(1, ws_notice.max_column + 1):
+                ws_notice.cell(cur_row, c).fill = FILL_TRANSFER_HOLD
+        elif rec["is_transfer"]:
+            for c in range(1, ws_notice.max_column + 1):
+                ws_notice.cell(cur_row, c).fill = FILL_TRANSFER
         if dup_flag:
-            for c in cells: c.fill = FILL_DUP
+            for c in range(1, ws_notice.max_column + 1):
+                ws_notice.cell(cur_row, c).fill = FILL_DUP
             dup_row_numbers.append(running_no)
         running_no += 1; cur_row += 1
     return dup_row_numbers
@@ -1470,7 +1510,6 @@ def build_notice_teacher_sheet(ws_notice, teacher_rows, learn_ids=None, admin_id
         if not la:
             for c in [8, 9]: ws_notice.cell(r_out, c).fill = FILL_GREY
         if nm and name_counter[nm] >= 2:
-            for c in range(1, 10): ws_notice.cell(r_out, c).fill = FILL_DUP
             dup_row_numbers.append(no)
         no += 1; r_out += 1
 
@@ -1484,6 +1523,7 @@ def build_notice_file(
     out_register_path: Path,
     teacher_rows: Optional[List[Dict]],
     transfer_done_rows: List[Dict],
+    transfer_hold_rows: Optional[List[Dict]] = None,
 ) -> List[int]:
     
     ensure_xlsx_only(template_notice_path)
@@ -1510,9 +1550,11 @@ def build_notice_file(
         ws_nt = wb_notice[_pick(wb_notice, ["선생님", "PW"])]
         ws_rs = wb_reg["학생자료"]
 
+        transfer_hold_rows = transfer_hold_rows or []
+
         transfer_ids: set = {
             str(tr["id"]).strip()
-            for tr in transfer_done_rows
+            for tr in (list(transfer_done_rows) + list(transfer_hold_rows))
             if tr.get("id")
         }
 
@@ -1522,7 +1564,15 @@ def build_notice_file(
             if tr.get("id") and tr.get("needs_highlight")
         }
 
-        dup_row_numbers = build_notice_student_sheet(ws_ns, ws_rs, transfer_ids, transfer_highlight_ids)
+        transfer_hold_ids: set = {
+            str(tr["id"]).strip()
+            for tr in transfer_hold_rows
+            if tr.get("id")
+        }
+
+        dup_row_numbers = build_notice_student_sheet(
+            ws_ns, ws_rs, transfer_ids, transfer_highlight_ids, transfer_hold_ids
+        )
 
         learn_ids_from_reg: Optional[List[str]] = None
         try:
@@ -1700,7 +1750,7 @@ def execute_pipeline(
                 manual_grade_year_map=grade_year_map,
             )
             _run_evts.extend(_evts); _run_marks.extend(_marks)
-            log(f"[OK] 신입생 {len(freshmen_rows)}명 로드")
+            log(f"[INFO] 신입생 {len(freshmen_rows)}명 로드")
         else:
             log("[INFO] 신입생 파일 없음 → 신입생 등록은 스킵합니다.")
 
@@ -1716,7 +1766,7 @@ def execute_pipeline(
             log(f"[DEBUG] 교사 layout: header_row={h}, data_start_row={s or 'auto'}")
             teacher_rows, _evts, _marks = read_teacher_rows(teacher_path, header_row=h, data_start_row=s)
             _run_evts.extend(_evts); _run_marks.extend(_marks)
-            log(f"[OK] 교사 신청 {len(teacher_rows)}건 로드")
+            log(f"[INFO] 교사 신청 {len(teacher_rows)}건 로드")
             _teacher_no_id_warn = teacher_rows and not any(
                 r.get("admin_apply") or r.get("learn_apply") for r in teacher_rows
             )
@@ -1730,7 +1780,7 @@ def execute_pipeline(
             log(f"[DEBUG] 전입생 layout: header_row={h}, data_start_row={s or 'auto'}")
             transfer_rows, _evts, _marks = read_transfer_rows(transfer_path, header_row=h, data_start_row=s)
             _run_evts.extend(_evts); _run_marks.extend(_marks)
-            log(f"[OK] 전입생 {len(transfer_rows)}명 로드")
+            log(f"[INFO] 전입생 {len(transfer_rows)}명 로드")
         else:
             transfer_rows = []; log("[INFO] 전입생 파일 없음 → 전입 처리 스킵")
 
@@ -1740,7 +1790,7 @@ def execute_pipeline(
             log(f"[DEBUG] 전출생 layout: header_row={h}, data_start_row={s or 'auto'}")
             withdraw_rows, _evts, _marks = read_withdraw_rows(withdraw_path, header_row=h, data_start_row=s)
             _run_evts.extend(_evts); _run_marks.extend(_marks)
-            log(f"[OK] 전출생 {len(withdraw_rows)}명 로드")
+            log(f"[INFO] 전출생 {len(withdraw_rows)}명 로드")
         else:
             withdraw_rows = []; log("[INFO] 전출생 파일 없음 → 전출 처리 스킵")
 
@@ -1754,13 +1804,23 @@ def execute_pipeline(
                 transfer_rows=transfer_rows, roster_info=scan.roster_info,
                 input_year=year_int, freshmen_rows=freshmen_rows,
             )
-            # 명부에 이미 존재하는 전입생 → hold로 분리 (엑셀 스펙: 완전일치/학년+이름 일치 둘 다 hold)
+            # 명부에 이미 존재하는 전입생 → hold로 분리 (완전일치/학년+이름 일치 둘 다 hold, 사유 구분)
             _roster_dup_rows = [r for r in transfer_done_rows if r.get("dup_with_roster")]
             transfer_done_rows = [r for r in transfer_done_rows if not r.get("dup_with_roster")]
+            _gc_index = getattr(scan.roster_info, "roster_names_by_grade_class", {}) or {}
+            _shift = getattr(scan.roster_info, "ref_grade_shift", 0) or 0
             for _rd in _roster_dup_rows:
-                _rd["보류사유"] = "학생명부에 이미 존재하는 학생입니다."
+                _g   = _rd.get("grade")
+                _cls = str(_rd.get("class", ""))
+                _nm  = str(_rd.get("name", ""))
+                _g_roster = (_g + _shift) if _g is not None else None
+                _cls_names = _gc_index.get((_g_roster, _cls), []) if _g_roster is not None else []
+                if _nm in _cls_names:
+                    _rd["보류사유"] = "학생명부에 이미 존재하는 학생입니다."
+                else:
+                    _rd["보류사유"] = "학생명부에 동일인으로 의심되는 학생이 있습니다."
             transfer_hold_rows = transfer_hold_rows + _roster_dup_rows
-            log(f"[OK] 전입 ID 매칭 완료 | 완료 {len(transfer_done_rows)}명, 보류 {len(transfer_hold_rows)}명")
+            log(f"[INFO] 전입 ID 매칭 완료 | 완료 {len(transfer_done_rows)}명, 보류 {len(transfer_hold_rows)}명")
         else:
             log("[INFO] 전입생 없음 → 전입 ID 생성 스킵")
 
@@ -1806,11 +1866,13 @@ def execute_pipeline(
                 1 for r in withdraw_hold_rows if str(r.get("보류사유", "")).startswith("자동 제외")
             )
             log(
-                f"[OK] 전출 퇴원 리스트 생성 | 퇴원 {len(withdraw_done_rows)}명, "
+                f"[INFO] 전출 퇴원 리스트 생성 | 퇴원 {len(withdraw_done_rows)}명, "
                 f"보류 {len(withdraw_hold_rows)}명 (자동 제외 {transfer_out_auto_skip}명 포함)"
             )
         else:
             log("[INFO] 전출생 없음 → 퇴원 처리 스킵")
+
+        transfer_hold_rows_all = list(transfer_hold_rows) + list(transfer_freshmen_dup_rows)
 
         # 등록작업파일
         if not scan.template_register:
@@ -1824,12 +1886,12 @@ def execute_pipeline(
             freshmen_rows=freshmen_rows,
             transfer_done_rows=transfer_done_rows,
             teacher_rows=teacher_rows,
-            transfer_hold_rows=transfer_hold_rows,
+            transfer_hold_rows=transfer_hold_rows_all,
             withdraw_done_rows=withdraw_done_rows,
             withdraw_hold_rows=withdraw_hold_rows,
             school_kind_override=school_kind_override,
         )
-        log(f"[OK] 등록작업파일 생성 완료: {out_register_path.name}")
+        log(f"[INFO] 등록작업파일 생성 완료: {out_register_path.name}")
 
         # 안내파일
         if not scan.template_notice:
@@ -1849,17 +1911,19 @@ def execute_pipeline(
             out_register_path=out_register_path,
             teacher_rows=teacher_rows,
             transfer_done_rows=transfer_done_rows,
+            transfer_hold_rows=transfer_hold_rows_all,
         )
         notice_dup_rows, notice_teacher_dup_rows = _notice_result if _notice_result else ([], [])
 
-        log(f"[OK] 안내파일 생성 완료: {out_notice_path.name}")
+        log(f"[INFO] 안내파일 생성 완료: {out_notice_path.name}")
 
         pr = PipelineResult(ok=True, outputs=[out_register_path, out_notice_path], logs=logs)
         pr.notice_dup_rows         = notice_dup_rows
         pr.notice_teacher_dup_rows = notice_teacher_dup_rows
-        transfer_hold_rows = transfer_hold_rows + transfer_freshmen_dup_rows
+        transfer_hold_rows = transfer_hold_rows_all
         pr.transfer_in_done   = len(transfer_done_rows)
         pr.transfer_in_hold   = len(transfer_hold_rows)
+        pr.transfer_in_dup    = len(transfer_freshmen_dup_rows)
         pr.transfer_out_done  = len(withdraw_done_rows)
         pr.transfer_out_hold  = len(withdraw_hold_rows)
         pr.transfer_out_auto_skip = transfer_out_auto_skip
@@ -1919,12 +1983,13 @@ def execute_pipeline(
             pr.events.append(_evt_freshmen_transfer_dup(name, grade, cls))
 
         # 명부 매칭 실패 / 명부 존재 전입생 보류 이벤트
+        _freshmen_dup_names = {str(r.get("name","")) for r in transfer_freshmen_dup_rows}
         for row in transfer_hold_rows:
-            if row in transfer_freshmen_dup_rows:
-                continue  # freshmen_transfer_dup으로 이미 추가됨
             name   = str(row.get("name", ""))
+            if name in _freshmen_dup_names:
+                continue  # freshmen_transfer_dup으로 이미 추가됨
             reason = str(row.get("보류사유", ""))
-            if "학생명부에 이미 존재" in reason:
+            if "학생명부에 이미 존재" in reason or "동일인으로 의심" in reason:
                 pr.events.append(_evt_roster_duplicate_transfer(name, reason))
             else:
                 pr.events.append(_evt_transfer_in_hold(name, reason))
@@ -2037,7 +2102,7 @@ def scan_work_root(work_root: Path) -> Dict[str, Any]:
     return {
         "ok": ok,
         "errors": errors,
-        "message": "[OK] resources(DB/templates/notices)가 정상적으로 준비되었습니다." if ok else "",
+        "message": "[INFO] resources(DB/templates/notices)가 정상적으로 준비되었습니다." if ok else "",
         "school_folders": school_folders,
         "notice_titles": notice_titles,
         "db_ok": db_ok, "errors_db": errors_db, "db_file": db_file,

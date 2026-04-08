@@ -156,7 +156,7 @@ WITHDRAW_HEADER_SLOTS: Dict[str, List[str]] = {
 
 TEACHER_HEADER_SLOTS: Dict[str, List[str]] = {
     "no":       ["no", "번호"],
-    "position": ["직위", "담당", "직위담당", "직책"],
+    "position": ["직위", "담당", "직위담당", "직책", "직급"],
     "name": [
         "성명", "이름", "성함",
         "교사명", "교사이름", "교사성명",

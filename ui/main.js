@@ -283,6 +283,8 @@ const App = {
       const el = _el(`tab-${t}`);
       if (el) el.classList.toggle('active', t === tab);
     });
+    const ca = document.querySelector('.content-area');
+    if (ca) ca.style.overflowY = tab === 'notice' ? 'hidden' : 'auto';
     const tabToStep = state.currentMode === 'diff'
       ? { diff: state.selected_school ? 2 : 1 }
       : { scan: 2, run: 3, notice: 4 };

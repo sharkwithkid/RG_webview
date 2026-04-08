@@ -3,7 +3,7 @@
 비교(diff) 파이프라인의 스캔 전용 모듈.
 
 책임 범위:
-  - 학생명렬표 / 비교용 입력 파일 탐색
+  - 재학생 명단 / 비교용 입력 파일 탐색
   - 헤더 행 / 데이터 시작 행 / 주요 컬럼 자동 감지
   - 비교 대상 행 읽기
   - 명부 비교 전 필요한 구조 검증
@@ -107,11 +107,7 @@ EXCLUDED_CLASS_KEYWORDS = [
 ]
 
 COMPARE_FILE_KEYWORDS = [
-    "명렬표",
-    "명렬",
     "재학생",
-    "학생명단",
-    "학생 명단",
 ]
 
 DIFF_TRANSFER_IN_TEMPLATE_KEYWORDS = ["전입생"]
@@ -204,7 +200,7 @@ def detect_example_and_data_start(ws, header_row: int, name_col: int, max_search
 
 def detect_header_row_compare(ws) -> int:
     """
-    비교용 재학생 명렬표 헤더 탐지.
+    비교용 재학생 명단 헤더 탐지.
     - 필수는 학년, 이름
     - 반은 보통 오지만 없어도 허용
     """
@@ -218,7 +214,7 @@ def detect_header_row_compare(ws) -> int:
         )
     except Exception:
         raise ValueError(
-            "[ERROR] 재학생 명렬표 파일에서 헤더를 찾을 수 없습니다. "
+            "[ERROR] 재학생 명단 파일에서 헤더를 찾을 수 없습니다. "
             "'학년', '이름' 열이 있는지 확인해 주세요."
         )
 
@@ -234,7 +230,7 @@ def detect_compare_input_layout(xlsx_path: Path) -> Dict[str, Any]:
 
         name_col = slot_cols.get("name")
         if name_col is None:
-            raise ValueError("[ERROR] 재학생 명렬표 헤더에서 이름 열을 찾을 수 없습니다.")
+            raise ValueError("[ERROR] 재학생 명단 헤더에서 이름 열을 찾을 수 없습니다.")
 
         example_rows, data_start_row = detect_example_and_data_start(
             ws,
@@ -371,7 +367,7 @@ def find_diff_templates(template_dir: Path) -> Tuple[Optional[Path], Optional[Pa
 
 def find_compare_file(input_dir: Path) -> Optional[Path]:
     """
-    학교 폴더 안 xlsx 중에서 비교용 재학생 명렬표 파일 1개를 찾는다.
+    학교 폴더 안 xlsx 중에서 비교용 재학생 명단 파일 1개를 찾는다.
     1차: 파일명 키워드 후보 수집
     2차: 헤더 구조 검증
     """
@@ -390,10 +386,14 @@ def find_compare_file(input_dir: Path) -> Optional[Path]:
         if any(text_contains(p.name, kw) for kw in COMPARE_FILE_KEYWORDS)
     ]
 
-    candidates = keyword_candidates if keyword_candidates else xlsx_files
+    if not keyword_candidates:
+        raise ValueError(
+            "[ERROR] 재학생 명단 파일을 찾을 수 없습니다. "
+            "파일명에 '재학생' 키워드를 포함해 주세요."
+        )
 
     valid: List[Path] = []
-    for p in candidates:
+    for p in keyword_candidates:
         try:
             detect_compare_input_layout(p)
             valid.append(p)
@@ -403,7 +403,7 @@ def find_compare_file(input_dir: Path) -> Optional[Path]:
     if len(valid) == 0:
         return None
     if len(valid) > 1:
-        raise ValueError(f"[ERROR] 비교용 재학생 명렬표 파일 후보가 여러 개입니다: {[p.name for p in valid]}")
+        raise ValueError(f"[ERROR] 재학생 명단 파일 후보가 여러 개입니다: {[p.name for p in valid]}")
     return valid[0]
 
 
@@ -475,7 +475,7 @@ def read_compare_rows(
     slot_cols: Optional[Dict[str, int]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    재학생 명렬표 비교용 입력 읽기.
+    재학생 명단 비교용 입력 읽기.
     필수: 학년, 이름
     선택: 반
     """
@@ -509,7 +509,7 @@ def read_compare_rows(
 
         if missing:
             raise ValueError(
-                "[ERROR] 재학생 명렬표 헤더에서 "
+                "[ERROR] 재학생 명단 헤더에서 "
                 + ", ".join(missing)
                 + " 열을 찾을 수 없습니다."
             )
@@ -530,13 +530,13 @@ def read_compare_rows(
 
             if grade_v is None or str(grade_v).strip() == "" or name_v is None or str(name_v).strip() == "":
                 raise ValueError(
-                    f"[ERROR] 재학생 명렬표 {row}행에 학년/이름 중 빈 값이 있습니다."
+                    f"[ERROR] 재학생 명단 {row}행에 학년/이름 중 빈 값이 있습니다."
                 )
 
             grade_i = parse_grade_int(grade_v)
             if grade_i is None:
                 raise ValueError(
-                    f"[ERROR] 재학생 명렬표 {row}행에서 학년 값을 인식할 수 없습니다: {grade_v!r}"
+                    f"[ERROR] 재학생 명단 {row}행에서 학년 값을 인식할 수 없습니다: {grade_v!r}"
                 )
 
             if grade_i not in TARGET_GRADES:
@@ -546,7 +546,7 @@ def read_compare_rows(
             name_n = normalize_compare_name(name_v)
             if not name_n:
                 raise ValueError(
-                    f"[ERROR] 재학생 명렬표 {row}행 이름을 인식할 수 없습니다."
+                    f"[ERROR] 재학생 명단 {row}행 이름을 인식할 수 없습니다."
                 )
 
             class_raw = "" if class_v is None else str(class_v).strip()
@@ -1017,7 +1017,7 @@ def scan_diff_pipeline(
         sr.input_dir  = school_dir
         sr.output_dir = school_dir
 
-        log(f"[OK] 학교 폴더 매칭: {school_dir.name}")
+        log(f"[INFO] 학교 폴더 매칭: {school_dir.name}")
 
         # 명단 xlsx 기반 학교 존재 확인
         if roster_xlsx:
@@ -1031,7 +1031,7 @@ def scan_diff_pipeline(
                     f"(파일: {Path(roster_xlsx).name})"
                 )
             sr.roster_xlsx_path = _roster_path
-            log(f"[OK] 명단 파일 검증 통과: {_roster_path.name}")
+            log(f"[INFO] 명단 파일 검증 통과: {_roster_path.name}")
         else:
             log("[WARN] 명단 파일이 지정되지 않았습니다. 학교 존재 확인을 건너뜁니다.")
             sr.roster_xlsx_path = None
@@ -1062,7 +1062,7 @@ def scan_diff_pipeline(
             sr.year_int = int(target_year)
             sr.year_str = str(target_year)
 
-            log(f"[OK] 올해 학생명부 감지: {roster_path.name}")
+            log(f"[INFO] 올해 학생명부 감지: {roster_path.name}")
 
             try:
                 modified_date = datetime.fromtimestamp(roster_path.stat().st_mtime).date()
@@ -1107,13 +1107,13 @@ def scan_diff_pipeline(
             if roster_wb is not None:
                 roster_wb.close()
 
-        # 비교용 명렬표
+        # 비교용 재학생 명단
         compare_file = find_compare_file(school_dir)
         sr.compare_file = compare_file
 
         if compare_file is None:
             sr.events.append(compare_file_not_found())
-            raise ValueError("[ERROR] 비교용 재학생 명렬표 파일을 찾을 수 없습니다.")
+            raise ValueError("[ERROR] 재학생 명단 파일을 찾을 수 없습니다. 파일명에 '재학생' 또는 '학생명단' 키워드를 포함해 주세요.")
 
         compare_layout = detect_compare_input_layout(compare_file)
         compare_override = ((layout_overrides or {}).get("compare") or {})
@@ -1146,16 +1146,16 @@ def scan_diff_pipeline(
             wb_cmp.close()
 
         sr.compare_layout = compare_layout
-        log(f"[OK] 비교용 재학생 명렬표 감지: {compare_file.name}")
+        log(f"[INFO] 재학생 명단 파일 감지: {compare_file.name}")
         log(
-            f"[DEBUG] 재학생 명렬표 layout: "
+            f"[DEBUG] 재학생 명단 layout: "
             f"header_row={compare_layout['header_row']}, "
             f"data_start_row={compare_layout['data_start_row']}"
         )
 
         missing_fields: List[str] = []
         if sr.roster_path       is None: missing_fields.append("올해 학생명부")
-        if sr.compare_file      is None: missing_fields.append("재학생 명렬표")
+        if sr.compare_file      is None: missing_fields.append("재학생 명단")
         # 템플릿 체크 제거
 
         sr.missing_fields = missing_fields

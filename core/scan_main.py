@@ -34,7 +34,7 @@ from core.events import (
     roster_xls_format, school_not_in_roster,
     school_folder_not_found, school_folder_ambiguous, no_input_files, input_xls_format,
     missing_header, missing_data_start, empty_data, missing_required_col,
-    grade_format_warn, class_format_warn, empty_required_field, empty_row, merged_cell,
+    grade_format_warn, class_format_warn, name_format_warn, empty_required_field, empty_row, merged_cell,
     multiple_sheets, school_kind_unknown, roster_not_found, roster_date_mismatch,
     open_date_missing, duplicate_input_file,
 )
@@ -711,6 +711,8 @@ def validate_input_sheet_structure(
                 warn_name = f"이름이 너무 짧습니다(1자 이하): '{ns}'"
             elif re.search(r"[0-9]{3,}", ns):
                 warn_name = f"이름 열에 숫자가 3자리 이상 포함되어 있습니다: '{ns}'"
+            elif re.search(r"[^\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318Fa-zA-Z\s]", ns):
+                warn_name = f"이름에 한글/영문 외 문자가 있습니다: '{ns}'"
             if warn_name:
                 issues.append(f"[WARN] {kind} 파일 {r}행 '이름' 열 — {warn_name}")
                 issue_row_nums.append(r)
