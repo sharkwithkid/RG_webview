@@ -1,19 +1,21 @@
 """
 build.py — RG_webview 배포 빌드 스크립트
 
-main 브랜치 push 시 git hook에서 자동 실행.
+권장 사용:
+  - dev  브랜치: 베타/내부 테스트 빌드
+  - main 브랜치: 배포 후보/안정 빌드
+
 수동 실행: python build.py
 
 순서:
-  1. 브랜치 확인 (main 아니면 중단)
+  1. 브랜치 확인 (dev/main 허용)
   2. 민감 파일 / 빌드 환경 점검
   3. PyInstaller 빌드
-  4. Inno Setup 인스톨러 패키징
+  4. Inno Setup 인스톨러 패키징 (설치돼 있으면)
   5. 결과 출력
 """
 
 import sys
-import os
 import subprocess
 import json
 import shutil
@@ -32,6 +34,8 @@ INNO_PATHS = [
     Path(r"C:\Program Files\Inno Setup 6\ISCC.exe"),
 ]
 ISS_FILE = ROOT / "ClassMate_installer.iss"
+
+ALLOWED_BRANCHES = {"dev", "main"}
 
 # ──────────────────────────────────────────────
 # 헬퍼
@@ -58,13 +62,21 @@ def run(cmd: list, cwd=None, check=True):
 # 1. 브랜치 확인
 # ──────────────────────────────────────────────
 
-def check_branch():
+def check_branch() -> str:
     log("브랜치 확인", "HEAD")
     result = run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     branch = result.stdout.strip()
-    if branch != "release":
-        abort(f"현재 브랜치: '{branch}'. 배포 빌드는 release 브랜치에서만 실행합니다.")
-    log(f"브랜치: {branch}", "OK")
+
+    if branch not in ALLOWED_BRANCHES:
+        allowed_text = ", ".join(sorted(ALLOWED_BRANCHES))
+        abort(f"현재 브랜치: '{branch}'. 빌드는 {allowed_text} 브랜치에서만 실행합니다.")
+
+    if branch == "dev":
+        log("dev 베타 빌드", "WARN")
+    else:
+        log("main 안정 빌드", "OK")
+
+    return branch
 
 # ──────────────────────────────────────────────
 # 2. 민감 파일 / 환경 점검
@@ -116,6 +128,7 @@ def build_exe():
     build_dir = ROOT / "build"
     if build_dir.exists():
         shutil.rmtree(build_dir)
+        log("이전 build 정리", "OK")
 
     result = subprocess.run(
         ["pyinstaller", str(SPEC_FILE), "--noconfirm"],
@@ -153,7 +166,6 @@ def build_installer():
     iscc = next((p for p in INNO_PATHS if p.exists()), None)
     if not iscc:
         log("Inno Setup을 찾을 수 없습니다. 인스톨러 빌드를 건너뜁니다.", "WARN")
-        log("설치: https://jrsoftware.org/isdl.php", "WARN")
         return
 
     if not ISS_FILE.exists():
@@ -189,12 +201,16 @@ def summarize():
     if exe.exists():
         size_mb = exe.stat().st_size / 1024 / 1024
         log(f"EXE: {exe}  ({size_mb:.1f} MB)", "OK")
+    else:
+        log("EXE 파일을 찾을 수 없습니다.", "WARN")
 
     installers = sorted(OUTPUT_DIR.glob("*.exe")) if OUTPUT_DIR.exists() else []
     if installers:
         ins = installers[-1]
         size_mb = ins.stat().st_size / 1024 / 1024
         log(f"인스톨러: {ins}  ({size_mb:.1f} MB)", "OK")
+    else:
+        log("인스톨러 없음", "WARN")
 
 # ──────────────────────────────────────────────
 # 진입점
