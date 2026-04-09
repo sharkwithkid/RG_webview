@@ -37,14 +37,20 @@ const Panel = (() => {
   // 작업 컨텍스트 세팅 (SetupPage 완료 후 main.js가 호출)
   function setWorkContext({ work_date, arrived_date }) {
     const d = work_date || _todayStr();
-    // 도착일: 저장된 값 우선, 없으면 work_date
-    _setDateInput('arrived-date', arrived_date || d);
+    // 도착일·발송일 모두 work_date 기본값
+    _setDateInput('arrived-date', d);
     _setDateInput('sent-date',    d);
-    // DatePicker 트리거 텍스트 동기화
     if (typeof DatePicker !== 'undefined') {
-      DatePicker.setValue('arrived-date', arrived_date || d);
+      DatePicker.setValue('arrived-date', d);
       DatePicker.setValue('sent-date',    d);
     }
+    // 체크박스 초기화
+    const chkA = _el('chk-arrived');
+    const chkS = _el('chk-sent');
+    if (chkA) chkA.checked = false;
+    if (chkS) chkS.checked = false;
+    // 파일 열기 버튼 — roster_log_path 있으면 바로 활성화
+    setRosterBtns(false, !!state.roster_log_path);
   }
 
   // ──────────────────────────────────────────────
@@ -211,10 +217,13 @@ const Panel = (() => {
     _setApplyBtn(false);
     _closeDropdown();
 
-    _el('chk-arrived').checked = false;
-    _el('chk-sent').checked    = false;
+    const chkArrived = _el('chk-arrived');
+    const chkSent    = _el('chk-sent');
+    if (chkArrived) chkArrived.checked = false;
+    if (chkSent)    chkSent.checked    = false;
     _el('btn-record-roster').disabled = true;
-    _el('btn-open-roster').disabled   = true;
+    _el('btn-record-roster').textContent = '명단 반영';
+    _el('btn-open-roster').disabled   = !state.roster_log_path;
   }
 
   // ──────────────────────────────────────────────
@@ -246,7 +255,8 @@ const Panel = (() => {
   // ──────────────────────────────────────────────
   function setRosterBtns(recordEnabled, openEnabled) {
     _el('btn-record-roster').disabled = !recordEnabled;
-    _el('btn-open-roster').disabled   = !openEnabled;
+    // 파일 열기는 명단 경로만 있으면 언제든 가능
+    _el('btn-open-roster').disabled   = !state.roster_log_path;
   }
 
   async function recordRoster() {
@@ -327,11 +337,15 @@ const Panel = (() => {
     state.pending_roster_log = false;
     setRosterBtns(false, true);
 
+    // 체크박스 초기화
+    _el('chk-arrived').checked = false;
+    _el('chk-sent').checked    = false;
+
     // 이력 라벨 즉시 갱신
     const SHORT = { '신입생': '신입', '전입생': '전입', '전출생': '전출', '교직원': '교직' };
-    const countStr = Object.entries(counts)
+    const countStr = Object.entries(kindFlags)
       .filter(([, v]) => v)
-      .map(([k, v]) => `${SHORT[k] ?? k} ${v}`)
+      .map(([k]) => SHORT[k] ?? k)
       .join(' · ');
 
     let histText = `마지막 작업 · ${entry.last_date || (state.work_date || _todayStr())}`;
@@ -344,16 +358,22 @@ const Panel = (() => {
       history_text: histText,
     });
 
-    // 버튼 텍스트 변경
+    // 버튼 비활성화 + 텍스트 영구 변경 (초기화 전까지 유지)
     const btn = _el('btn-record-roster');
-    if (btn) btn.textContent = '반영 완료';
+    if (btn) {
+      btn.textContent = '반영 완료 ✓';
+      btn.disabled = true;
+    }
 
     toast(res.data.message || '전체 명단 반영 완료', 'ok');
   }
 
   async function openRoster() {
-    if (!state.roster_log_path) return;
-    await bridge.openFile(state.roster_log_path);
+    const path = state.roster_log_path;
+    console.log('[openRoster] path:', path);
+    if (!path) { toast('명단 파일 경로가 설정되지 않았습니다.', 'warn'); return; }
+    const res = JSON.parse(await bridge.openFile(path));
+    if (res && !res.ok) toast('파일 열기 실패: ' + (res.error || ''), 'err');
   }
 
   // ──────────────────────────────────────────────

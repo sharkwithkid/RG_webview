@@ -240,18 +240,18 @@ input[type="checkbox"]:focus-visible {
 
 /* ── SetupPage ─────────────────────────────────────────── */
 #page-setup {
-  flex: 1; overflow-y: auto; display: flex;
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   padding: 40px 24px 60px;
   background: var(--bg);
 }
 .setup-inner {
-  width: 100%; max-width: 460px;
+  width: 100%; max-width: 680px;
   background: var(--surface);
   border-radius: 16px;
   border: 1px solid rgba(213,223,234,.90);
   box-shadow: none;
-  padding: 32px 36px 28px;
+  padding: 30px 36px 36px;
   display: flex; flex-direction: column; gap: 20px;
 }
 .page-title   { font-size: 14px; font-weight: 700; color: var(--text); }
@@ -266,6 +266,15 @@ input[type="checkbox"]:focus-visible {
 .stat-card .label { font-size: 12px; color: var(--muted); font-weight: 500; }
 .stat-card .value { font-size: 12px; font-weight: 600; color: var(--text); margin-top: auto; }
 .setup-form { padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.setup-cols { display: flex; gap: 24px; align-items: flex-start; }
+.setup-col-left  { flex: 1; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.setup-col-mid   { width: 130px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; }
+.setup-col-right { width: 70px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; }
+.setup-col-mid .date-picker-wrap { width: 100%; }
+.setup-worker-input { width: 100%; height: 34px; padding: 0 12px; box-sizing: border-box;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-2); font-family: inherit; font-size: 12px; color: var(--text); }
+.setup-worker-input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field-label { font-size: 12px; color: var(--muted); font-weight: 500; display: flex; align-items: center; gap: 8px; }
 .input-row { display: flex; gap: 8px; }
@@ -277,7 +286,7 @@ input[type="date"] { display: none; }
 .date-picker-wrap { position: relative; }
 .date-picker-input {
   display: flex; align-items: center; justify-content: space-between;
-  height: 34px; padding: 0 10px 0 12px;
+  height: 33px; padding: 0 10px 0 12px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface-2); cursor: pointer; user-select: none;
   font-size: 12px; color: var(--text);
@@ -342,7 +351,13 @@ input[type="date"] { display: none; }
 .dp-year-btn:hover, .dp-month-btn:hover { background: var(--accent-bg); color: var(--accent); }
 .dp-year-btn.selected, .dp-month-btn.selected { background: var(--accent); color: #fff; font-weight: 700; }
 
-.setup-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.setup-actions { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; margin-top: 30px; }
+.setup-actions-outside {
+  width: 100%;
+  max-width: 680px;
+  margin: 14px auto 0;
+  padding: 0 4px;
+}
 .sub-btns { display: flex; gap: 8px; }
 .btn-start { height: 40px; padding: 0 32px; font-size: 13px; border-radius: 20px; }
 
@@ -381,8 +396,8 @@ input[type="date"] { display: none; }
   border-radius: 999px; color: var(--muted); font-weight: 500; font-size: 12px;
   transition: background .2s, color .2s;
 }
-.btn-mode.active { background: var(--surface); color: var(--text); font-weight: 600;
-  box-shadow: none; }
+.btn-mode.active { background: var(--accent-bg); color: var(--accent); font-weight: 600;
+  box-shadow: none; border: 1px solid var(--accent-bd); }
 
 /* ── 본문 레이아웃 ─────────────────────────────────────── */
 .main-body {
@@ -572,6 +587,7 @@ input[type="date"] { display: none; }
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 6px;
 }
 
 .date-chk-row label {
@@ -590,8 +606,8 @@ input[type="date"] { display: none; }
 }
 
 .date-chk-row .date-picker-input {
-  width: auto;
-  min-width: 90px;
+  width: 108px;
+  min-width: 80px;
 }
 
 .date-picker-input .dp-text {
@@ -854,7 +870,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
 /* ── 안내문탭 ─────────────────────────────────────────── */
 .notice-body { display: flex; gap: 10px; }
-.notice-list-wrap { width: 160px; flex-shrink: 0; overflow-y: auto; height: 325px; border: 1px solid #FCFEFF; border-radius: var(--radius); background: var(--surface); }
+.notice-list-wrap { width: 160px; flex-shrink: 0; overflow-y: auto; height: 385px; border: 1px solid #FCFEFF; border-radius: var(--radius); background: var(--surface); }
 .notice-list-item { padding: 8px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); color: var(--text-2); border-radius: 0; margin: 0; line-height: 1.4; }
 .notice-list-item:last-child { border-bottom: none; }
 .notice-list-item:hover { background: var(--surface-2); color: var(--text); }
@@ -971,15 +987,15 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 
 
 #page-main .date-picker-sm .date-picker-input {
-  height: 24px;
-  padding: 0 8px;
+  height: 30px;
+  padding: 0 10px 0 12px;
   font-size: 12px;
 }
 
 #page-main .date-picker-sm .dp-icon {
-  width: 14px;
+  width: 12px;
   height: 14px;
-  margin-left: 6px;
+  margin-left: 5px;
 }
 
 
@@ -1067,78 +1083,91 @@ button:not(:disabled), a, [data-action]:not(:disabled),
   <div class="banner" id="setup-banner"></div>
 
   <div class="setup-form">
-    <div class="field">
-      <label class="field-label">
-        작업 폴더
-        <span id="work-root-badge" class="file-badge"></span>
-      </label>
-      <div class="input-row">
-        <input type="text" id="work-root" placeholder="작업 폴더를 선택하거나 직접 입력하세요">
-        <button class="btn-ghost" data-action="pick-folder">찾아보기</button>
-      </div>
-    </div>
+    <div class="setup-cols">
 
-    <div class="field">
-      <label class="field-label">
-        학교 전체 명단 파일 (xlsx)
-        <span class="file-badge warn" id="col-map-badge">열 매핑 필요</span>
-      </label>
-      <div class="input-row">
-        <input type="text" id="roster-log" placeholder="학교전체명단 .xlsx 파일을 선택하세요" readonly>
-        <button class="btn-ghost" data-action="pick-roster">찾아보기</button>
-      </div>
-    </div>
-
-    <div class="field">
-      <label class="field-label">작업자</label>
-      <div class="input-row" style="padding-right:76px"><input type="text" id="worker" placeholder="작업자 이름"></div>
-    </div>
-
-    <div class="date-row">
-      <div class="field">
-        <label class="field-label">개학일</label>
-        <div class="date-picker-wrap" id="dp-school-start-date">
-          <input type="date" id="school-start-date">
-          <div class="date-picker-input" data-dp="school-start-date">
-            <span class="dp-text dp-placeholder">날짜 선택</span>
-            <svg class="dp-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
-              <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
-              <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
-              <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-              <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-              <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-              <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
-              <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
-            </svg>
+      <!-- 1열: 작업 폴더 + 명단 파일 -->
+      <div class="setup-col-left">
+        <div class="field">
+          <label class="field-label">
+            작업 폴더
+            <span id="work-root-badge" class="file-badge"></span>
+          </label>
+          <div class="input-row">
+            <input type="text" id="work-root" placeholder="작업 폴더를 선택하거나 직접 입력하세요">
+            <button class="btn-ghost" data-action="pick-folder">찾아보기</button>
           </div>
-          <div class="dp-popup" id="dp-popup-school-start-date"></div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">
+            학교 전체 명단 파일 (xlsx)
+            <span class="file-badge warn" id="col-map-badge">열 매핑 필요</span>
+          </label>
+          <div class="input-row">
+            <input type="text" id="roster-log" placeholder="학교전체명단 .xlsx 파일을 선택하세요" readonly>
+            <button class="btn-ghost" data-action="pick-roster">찾아보기</button>
+          </div>
         </div>
       </div>
-      <div class="field">
-        <label class="field-label">작업일</label>
-        <div class="date-picker-wrap" id="dp-work-date">
-          <input type="date" id="work-date">
-          <div class="date-picker-input" data-dp="work-date">
-            <span class="dp-text dp-placeholder">날짜 선택</span>
-            <svg class="dp-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
-              <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
-              <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
-              <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-              <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-              <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
-              <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
-              <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
-            </svg>
+
+      <!-- 2열: 개학일 + 작업일 -->
+      <div class="setup-col-mid">
+        <div class="field">
+          <label class="field-label">개학일</label>
+          <div class="date-picker-wrap" id="dp-school-start-date">
+            <input type="date" id="school-start-date">
+            <div class="date-picker-input" data-dp="school-start-date">
+              <span class="dp-text dp-placeholder">날짜 선택</span>
+              <svg class="dp-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
+                <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
+                <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
+                <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              </svg>
+            </div>
+            <div class="dp-popup" id="dp-popup-school-start-date"></div>
           </div>
-          <div class="dp-popup" id="dp-popup-work-date"></div>
+        </div>
+        <div class="field">
+          <label class="field-label">작업일</label>
+          <div class="date-picker-wrap" id="dp-work-date">
+            <input type="date" id="work-date">
+            <div class="date-picker-input" data-dp="work-date">
+              <span class="dp-text dp-placeholder">날짜 선택</span>
+              <svg class="dp-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
+                <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
+                <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
+                <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+              </svg>
+            </div>
+            <div class="dp-popup" id="dp-popup-work-date"></div>
+          </div>
         </div>
       </div>
+
+      <!-- 3열: 작업자 -->
+      <div class="setup-col-right">
+        <div class="field">
+          <label class="field-label">작업자</label>
+          <input type="text" id="worker" class="setup-worker-input">
+        </div>
+      </div>
+
     </div>
   </div>
 
-  <div class="setup-actions">
+</div>
+
+  <div class="setup-actions setup-actions-outside">
     <div class="sub-btns">
       <button class="btn-ghost" data-action="save-defaults">기본 설정 저장</button>
       <button class="btn-ghost" data-action="load-defaults">기본 설정 불러오기</button>
@@ -1147,8 +1176,6 @@ button:not(:disabled), a, [data-action]:not(:disabled),
       작업 시작 →
     </button>
   </div>
-
-</div>
 </div><!-- /page-setup -->
 
 
@@ -1252,6 +1279,16 @@ button:not(:disabled), a, [data-action]:not(:disabled),
               <input type="date" id="arrived-date">
               <div class="date-picker-input" data-dp="arrived-date">
                 <span class="dp-text dp-placeholder">날짜 선택</span>
+                <svg class="dp-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
+                  <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
+                  <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
+                  <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                </svg>
               </div>
               <div class="dp-popup" id="dp-popup-arrived-date"></div>
             </div>
@@ -1262,6 +1299,16 @@ button:not(:disabled), a, [data-action]:not(:disabled),
               <input type="date" id="sent-date">
               <div class="date-picker-input" data-dp="sent-date">
                 <span class="dp-text dp-placeholder">날짜 선택</span>
+                <svg class="dp-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="1" y="2.5" width="14" height="12.5" rx="2" stroke="#64748B" stroke-width="1.3"/>
+                  <path d="M1 6.5h14" stroke="#64748B" stroke-width="1.3"/>
+                  <path d="M5 1v3M11 1v3" stroke="#64748B" stroke-width="1.3" stroke-linecap="round"/>
+                  <rect x="3.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="7" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="10.5" y="8.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="3.5" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                  <rect x="7" y="11.5" width="2" height="2" rx=".4" fill="#64748B"/>
+                </svg>
               </div>
               <div class="dp-popup" id="dp-popup-sent-date"></div>
             </div>

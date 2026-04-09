@@ -1,10 +1,10 @@
 {
   "서울포이초": {
-    "last_date": "2026-03-29",
+    "last_date": "2026-04-09",
     "worker": "임지윤",
     "counts": {
       "신입생": 65,
-      "전입생": 13,
+      "전입생": 8,
       "전출생": 21,
       "교직원": 11
     },
@@ -595,6 +595,43 @@
       "전입생": 1,
       "전출생": 0,
       "교직원": 4
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "창원진해남산초": {
+    "last_date": "2026-04-09",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 13,
+      "전입생": 3,
+      "전출생": 10,
+      "교직원": 22
+    },
+    "run_completed": true,
+    "master_recorded": false
+  },
+  "대구효성중": {
+    "last_date": "2026-04-09",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 652,
+      "전입생": 0,
+      "전출생": 0,
+      "교직원": 26
+    },
+    "run_completed": true,
+    "master_recorded": true,
+    "master_recorded_at": "2026-04-09"
+  },
+  "성남수진중": {
+    "last_date": "2026-04-09",
+    "worker": "임지윤",
+    "counts": {
+      "신입생": 54,
+      "전입생": 1,
+      "전출생": 0,
+      "교직원": 1
     },
     "run_completed": true,
     "master_recorded": false

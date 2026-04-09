@@ -140,7 +140,7 @@ def build_compare_result_workbook(
             sorted_rows = sorted(
                 all_rows,
                 key=lambda r: (
-                    str(r.get("hold_reason", r.get("remark", ""))),
+                    str(r.get("hold_code", r.get("remark", ""))),
                     int(r.get("grade", 0)) if str(r.get("grade", 0)).isdigit() else 0,
                     str(r.get("name", "")),
                 )
@@ -233,7 +233,7 @@ def fill_transfer_in_workbook(
                 write_text_cell(ws_hold, hold_row, 2, rec.get("grade", ""))
                 write_text_cell(ws_hold, hold_row, 3, rec.get("class", ""))
                 write_text_cell(ws_hold, hold_row, 4, rec.get("name", ""))
-                write_text_cell(ws_hold, hold_row, 5, rec.get("hold_reason", ""))
+                write_text_cell(ws_hold, hold_row, 5, diff_reason_text(rec.get("hold_code", "")))
                 hold_row += 1
 
         reset_view_to_a1(wb)
@@ -283,7 +283,7 @@ def fill_transfer_out_workbook(
                 write_text_cell(ws_hold, hold_row, 2, rec.get("grade", ""))
                 write_text_cell(ws_hold, hold_row, 3, rec.get("class", ""))
                 write_text_cell(ws_hold, hold_row, 4, rec.get("name", ""))
-                write_text_cell(ws_hold, hold_row, 5, rec.get("hold_reason", ""))
+                write_text_cell(ws_hold, hold_row, 5, diff_reason_text(rec.get("hold_code", "")))
                 hold_row += 1
 
         reset_view_to_a1(wb)
@@ -424,17 +424,23 @@ def execute_diff_pipeline(
         for row in (transfer_in_hold or []):
             pr.events.append(diff_transfer_in_hold(
                 name=str(row.get("name", row.get("이름", ""))),
-                reason=str(row.get("hold_reason", row.get("remark", ""))),
+                reason_code=str(row.get("hold_code", row.get("remark", ""))),
+                grade=int(row.get("grade", 0) or 0),
+                class_=str(row.get("class", "")),
             ))
         for row in (transfer_out_hold or []):
             pr.events.append(diff_transfer_out_hold(
                 name=str(row.get("name", row.get("이름", ""))),
-                reason=str(row.get("hold_reason", row.get("remark", ""))),
+                reason_code=str(row.get("hold_code", row.get("remark", ""))),
+                grade=int(row.get("grade", 0) or 0),
+                class_=str(row.get("class", "")),
             ))
         for row in (unresolved_rows or []):
             pr.events.append(diff_unresolved(
                 name=str(row.get("name", row.get("이름", ""))),
-                reason=str(row.get("hold_reason", row.get("remark", ""))),
+                reason_code=str(row.get("hold_code", row.get("remark", ""))),
+                grade=int(row.get("grade", 0) or 0),
+                class_=str(row.get("class", "")),
             ))
 
         log("[DONE] 비교 실행 완료")

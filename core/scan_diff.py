@@ -108,6 +108,7 @@ EXCLUDED_CLASS_KEYWORDS = [
 
 COMPARE_FILE_KEYWORDS = [
     "재학생",
+    "신청자",
 ]
 
 DIFF_TRANSFER_IN_TEMPLATE_KEYWORDS = ["전입생"]
@@ -119,7 +120,7 @@ COMPARE_HEADER_SLOTS = {
     "name": ["이름", "성명", "학생이름"],
 }
 
-TARGET_GRADES = set(range(2, 7))
+TARGET_GRADES = set(range(1, 7))
 
 ROSTER_HEADER_SLOTS = {
     "current_class": ["현재반"],
@@ -810,7 +811,7 @@ def build_diff_rows(
                         "source": "명단",
                         "compare_class": r.get("class", ""),
                         "roster_class": "",
-                        "hold_reason": "재학생 명단에 동명이인이 있습니다 — 수동 확인이 필요합니다.",
+                        "hold_code": "COMPARE_DUPLICATE_NAME",
                     }
                     transfer_in_hold.append(rec)
                     unresolved_rows.append(rec)
@@ -840,7 +841,7 @@ def build_diff_rows(
                             "source": "명부",
                             "compare_class": "",
                             "roster_class": r.get("class", ""),
-                            "hold_reason": "명부에 동명이인이 있습니다 — 수동 확인이 필요합니다.",
+                            "hold_code": "ROSTER_DUPLICATE_NAME",
                             "candidate_ids": [r.get("student_id", "")] if r.get("student_id", "") else [],
                         }
                         transfer_out_hold.append(rec)
@@ -854,7 +855,7 @@ def build_diff_rows(
                         "source": "명단",
                         "compare_class": r.get("class", ""),
                         "roster_class": "",
-                        "hold_reason": "재학생 명단과 명부 양쪽에 동명이인이 있습니다 — 수동 확인이 필요합니다.",
+                        "hold_code": "BOTH_DUPLICATE_NAME",
                     }
                     transfer_in_hold.append(rec)
                     unresolved_rows.append(rec)
@@ -869,7 +870,7 @@ def build_diff_rows(
                         "source": "명부",
                         "compare_class": "",
                         "roster_class": r.get("class", ""),
-                        "hold_reason": "재학생 명단과 명부 양쪽에 동명이인이 있습니다 — 수동 확인이 필요합니다.",
+                        "hold_code": "BOTH_DUPLICATE_NAME",
                         "candidate_ids": [r.get("student_id", "")] if r.get("student_id", "") else [],
                     }
                     transfer_out_hold.append(rec)
@@ -887,9 +888,9 @@ def build_diff_rows(
             if len(roster_suffixed) >= 1:
                 # 명부에 suffix 붙은 동명이인 후보 존재 → 판정불가
                 if len(roster_suffixed) >= 2:
-                    reason = "명부에 동명이인(A,B,C 등)으로 구분된 이름이 있습니다 — 수동 확인이 필요합니다."
+                    reason_code = "ROSTER_SUFFIX_DUPLICATES"
                 else:
-                    reason = "명부에 동일 학생으로 의심되는 후보가 있습니다 — 수동 확인이 필요합니다."
+                    reason_code = "ROSTER_SUSPECT_SAME_PERSON"
                 rec = {
                     "grade": r["grade"],
                     "class": r.get("class", ""),
@@ -897,7 +898,7 @@ def build_diff_rows(
                     "source": "명단",
                     "compare_class": r.get("class", ""),
                     "roster_class": roster_suffixed[0].get("class", "") if len(roster_suffixed) == 1 else "",
-                    "hold_reason": reason,
+                    "hold_code": reason_code,
                     "candidate_ids": [s.get("student_id", "") for s in roster_suffixed if s.get("student_id", "")],
                 }
                 unresolved_rows.append(rec)
@@ -907,7 +908,7 @@ def build_diff_rows(
             if r.get("class", ""):
                 transfer_in_done.append({**base, "remark": ""})
             else:
-                transfer_in_hold.append({**base, "hold_reason": "반 정보 없음"})
+                transfer_in_hold.append({**base, "hold_code": "MISSING_CLASS"})
             continue
 
         # roster에만 있으면 전출 후보
@@ -924,7 +925,7 @@ def build_diff_rows(
             if cls:
                 transfer_out_done.append({**base, "remark": ""})
             else:
-                transfer_out_hold.append({**base, "hold_reason": "명부 반 정보 없음"})
+                transfer_out_hold.append({**base, "hold_code": "MISSING_ROSTER_CLASS"})
             continue
 
         # 양쪽 1건씩 → 정상 재학생

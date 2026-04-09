@@ -172,11 +172,8 @@ def write_work_result(
                 ws.cell(row, col).value = DONE_TEXT
 
         if email_arrived_date is not None and col_email_arr:
-            ws.cell(row, col_email_arr).value = datetime(
-                email_arrived_date.year,
-                email_arrived_date.month,
-                email_arrived_date.day,
-            )
+            cell = ws.cell(row, col_email_arr)
+            cell.value = f"{email_arrived_date.month}/{email_arrived_date.day}"
 
         wb.save(str(xlsx_path))
         return True, f"'{school_name}' 명단 기록 완료"
@@ -224,9 +221,8 @@ def write_email_sent(
 
         if col_email_snt:
             if sent_date is not None:
-                ws.cell(row, col_email_snt).value = datetime(
-                    sent_date.year, sent_date.month, sent_date.day
-                )
+                cell = ws.cell(row, col_email_snt)
+                cell.value = f"{sent_date.month}/{sent_date.day}"
             else:
                 ws.cell(row, col_email_snt).value = None
 

@@ -142,7 +142,7 @@ TRANSFER_HEADER_SLOTS: Dict[str, List[str]] = {
     "grade":  ["학년"],
     "class":  ["반", "학급"],
     "number": ["번호", "번", "출석번호"],
-    "name":   ["성명", "이름"],
+    "name":   ["성명", "이름", "학생이름"],
     "remark": ["비고", "메모", "특이사항"],
 }
 

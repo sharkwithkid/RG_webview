@@ -35,6 +35,8 @@ from core.events import (
     template_notice_not_found as _evt_template_notice_not_found,
     db_file_error as _evt_db_file_error,
     open_date_required as _evt_open_date_required,
+    transfer_in_reason_text as _transfer_in_reason_text,
+    transfer_out_reason_text as _transfer_out_reason_text,
 )
 from typing import Dict, List, Optional, Tuple, Any
 from collections import Counter
@@ -536,6 +538,12 @@ def read_teacher_rows(
         if col_name is None:
             raise ValueError("[ERROR] 교사 파일 헤더에서 이름 열을 찾을 수 없습니다.")
 
+        if col_learn is None:
+            raise ValueError("[ERROR] 교사 파일 헤더에서 학습용 ID 신청 열을 찾을 수 없습니다.")
+
+        if col_admin is None:
+            raise ValueError("[ERROR] 교사 파일 헤더에서 관리용 ID 신청 열을 찾을 수 없습니다.")
+
         if data_start_row is None:
             _, data_start_row = detect_example_and_data_start(ws, header_row=header_row, name_col=col_name)
 
@@ -761,7 +769,7 @@ def build_transfer_ids(
         if pref is None:
             hold.append({
                 **tr,
-                "보류사유": f"명부 학년({g_roster})에서 ID prefix 최빈값 산출 불가"
+                "hold_code": "PREFIX_MODE_UNAVAILABLE"
             })
             continue
 
@@ -823,7 +831,7 @@ def split_transfer_dup_against_freshmen(
             normalize_name_key(row.get("name", "")),
         )
         if key in freshmen_keys:
-            dup_hold.append({**row, "보류사유": "신입생 명단과 학년/반/이름이 동일합니다."})
+            dup_hold.append({**row, "hold_code": "DUP_WITH_FRESHMEN"})
         else:
             kept.append(row)
 
@@ -934,7 +942,7 @@ def build_withdraw_outputs(
         wnd = w["name"]
         wnk = normalize_name_key(wnd)
         if not wnk:
-            hold.append({"학년": g_cur, "반": w["class"], "성명": wnd, "보류사유": "성명 정규화(키) 결과가 비어 있음"})
+            hold.append({"학년": g_cur, "반": w["class"], "성명": wnd, "hold_code": "NAME_KEY_EMPTY"})
             continue
 
         key = f"{_norm_class(str(w['class']))}|{wnk}"
@@ -953,25 +961,20 @@ def build_withdraw_outputs(
                 if   len(sc0) == 1: matches = sc0
                 elif len(sc0) >= 2:
                     hold.append({"학년": g_cur, "반": w["class"], "성명": wnd,
-                                 "보류사유": "보류: 학생명부에서 동명이인(A,B,C 등)으로 구분된 이름 – 수동 확인이 필요합니다."})
+                                 "hold_code": "ROSTER_DUPLICATE_NAME"})
                     continue
                 elif len(sc1) == 1: matches = sc1
                 elif len(sc1) >= 2:
                     hold.append({"학년": g_cur, "반": w["class"], "성명": wnd,
-                                 "보류사유": "보류: 학생명부에서 동명이인(A,B,C 등)으로 구분된 이름 – 수동 확인이 필요합니다."})
+                                 "hold_code": "ROSTER_DUPLICATE_NAME"})
                     continue
                 else:
-                    reason = (
-                        "자동 제외: 학생명부에 존재하지 않는 학생 – 서버 미등록/학년 불일치 등으로 추정됩니다."
-                        if not cand else
-                        f"보류: 학년+이름 후보가 2건 이상({len(cand)}건) – 수동 확인 필요."
-                    )
-                    hold.append({"학년": g_cur, "반": w["class"], "성명": wnd, "보류사유": reason})
+                    reason_code = "AUTO_SKIP_NOT_FOUND" if not cand else "GRADE_NAME_MULTI_MATCH"
+                    hold.append({"학년": g_cur, "반": w["class"], "성명": wnd, "hold_code": reason_code})
                     continue
 
         if len(matches) > 1:
-            hold.append({"학년": g_cur, "반": w["class"], "성명": wnd,
-                         "보류사유": f"중복 매칭({len(matches)}건)"})
+            hold.append({"학년": g_cur, "반": w["class"], "성명": wnd, "hold_code": "MULTIPLE_MATCHES"})
             continue
 
         m = matches[0]
@@ -1062,7 +1065,7 @@ def write_withdraw_to_register(wb, done_rows: List[Dict], hold_rows: List[Dict])
             write_text_cell(ws_hold, r, 1, row.get("학년", ""))
             write_text_cell(ws_hold, r, 2, row.get("반", ""))
             write_text_cell(ws_hold, r, 3, row.get("성명", ""))
-            write_text_cell(ws_hold, r, 4, row.get("보류사유", ""))
+            write_text_cell(ws_hold, r, 4, _transfer_out_reason_text(row.get("hold_code", "")))
             r += 1
         move_sheet_after(wb, "퇴원_보류", "퇴원")
     else:
@@ -1093,7 +1096,7 @@ def write_transfer_hold_sheet(wb, hold_rows: List[Dict]):
         write_text_cell(ws, i, 2, row.get("class", ""))
         write_text_cell(ws, i, 3, row.get("number", ""))
         write_text_cell(ws, i, 4, row.get("name", ""))
-        write_text_cell(ws, i, 5, row.get("보류사유", ""))
+        write_text_cell(ws, i, 5, _transfer_in_reason_text(row.get("hold_code", "")))
 
 
 def make_kindergarten_class_name(class_value: Any) -> str:
@@ -1767,12 +1770,8 @@ def execute_pipeline(
             teacher_rows, _evts, _marks = read_teacher_rows(teacher_path, header_row=h, data_start_row=s)
             _run_evts.extend(_evts); _run_marks.extend(_marks)
             log(f"[INFO] 교사 신청 {len(teacher_rows)}건 로드")
-            _teacher_no_id_warn = teacher_rows and not any(
-                r.get("admin_apply") or r.get("learn_apply") for r in teacher_rows
-            )
         else:
             teacher_rows = []; log("[INFO] 교사 파일 없음 → 교사 관련 처리는 스킵")
-            _teacher_no_id_warn = False
 
         # 전입
         if transfer_path:
@@ -1816,9 +1815,9 @@ def execute_pipeline(
                 _g_roster = (_g + _shift) if _g is not None else None
                 _cls_names = _gc_index.get((_g_roster, _cls), []) if _g_roster is not None else []
                 if _nm in _cls_names:
-                    _rd["보류사유"] = "학생명부에 이미 존재하는 학생입니다."
+                    _rd["hold_code"] = "ROSTER_DUPLICATE"
                 else:
-                    _rd["보류사유"] = "학생명부에 동일인으로 의심되는 학생이 있습니다."
+                    _rd["hold_code"] = "ROSTER_SUSPECT_SAME_PERSON"
             transfer_hold_rows = transfer_hold_rows + _roster_dup_rows
             log(f"[INFO] 전입 ID 매칭 완료 | 완료 {len(transfer_done_rows)}명, 보류 {len(transfer_hold_rows)}명")
         else:
@@ -1863,7 +1862,7 @@ def execute_pipeline(
                 roster_wb2.close()
 
             transfer_out_auto_skip = sum(
-                1 for r in withdraw_hold_rows if str(r.get("보류사유", "")).startswith("자동 제외")
+                1 for r in withdraw_hold_rows if str(r.get("hold_code", "")) == "AUTO_SKIP_NOT_FOUND"
             )
             log(
                 f"[INFO] 전출 퇴원 리스트 생성 | 퇴원 {len(withdraw_done_rows)}명, "
@@ -1983,31 +1982,38 @@ def execute_pipeline(
             pr.events.append(_evt_freshmen_transfer_dup(name, grade, cls))
 
         # 명부 매칭 실패 / 명부 존재 전입생 보류 이벤트
-        _freshmen_dup_names = {str(r.get("name","")) for r in transfer_freshmen_dup_rows}
+        _freshmen_dup_keys = {
+            (
+                int(r.get("grade", 0) or 0),
+                str(r.get("class", "")).strip(),
+                str(r.get("name", "")).strip(),
+            )
+            for r in transfer_freshmen_dup_rows
+        }
         for row in transfer_hold_rows:
-            name   = str(row.get("name", ""))
-            if name in _freshmen_dup_names:
+            name   = str(row.get("name", "")).strip()
+            grade  = int(row.get("grade", 0) or 0)
+            cls    = str(row.get("class", "")).strip()
+            if (grade, cls, name) in _freshmen_dup_keys:
                 continue  # freshmen_transfer_dup으로 이미 추가됨
-            reason = str(row.get("보류사유", ""))
-            if "학생명부에 이미 존재" in reason or "동일인으로 의심" in reason:
-                pr.events.append(_evt_roster_duplicate_transfer(name, reason))
+            reason_code = str(row.get("hold_code", ""))
+            if reason_code in {"ROSTER_DUPLICATE", "ROSTER_SUSPECT_SAME_PERSON"}:
+                pr.events.append(_evt_roster_duplicate_transfer(name, reason_code, grade, cls))
             else:
-                pr.events.append(_evt_transfer_in_hold(name, reason))
+                pr.events.append(_evt_transfer_in_hold(name, reason_code, grade, cls))
 
         for row in withdraw_hold_rows:
-            name = str(row.get("성명", ""))
-            reason = str(row.get("보류사유", ""))
-            if not reason.startswith("자동 제외"):
-                pr.events.append(_evt_transfer_out_hold(name, reason))
+            name = str(row.get("성명", "")).strip()
+            grade = int(row.get("학년", 0) or 0)
+            cls = str(row.get("반", "")).strip()
+            reason_code = str(row.get("hold_code", ""))
+            if reason_code != "AUTO_SKIP_NOT_FOUND":
+                pr.events.append(_evt_transfer_out_hold(name, reason_code, grade, cls))
 
         dup_count = len(notice_dup_rows)
         if dup_count > 0:
             from core.events import duplicate_name as _evt_dup
             pr.events.append(_evt_dup(dup_count))
-
-        if _teacher_no_id_warn:
-            from core.events import no_teacher_id_request as _evt_no_tid
-            pr.events.append(_evt_no_tid())
 
         log("[DONE] 실행 완료")
         return pr

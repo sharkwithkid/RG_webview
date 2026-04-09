@@ -56,6 +56,7 @@ from core.common import (
     _build_header_slot_map,
     _detect_header_row_generic,
     normalize_name,
+    normalize_name_key,
     load_roster_sheet,
     parse_class_str,
     extract_id_prefix4,
@@ -128,7 +129,7 @@ class ScanResult:
 # =========================
 # Constants / keywords
 # =========================
-FRESHMEN_KEYWORDS = ["신입생", "신입"]
+FRESHMEN_KEYWORDS = ["신입생", "신입", "1학년"]
 TEACHER_KEYWORDS  = ["교사", "교원", "교직원"]
 TRANSFER_KEYWORDS = ["전입생", "전입"]
 WITHDRAW_KEYWORDS = ["전출생", "전출"]
@@ -1508,6 +1509,79 @@ def scan_pipeline(
             header_slots=TEACHER_HEADER_SLOTS,
             required_keys=["name"],
         )
+
+        if (
+            freshmen_file and transfer_file
+            and sr.freshmen and sr.transfer_in
+            and sr.freshmen.get("severity") != "error"
+            and sr.transfer_in.get("severity") != "error"
+        ):
+            try:
+                from core.run_main import read_freshmen_rows, read_transfer_rows
+                from core.events import freshmen_transfer_same_student_scan
+
+                freshmen_rows, _, _ = read_freshmen_rows(
+                    freshmen_file,
+                    input_year=year_int,
+                    header_row=sr.freshmen.get("header_row"),
+                    data_start_row=sr.freshmen.get("data_start_row"),
+                    roster_info=sr.roster_info,
+                    school_name=school_name,
+                )
+                transfer_rows, _, _ = read_transfer_rows(
+                    transfer_file,
+                    header_row=sr.transfer_in.get("header_row"),
+                    data_start_row=sr.transfer_in.get("data_start_row"),
+                )
+
+                def _norm_class(value: Any) -> str:
+                    if value is None:
+                        return ""
+                    return re.sub(r"\s+", "", str(value).strip())
+
+                freshmen_keys = {
+                    (
+                        int(row.get("grade", 0) or 0),
+                        _norm_class(row.get("class", "")),
+                        normalize_name_key(row.get("name", "")),
+                    )
+                    for row in freshmen_rows
+                    if normalize_name_key(row.get("name", ""))
+                }
+
+                seen_keys = set()
+                for row in transfer_rows:
+                    key = (
+                        int(row.get("grade", 0) or 0),
+                        _norm_class(row.get("class", "")),
+                        normalize_name_key(row.get("name", "")),
+                    )
+                    if key in freshmen_keys and key not in seen_keys:
+                        seen_keys.add(key)
+                        sr.events.append(
+                            freshmen_transfer_same_student_scan(
+                                grade=int(row.get("grade", 0) or 0),
+                                class_=str(row.get("class", "")).strip(),
+                                name=str(row.get("name", "")).strip(),
+                            )
+                        )
+            except Exception:
+                pass
+
+        # 교직원 파일이 있고 관리용 ID 신청자가 0건이면 스캔 단계에서 경고
+        if teacher_file and sr.teachers and (sr.teachers.get("severity") != "error"):
+            try:
+                from core.run_main import read_teacher_rows
+                _t_rows, _, _ = read_teacher_rows(
+                    teacher_file,
+                    header_row=sr.teachers.get("header_row"),
+                    data_start_row=sr.teachers.get("data_start_row"),
+                )
+                if _t_rows and not any(r.get("admin_apply") for r in _t_rows):
+                    from core.events import no_teacher_id_request as _evt_no_tid
+                    sr.events.append(_evt_no_tid())
+            except Exception:
+                pass
 
         if any(
             (meta or {}).get("severity") == "error"

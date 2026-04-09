@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ClassMate 운영 가이드 초안</title>
+<style>
+:root{
+  --bg:#EEF3F8; --surface:#FBFDFF; --surface-2:#F5F8FC; --border:#D5DFEA;
+  --text:#0F1720; --text-2:#405160; --muted:#617486; --accent:#EA580C;
+  --accent-bg:#FFF7ED; --accent-bd:#FED7AA; --ok:#15803D; --warn:#92400E; --err:#B91C1C;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:Arial,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;background:var(--bg);color:var(--text);line-height:1.6;font-size:14px}
+button,input{font:inherit}
+.topbar{position:sticky;top:0;z-index:20;background:rgba(251,253,255,.96);backdrop-filter:blur(6px);border-bottom:1px solid var(--border)}
+.topbar-inner{max-width:1440px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px}
+.brand{min-width:230px}
+.brand h1{margin:0;font-size:18px}
+.brand div{font-size:12px;color:var(--muted);margin-top:2px}
+.search-wrap{display:flex;gap:8px;flex:1}
+.search-wrap input{flex:1;height:38px;border:1px solid var(--border);border-radius:999px;padding:0 14px;background:#fff}
+.btn{height:38px;padding:0 14px;border:1px solid var(--border);border-radius:999px;background:#fff;color:var(--text-2);cursor:pointer}
+.status{font-size:12px;color:var(--muted);min-width:90px;text-align:right;align-self:center}
+.shell{max-width:1440px;margin:0 auto;padding:16px 20px 40px}
+.layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:18px}
+.sidebar{position:sticky;top:70px;align-self:start;background:transparent}
+.side-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px}
+.side-title{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:10px;text-transform:uppercase}
+.toc a{display:block;color:var(--text-2);text-decoration:none;padding:6px 8px;border-radius:8px;font-size:13px}
+.toc a:hover{background:var(--surface-2);color:var(--text)}
+.toc .sub{padding-left:18px;font-size:12px;color:var(--muted)}
+.main{display:flex;flex-direction:column;gap:18px}
+.hero{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px 20px}
+.hero h2{margin:0 0 6px;font-size:24px}
+.hero p{margin:0;color:var(--text-2)}
+.section{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px 20px}
+.section h2{margin:0 0 10px;font-size:22px}
+.section h3{margin:22px 0 8px;font-size:18px}
+.section h4{margin:18px 0 6px;font-size:15px}
+.section p{margin:0 0 10px}
+.section ul{margin:0 0 12px 20px;padding:0}
+.section li{margin:4px 0}
+.kicker{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:6px}
+.note{padding:10px 12px;border:1px solid var(--border);background:var(--surface-2);border-radius:10px;margin:10px 0}
+.example{padding:10px 12px;border:1px solid var(--accent-bd);background:var(--accent-bg);border-radius:10px;margin:10px 0}
+.example strong,.note strong{display:block;margin-bottom:4px}
+.rule{padding:10px 0;border-top:1px solid #edf2f7}
+.rule:first-of-type{border-top:none;padding-top:0}
+.table-wrap{overflow:auto;margin:8px 0 12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th,td{border:1px solid var(--border);padding:9px 10px;vertical-align:top;text-align:left}
+th{background:var(--surface-2)}
+.ui-block{border:1px solid var(--border);border-radius:14px;background:#fff;margin:12px 0;overflow:hidden}
+.ui-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface)}
+.ui-header .title{font-weight:700}
+.ui-header .desc{font-size:12px;color:var(--muted);margin-top:2px}
+.ui-body{padding:14px}
+.ui-grid{display:grid;grid-template-columns:220px 1fr;gap:14px}
+.mock-sidebar{border:1px solid var(--border);border-radius:12px;background:var(--surface-2);padding:10px}
+.mock-sidebar .box{border:1px solid var(--border);border-radius:10px;background:#fff;padding:10px;margin-bottom:10px}
+.mock-content{display:flex;flex-direction:column;gap:10px}
+.mock-card{border:1px solid var(--border);border-radius:12px;background:#fff;padding:12px}
+.mock-table{width:100%;border-collapse:collapse;font-size:12px}
+.mock-table td,.mock-table th{border:1px solid var(--border);padding:6px}
+.badge{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:700}
+.badge.idle{background:var(--surface-2);color:var(--muted)}
+.badge.ok{background:#F0FDF4;color:var(--ok)}
+.badge.warn{background:#FFFBEB;color:var(--warn)}
+.badge.err{background:#FEF2F2;color:var(--err)}
+.panel-nav{display:flex;gap:8px;margin:8px 0 0}
+.panel-nav .tab{padding:6px 10px;border:1px solid var(--border);border-radius:999px;background:#fff;font-size:12px}
+mark.search-hit{background:#fff3bf;padding:0 .08em}
+.footer{font-size:12px;color:var(--muted);text-align:center;padding:10px 0 0}
+@media (max-width:1100px){.layout{grid-template-columns:1fr}.sidebar{position:static}.ui-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <h1>ClassMate 운영 가이드 초안</h1>
+      <div>리딩게이트 반이동 자동화 도구 · 사용자 / 관리자 / 개발·유지보수 참고</div>
+    </div>
+    <div class="search-wrap">
+      <input id="searchInput" type="text" placeholder="검색어 입력" />
+      <button class="btn" id="clearBtn" type="button">초기화</button>
+      <div class="status" id="searchStatus"></div>
+    </div>
+  </div>
+</header>
+<div class="shell">
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="side-card">
+        <div class="side-title">목차</div>
+        <nav class="toc">
+          <a href="#scope">0. 이 문서의 범위</a>
+          <a href="#user-guide">1. 사용자 가이드</a>
+          <a class="sub" href="#user-prep">1-1. 시작 전 준비사항</a>
+          <a class="sub" href="#user-setup">1-2. 기본 설정</a>
+          <a class="sub" href="#user-school">1-3. 학교 선택</a>
+          <a class="sub" href="#user-scan">1-4. 스캔 검수</a>
+          <a class="sub" href="#user-run">1-5. 실행 / 결과</a>
+          <a class="sub" href="#user-notice">1-6. 안내문</a>
+          <a class="sub" href="#user-roster-log">1-7. 명단 반영</a>
+          <a class="sub" href="#user-diff">1-8. 명단비교 모드</a>
+          <a href="#admin-guide">2. 관리자 가이드</a>
+          <a href="#rules">3. 규칙 설명</a>
+          <a class="sub" href="#rule-dup">3-1. 동명이인 규칙</a>
+          <a class="sub" href="#rule-transfer">3-2. 전입 처리 규칙</a>
+          <a class="sub" href="#rule-withdraw">3-3. 전출 처리 규칙</a>
+          <a class="sub" href="#rule-hold">3-4. 보류 / 자동 제외</a>
+          <a class="sub" href="#rule-roster-date">3-5. 명부 기준일</a>
+          <a class="sub" href="#rule-grade-year">3-6. 학년도 아이디 규칙</a>
+          <a class="sub" href="#rule-diff">3-7. 명단비교 분류 기준</a>
+          <a href="#dev-guide">4. 개발·유지보수 참고사항</a>
+        </nav>
+      </div>
+    </aside>
+    <main class="main" id="manualContent">
+      <section class="hero">
+        <div class="kicker">초안</div>
+        <h2>ClassMate 운영 가이드</h2>
+        <p>이 문서는 프로그램 사용 방법만 설명하는 문서가 아닙니다. 실제 업무에서 필요한 입력 조건, 판정 규칙, 예외 처리 기준, 운영 시 주의사항까지 함께 정리한 사내 운영 문서입니다.</p>
+      </section>
+
+      <section class="section" id="scope">
+        <h2>0. 이 문서의 범위</h2>
+        <p>이 문서는 세 가지 관점으로 구성합니다.</p>
+        <div class="rule"><strong>사용자 가이드</strong><p>실제 작업자가 프로그램을 사용하는 순서대로 설명합니다. 실행 전 준비사항, 스캔, 실행, 결과 확인, 명단 반영, 명단비교 모드를 포함합니다.</p></div>
+        <div class="rule"><strong>관리자 가이드</strong><p>안내문, 템플릿, resources 구성처럼 운영 자산을 유지하거나 교체할 때 필요한 내용을 설명합니다.</p></div>
+        <div class="rule"><strong>개발·유지보수 참고사항</strong><p>프로그램 구조, 주요 파일 역할, 규칙 수정 시 영향 범위를 설명합니다. 함수명 자체를 나열하기보다 수정 포인트를 찾을 수 있는 수준으로 정리합니다.</p></div>
+        <div class="note"><strong>작성 원칙</strong>설계 내용은 숨기지 않습니다. 다만 함수명이나 내부 변수명 대신, 실제 업무에서 이해 가능한 표현으로 바꿔 설명합니다.</div>
+      </section>
+
+      <section class="section" id="user-guide">
+        <h2>1. 사용자 가이드</h2>
+        <p>이 섹션은 실제 프로그램 화면과 같은 순서로 읽을 수 있도록 구성합니다. 사용자는 이 섹션만 읽어도 프로그램을 실행하고, 오류 원인을 확인하고, 결과를 해석할 수 있어야 합니다.</p>
+
+        <h3 id="user-prep">1-1. 시작 전 준비사항</h3>
+        <h4>작업 폴더와 resources 폴더</h4>
+        <p>이 프로그램은 작업 폴더 안의 구조를 기준으로 파일을 찾습니다. 따라서 작업 시작 전에 폴더 구성이 먼저 맞아 있어야 합니다.</p>
+        <div class="table-wrap">
+          <table>
+            <tr><th>항목</th><th>필수 조건</th><th>확인 방법</th></tr>
+            <tr><td>resources 폴더</td><td>이름에 <code>resources</code>가 포함된 폴더가 1개만 있어야 합니다.</td><td>작업 폴더 바로 아래에서 확인</td></tr>
+            <tr><td>templates 폴더</td><td>등록 템플릿 1개, 안내 템플릿 1개가 있어야 합니다.</td><td>파일명에 각각 <code>등록</code>, <code>안내</code> 포함 여부 확인</td></tr>
+            <tr><td>notices 폴더</td><td>안내문 txt 파일이 있어야 합니다.</td><td>안내문 탭 목록에 표시되는 기준</td></tr>
+            <tr><td>DB 폴더</td><td>학교전체명단 xlsb 파일이 있어야 합니다.</td><td>전체 명단 조회와 학교 검색에 사용</td></tr>
+          </table>
+        </div>
+        <div class="example"><strong>예시</strong>resources 폴더가 2개 있거나, templates 안에 등록 템플릿이 2개 있으면 프로그램은 어떤 파일을 써야 할지 결정할 수 없으므로 바로 오류를 표시합니다.</div>
+
+        <h4>학교 폴더 안 입력 파일</h4>
+        <p>학교 폴더 안의 파일명은 프로그램이 자동으로 종류를 구분하는 기준입니다. 파일 내용이 맞더라도 이름이 맞지 않으면 프로그램이 찾지 못합니다.</p>
+        <div class="table-wrap">
+          <table>
+            <tr><th>파일 종류</th><th>파일명에 포함할 키워드</th><th>비고</th></tr>
+            <tr><td>신입생 명단</td><td>신입생 또는 신입</td><td>반편성 모드</td></tr>
+            <tr><td>전입생 명단</td><td>전입생 또는 전입</td><td>반편성 모드</td></tr>
+            <tr><td>전출생 명단</td><td>전출생 또는 전출</td><td>반편성 모드</td></tr>
+            <tr><td>교직원 명단</td><td>교사, 교원, 교직원 중 하나</td><td>반편성 모드</td></tr>
+            <tr><td>학생명부</td><td>학생명부</td><td>전입/전출/일부 신입 처리 시 필요</td></tr>
+            <tr><td>비교용 명단</td><td>재학생 또는 신청자</td><td>명단비교 모드</td></tr>
+          </table>
+        </div>
+
+        <h4>입력 파일 헤더 규칙</h4>
+        <p>프로그램은 헤더 행을 자동으로 찾고, 그 헤더 이름을 기준으로 학년·반·이름 같은 필수 열을 읽습니다. 따라서 학교에서 받은 파일의 열 제목이 너무 다르면 스캔에서 막힐 수 있습니다.</p>
+        <div class="note"><strong>기본 원칙</strong>신입생 / 전입생 / 전출생 / 재학생 비교 파일은 최소한 학년, 반, 이름을 읽을 수 있어야 합니다. 교직원 파일은 이름과 신청 열을 읽을 수 있어야 합니다.</div>
+        <div class="example"><strong>예시</strong>학년 열이 <code>3학년</code>, 반 열이 <code>2반</code>처럼 적혀 있으면 대부분 경고로 처리됩니다. 반대로 학년 열과 반 열이 하나로 합쳐져 <code>3-2</code>처럼 들어 있으면 구조 경고가 더 강하게 뜰 수 있습니다.</div>
+
+        <h4>학생명부가 필요한 경우</h4>
+        <ul>
+          <li>전입생 파일이 있는 경우</li>
+          <li>전출생 파일이 있는 경우</li>
+          <li>신입생 파일 안에 1학년 외 학년이 섞여 있어 아이디 시작 연도를 자동으로 추정해야 하는 경우</li>
+        </ul>
+        <p>이 경우 학생명부가 없으면 일부 작업은 실행 자체가 되지 않거나, 보류가 발생합니다.</p>
+
+        <h3 id="user-setup">1-2. 기본 설정</h3>
+        <div class="ui-block">
+          <div class="ui-header"><div><div class="title">기본 설정 화면</div><div class="desc">작업 폴더, 전체 명단 파일, 개학일, 작업일, 작업자 입력</div></div><span class="badge idle">대기</span></div>
+          <div class="ui-body">
+            <div class="mock-card">
+              <div style="display:grid;grid-template-columns:1fr 120px 120px;gap:10px;align-items:end">
+                <div><strong>작업 폴더</strong><div style="margin-top:6px;border:1px solid var(--border);padding:8px 10px;border-radius:10px;background:#fff">[작업 폴더 입력 영역]</div></div>
+                <div><strong>개학일</strong><div style="margin-top:6px;border:1px solid var(--border);padding:8px 10px;border-radius:10px;background:#fff">날짜 선택</div></div>
+                <div><strong>작업일</strong><div style="margin-top:6px;border:1px solid var(--border);padding:8px 10px;border-radius:10px;background:#fff">날짜 선택</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p>기본 설정 화면에서는 작업 기준을 먼저 확정합니다. 특히 전체 명단 파일은 학교 검색, 도메인 조회, 작업 결과 기록에 사용되므로 정확한 파일을 지정해야 합니다.</p>
+        <div class="note"><strong>전체 명단 파일의 역할</strong>학교 검색 자동완성, 학교 폴더 매칭, 도메인 조회, 명단 반영 기록 모두 이 파일을 기준으로 동작합니다.</div>
+
+        <h3 id="user-school">1-3. 학교 선택</h3>
+        <p>학교 선택은 사이드바에서 진행합니다. 전체 명단 파일에 있는 학교만 검색됩니다.</p>
+        <div class="ui-block">
+          <div class="ui-header"><div><div class="title">사이드바</div><div class="desc">학교 선택 · 학년도 아이디 규칙 · 메일 기록 · 전체 명단(DB)</div></div></div>
+          <div class="ui-body ui-grid">
+            <div class="mock-sidebar">
+              <div class="box"><strong>학교 선택</strong><div style="margin-top:8px;border:1px solid var(--border);padding:7px 9px;border-radius:10px;background:#fff">학교명 검색</div></div>
+              <div class="box"><strong>학년도 아이디 규칙</strong><div style="margin-top:8px;font-size:12px;color:var(--muted)">스캔 후 자동 감지 · 직접 수정 가능</div></div>
+              <div class="box"><strong>전체 명단(DB)</strong><div class="panel-nav"><span class="tab">명단 반영</span><span class="tab">파일 열기</span></div></div>
+            </div>
+            <div class="mock-content">
+              <div class="mock-card"><strong>학교 적용 전</strong><p style="margin-top:6px">학교를 적용하기 전에는 스캔과 실행 버튼이 비활성화될 수 있습니다.</p></div>
+              <div class="mock-card"><strong>학교 적용 후 확인할 것</strong><ul><li>현재 학교명이 맞는지</li><li>이전 작업 이력이 표시되는지</li><li>학생명부 파일이 있는 경우 학년도 아이디 규칙 영역이 채워지는지</li></ul></div>
+            </div>
+          </div>
+        </div>
+
+        <h3 id="user-scan">1-4. 스캔 검수</h3>
+        <p>스캔은 입력 파일 구조를 읽고, 실행 가능한 상태인지 먼저 점검하는 단계입니다. 이 단계에서 파일 종류, 시트, 시작행, 구조 경고를 확인합니다.</p>
+        <div class="ui-block">
+          <div class="ui-header"><div><div class="title">스캔 검수 카드</div><div class="desc">파일 내용 스캔 · 스캔 로그 보기 · 상태 배지</div></div><span class="badge warn">검토 필요</span></div>
+          <div class="ui-body">
+            <table class="mock-table">
+              <tr><th>구분</th><th>파일명</th><th>시트</th><th>시작행</th><th>확인</th></tr>
+              <tr><td>신입생</td><td>신입생 명단.xlsx</td><td>Sheet1</td><td>5</td><td>□</td></tr>
+              <tr><td>전입생</td><td>전입생 명단.xlsx</td><td>Sheet1</td><td>3</td><td>□</td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="rule"><strong>시작행 확인</strong><p>프로그램이 자동으로 헤더를 찾지 못하면 시작행이 어긋날 수 있습니다. 이 경우 미리보기에서 실제 헤더 행과 데이터 시작 위치를 확인한 뒤, 시작행 값을 조정합니다.</p></div>
+        <div class="rule"><strong>확인 체크</strong><p>확인 체크는 해당 파일을 검토했다는 표시입니다. 시작행을 조정한 경우에는 조정 후 내용을 다시 확인한 뒤 체크합니다.</p></div>
+        <div class="rule"><strong>오류와 경고</strong><p>오류가 있으면 실행할 수 없습니다. 경고는 실행은 가능하지만, 결과를 반드시 다시 확인해야 한다는 뜻입니다.</p></div>
+        <div class="example"><strong>예시</strong><code>전입생 파일에서 헤더를 찾을 수 없습니다.</code>가 뜨면 전입생 파일이 잘못된 것이 아니라, 헤더 행 자동 감지가 실패했을 가능성이 큽니다. 먼저 시작행과 미리보기를 함께 확인합니다.</div>
+
+        <h3 id="user-run">1-5. 실행 / 결과</h3>
+        <p>실행 단계에서는 스캔을 통과한 입력 파일을 기준으로 등록작업파일과 안내 파일을 생성합니다. 실행 결과 탭에서는 상태 요약, 출력 파일, 파일 뷰어를 함께 확인합니다.</p>
+        <div class="ui-block">
+          <div class="ui-header"><div><div class="title">실행 / 결과 카드</div><div class="desc">작업 실행 · 실행 로그 보기 · 결과 파일 확인</div></div><span class="badge ok">실행 가능</span></div>
+          <div class="ui-body">
+            <div class="mock-card"><strong>이번 작업 관련 비고</strong><div style="margin-top:6px;border:1px solid var(--border);padding:8px 10px;border-radius:10px;min-height:54px;background:#fff">이번 작업 관련 메모 입력 영역</div></div>
+            <div class="mock-card"><strong>출력 파일</strong><ul><li>★학교명_등록작업파일(작업용).xlsx</li><li>☆학교명_신입생,전입생,교직원_ID,PW안내.xlsx</li></ul></div>
+          </div>
+        </div>
+        <h4>실행 메모</h4>
+        <p>실행 메모는 이번 작업의 상황을 남기는 용도입니다. 예를 들어 학교에서 재학생 명단을 다시 보낸 경우, 학생명부 기준일을 별도로 확인한 경우, 수동 보정이 필요한 사항이 있는 경우 간단히 적어 둡니다.</p>
+        <h4>출력 파일 확인</h4>
+        <ul>
+          <li>출력 파일명 클릭: 결과 파일 바로 열기</li>
+          <li>폴더 열기: 작업 폴더의 결과 위치 열기</li>
+          <li>동명이인만 보기: 노란색 표시가 있는 대상만 빠르게 점검</li>
+        </ul>
+
+        <h3 id="user-notice">1-6. 안내문</h3>
+        <p>안내문 탭은 resources/notices 안의 txt 파일을 기준으로 목록이 표시됩니다. 학교명, 학년도, 개학일, 도메인 같은 값은 프로그램이 현재 작업 기준으로 반영합니다.</p>
+        <div class="note"><strong>안내문 탭에서 확인할 것</strong>목록에 필요한 안내문이 보이는지, 현재 학교에 맞게 문안이 채워졌는지, 복사 후 바로 발송 가능한 수준인지 확인합니다.</div>
+
+        <h3 id="user-roster-log">1-7. 명단 반영</h3>
+        <p>명단 반영은 전체 명단 파일의 해당 학교 행에 작업 결과를 기록하는 단계입니다. 이 기능은 실행 완료 후 사용합니다.</p>
+        <div class="rule"><strong>기록되는 항목</strong><p>신입생, 전입생, 전출생, 교직원 처리 결과와 작업자명이 기록됩니다. 도착일과 발송일은 체크된 경우에만 기록됩니다.</p></div>
+        <div class="rule"><strong>사용 순서</strong><p>1) 메일 기록 날짜 확인 → 2) 도착일/발송일 체크 여부 확인 → 3) 명단 반영 클릭 → 4) 반영 완료 상태 확인</p></div>
+        <div class="example"><strong>예시</strong>도착일 체크 없이 명단 반영을 누르면 처리 결과와 작업자명은 기록되지만, 도착일은 비워 둘 수 있습니다.</div>
+
+        <h3 id="user-diff">1-8. 명단비교 모드</h3>
+        <p>명단비교 모드는 비교용 명단과 학생명부를 대조해, 이미 계정이 있는 학생과 추가 확인이 필요한 학생을 분류하는 모드입니다. 이 모드 자체가 등록을 수행하는 것은 아닙니다.</p>
+        <div class="ui-block">
+          <div class="ui-header"><div><div class="title">명단비교 모드</div><div class="desc">스캔 검수 · 명부 비교 실행 · 결과 분류</div></div></div>
+          <div class="ui-body">
+            <div class="mock-card"><strong>상태 요약</strong>
+              <div class="table-wrap"><table>
+                <tr><th>구분</th><th>의미</th></tr>
+                <tr><td>공통 학생</td><td>명단과 명부 양쪽에 모두 있음</td></tr>
+                <tr><td>명단에만 있음</td><td>신규 등록 후보</td></tr>
+                <tr><td>명부에만 있음</td><td>전출 가능성</td></tr>
+                <tr><td>판정 불가</td><td>자동으로 결론을 낼 수 없는 대상</td></tr>
+              </table></div>
+            </div>
+          </div>
+        </div>
+        <div class="note"><strong>중요</strong>명단비교 결과는 분류 결과입니다. 실제 등록, 퇴원, 아이디 생성은 반편성 모드에서 진행합니다.</div>
+      </section>
+
+      <section class="section" id="admin-guide">
+        <h2>2. 관리자 가이드</h2>
+        <p>이 섹션은 운영 자산을 유지하거나 교체할 때 참고합니다. 일반 작업자는 읽지 않아도 되지만, 템플릿이나 안내문 내용을 바꿔야 하는 경우에는 반드시 확인해야 합니다.</p>
+        <h3>2-1. 안내문 txt 관리</h3>
+        <p>resources/notices 폴더의 txt 파일명이 그대로 안내문 목록의 제목이 됩니다. 파일 추가, 삭제, 수정은 이 폴더에서 관리합니다.</p>
+        <h3>2-2. 등록 템플릿 수정 범위</h3>
+        <p>등록 템플릿은 시트명과 핵심 열 제목을 프로그램이 직접 참조합니다. 서식은 바꿔도 되지만, 시트명과 필수 열 제목은 유지해야 합니다.</p>
+        <h3>2-3. 안내 템플릿 수정 범위</h3>
+        <p>안내 템플릿은 4행부터 데이터가 들어갑니다. 1~3행은 자유롭게 수정할 수 있지만, 데이터 시작 위치는 유지하는 것이 안전합니다.</p>
+        <h3>2-4. 템플릿 교체 시 점검</h3>
+        <ul>
+          <li>파일명에 등록 또는 안내 키워드가 포함되어 있는지</li>
+          <li>같은 종류 템플릿이 2개 이상 들어 있지 않은지</li>
+          <li>교체 후 스캔에서 오류가 없는지</li>
+        </ul>
+      </section>
+
+      <section class="section" id="rules">
+        <h2>3. 규칙 설명</h2>
+        <p>이 섹션은 프로그램이 실제로 어떤 기준으로 판단하는지 설명합니다. 사용자도 결과를 이해하기 위해 알아야 하는 내용입니다.</p>
+
+        <h3 id="rule-dup">3-1. 동명이인 규칙</h3>
+        <p>같은 학년 안에서 이름이 같은 학생이 둘 이상 있으면 이름 뒤에 A, B, C 같은 구분자를 붙여 구분합니다.</p>
+        <div class="table-wrap"><table>
+          <tr><th>상황</th><th>처리 기준</th><th>예시</th></tr>
+          <tr><td>신입생 파일 안에서 이름이 같음</td><td>A부터 순서대로 붙임</td><td>이수현, 이수현 → 이수현A, 이수현B</td></tr>
+          <tr><td>명부에 기존 동명이인이 있고 전입생 추가</td><td>명부에 있는 마지막 구분자 다음부터 붙임</td><td>김지우, 김지우A → 전입생 김지우B</td></tr>
+          <tr><td>중복 없음</td><td>구분자 없이 사용</td><td>홍길동</td></tr>
+        </table></div>
+        <p>동명이인으로 처리된 행은 등록작업파일에서 표시되며, 안내 파일에도 구분자가 붙은 이름 그대로 출력됩니다.</p>
+
+        <h3 id="rule-transfer">3-2. 전입 처리 규칙</h3>
+        <p>전입생은 학생명부를 기준으로 아이디 시작 연도를 추정합니다. 해당 학년 학생명부 정보가 충분하면 자동으로 처리하고, 판단 근거가 부족하면 보류합니다.</p>
+        <div class="example"><strong>예시</strong>3학년 전입생을 처리할 때, 학생명부의 현재 3학년 학생 아이디가 대부분 2022로 시작하면 프로그램은 3학년 전입생도 2022 기준으로 아이디를 생성합니다.</div>
+
+        <h3 id="rule-withdraw">3-3. 전출 처리 규칙</h3>
+        <p>전출생은 학생명부에서 현재 반 / 이전 반 / 이름 / 아이디를 기준으로 매칭합니다. 한 명으로 확정할 수 있으면 퇴원 목록에 넣고, 여러 후보가 걸리면 보류합니다.</p>
+
+        <h3 id="rule-hold">3-4. 보류 / 자동 제외</h3>
+        <h4>보류</h4>
+        <p>보류는 프로그램이 자동으로 처리하기 어렵다고 판단한 경우입니다. 담당자가 확인 후 다시 실행하거나 수동 처리해야 합니다.</p>
+        <ul>
+          <li>전입생이 신입생 명단과 학년·반·이름이 같은 경우</li>
+          <li>전입생이 명부에 이미 존재하는 경우</li>
+          <li>전출생이 명부의 동명이인 후보 여러 명과 겹치는 경우</li>
+          <li>명단비교에서 전입/전출을 자동 판정하기 어려운 경우</li>
+        </ul>
+        <h4>자동 제외</h4>
+        <p>자동 제외는 명부에서 찾을 수 없거나, 현재 처리 대상이 아니라고 판단된 경우입니다. 자동 제외된 항목도 결과 파일에 사유와 함께 기록됩니다.</p>
+
+        <h3 id="rule-roster-date">3-5. 명부 기준일</h3>
+        <p>명부 기준일은 학생명부 파일의 마지막 수정일을 의미합니다. 프로그램은 이 날짜를 보고 현재 명부가 올해 기준인지, 개학 전 기준인지 해석합니다.</p>
+        <div class="example"><strong>예시</strong>작업일은 3월 10일인데 학생명부 수정일이 2월 20일이라면, 개학 전 명부일 수 있으므로 학년 보정이 필요한지 확인합니다.</div>
+
+        <h3 id="rule-grade-year">3-6. 학년도 아이디 규칙</h3>
+        <p>사이드바의 학년도 아이디 규칙은 각 학년의 아이디 시작 연도를 뜻합니다. 학생명부가 있으면 스캔 후 자동으로 채워지고, 자동으로 판단하기 어려운 학년은 직접 수정할 수 있습니다.</p>
+        <div class="note"><strong>직접 수정이 필요한 경우</strong>학생명부에 해당 학년 정보가 없거나, 신입생 파일에 여러 학년이 섞여 있는데 학생명부가 없을 때</div>
+
+        <h3 id="rule-diff">3-7. 명단비교 분류 기준</h3>
+        <p>명단비교는 이름, 학년, 반 정보를 기준으로 명단과 명부를 대조합니다.</p>
+        <div class="table-wrap"><table>
+          <tr><th>분류</th><th>뜻</th><th>후속 조치</th></tr>
+          <tr><td>공통 학생</td><td>이미 계정이 있는 재학생</td><td>추가 조치 없음</td></tr>
+          <tr><td>명단에만 있음</td><td>신규 등록 필요 가능성</td><td>반편성 모드 전입/신입 검토</td></tr>
+          <tr><td>명부에만 있음</td><td>전출 가능성</td><td>반편성 모드 전출 검토</td></tr>
+          <tr><td>판정 불가</td><td>자동으로 결론을 낼 수 없음</td><td>결과 파일 수동 확인</td></tr>
+        </table></div>
+      </section>
+
+      <section class="section" id="dev-guide">
+        <h2>4. 개발·유지보수 참고사항</h2>
+        <p>이 섹션은 규칙 변경이나 오류 원인 추적 시 어떤 층을 먼저 봐야 하는지 정리한 참고사항입니다.</p>
+        <div class="table-wrap"><table>
+          <tr><th>영역</th><th>역할</th><th>대표 파일</th></tr>
+          <tr><td>UI</td><td>화면 구성, 버튼, 탭, 미리보기, 검색, 모달</td><td>index.html, setup.js, scan_tab.js, diff_tab.js</td></tr>
+          <tr><td>Bridge</td><td>WebView와 Python 엔진 연결, 비동기 작업 시작/완료 전달</td><td>bridge.py</td></tr>
+          <tr><td>Engine</td><td>UI에서 받은 값 정리, scan/run 호출 진입점</td><td>engine.py</td></tr>
+          <tr><td>Core</td><td>실제 판정 규칙, 입력 해석, 출력 파일 생성</td><td>run_main.py, run_diff.py, scan_main.py, scan_diff.py, common.py</td></tr>
+        </table></div>
+        <div class="rule"><strong>규칙 수정 시 기본 원칙</strong><p>문구만 바뀌는지, 판정 기준이 바뀌는지, 결과 파일 구조가 바뀌는지를 먼저 구분합니다. 판정 기준이 바뀌면 사용자 가이드와 규칙 설명도 함께 수정해야 합니다.</p></div>
+        <div class="rule"><strong>대표적인 수정 포인트</strong><p>동명이인 규칙, 보류 사유, 비교 대상 해석, 명부 기준일 처리, 학년도 아이디 규칙은 대부분 core 쪽 로직과 연결됩니다. 화면 문구만 고치면 끝나지 않는 경우가 많습니다.</p></div>
+      </section>
+
+      <div class="footer">ClassMate 운영 가이드 초안 · HTML 시안</div>
+    </main>
+  </div>
+</div>
+<script>
+const input = document.getElementById('searchInput');
+const clearBtn = document.getElementById('clearBtn');
+const statusEl = document.getElementById('searchStatus');
+const article = document.getElementById('manualContent');
+const originalHTML = article.innerHTML;
+function removeMarks(){ article.innerHTML = originalHTML; }
+function walkAndMark(node, regex){
+  let hitCount = 0;
+  if(node.nodeType === Node.TEXT_NODE){
+    const text = node.nodeValue;
+    if(!text.trim()) return 0;
+    if(!regex.test(text)) return 0;
+    regex.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let lastIndex = 0, match;
+    while((match = regex.exec(text)) !== null){
+      const before = text.slice(lastIndex, match.index);
+      if(before) frag.appendChild(document.createTextNode(before));
+      const mark = document.createElement('mark');
+      mark.className = 'search-hit';
+      mark.textContent = match[0];
+      frag.appendChild(mark);
+      lastIndex = match.index + match[0].length;
+      hitCount += 1;
+    }
+    const after = text.slice(lastIndex);
+    if(after) frag.appendChild(document.createTextNode(after));
+    node.parentNode.replaceChild(frag, node);
+    return hitCount;
+  }
+  if(node.nodeType === Node.ELEMENT_NODE){
+    const tag = node.tagName;
+    if(['SCRIPT','STYLE','MARK'].includes(tag)) return 0;
+    Array.from(node.childNodes).forEach(child => { hitCount += walkAndMark(child, regex); });
+  }
+  return hitCount;
+}
+function doSearch(){
+  article.innerHTML = originalHTML;
+  const q = input.value.trim();
+  if(!q){ statusEl.textContent=''; return; }
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(escaped, 'gi');
+  const total = walkAndMark(article, regex);
+  statusEl.textContent = total ? `결과 ${total}건` : '결과 없음';
+  const first = article.querySelector('mark.search-hit');
+  if(first) first.scrollIntoView({behavior:'smooth', block:'center'});
+}
+input.addEventListener('input', doSearch);
+clearBtn.addEventListener('click', ()=>{ input.value=''; article.innerHTML = originalHTML; statusEl.textContent=''; input.focus(); });
+</script>
+</body>
+</html>

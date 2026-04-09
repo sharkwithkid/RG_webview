@@ -11,6 +11,7 @@ core/events.py — 코어 이벤트 타입 정의 + 케이스별 생성 함수
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import List, Literal, Optional
 
 # ──────────────────────────────────────────────
@@ -301,7 +302,7 @@ def no_teacher_id_request() -> CoreEvent:
     return CoreEvent(
         code     = "NO_TEACHER_ID_REQUEST",
         level    = "warn",
-        message  = "교직원 명단의 관리용 아이디 신청이 한 건도 없습니다.",
+        message  = "교직원 명단에 관리용 아이디 신청자가 한 건도 없습니다. 관리용 ID 신청 열을 확인해 주세요.",
         file_key = "teachers",
     )
 
@@ -388,52 +389,151 @@ def open_date_missing() -> CoreEvent:
     )
 
 
+def _class_token(raw: str | int | None, grade: int | None = None) -> str:
+    if raw is None:
+        return ""
+    s = str(raw).strip()
+    if not s:
+        return ""
+    s = s.replace("　", " ").replace(" ", " ")
+    s = re.sub(r"\s+", "", s)
+
+    if s in {"유치원", "유치원반"}:
+        return "유치원"
+
+    s = re.sub(r"반+$", "", s)
+
+    m = re.fullmatch(r"(\d+)-(\d+)", s)
+    if m:
+        return f"{int(m.group(1))}-{int(m.group(2))}"
+
+    m = re.fullmatch(r"(\d+)", s)
+    if m:
+        cls = int(m.group(1))
+        if grade:
+            return f"{int(grade)}-{cls}"
+        return str(cls)
+
+    return s
+
+
+def format_school_info(grade: int | None = None, class_: str | int | None = None) -> str:
+    token = _class_token(class_, grade)
+    if token:
+        return token
+    if grade:
+        return str(int(grade))
+    return ""
+
+
+TRANSFER_IN_REASON_TEXT = {
+    "PREFIX_MODE_UNAVAILABLE": "ID 규칙을 확인할 수 없어 확인이 필요합니다.",
+    "DUP_WITH_FRESHMEN": "신입생 명단과 학년/반/이름이 동일합니다.",
+    "ROSTER_DUPLICATE": "학생명부에 이미 존재하는 학생입니다.",
+    "ROSTER_SUSPECT_SAME_PERSON": "학생명부에 동일인으로 의심되는 학생이 있습니다.",
+}
+
+TRANSFER_OUT_REASON_TEXT = {
+    "NAME_KEY_EMPTY": "이름을 확인할 수 없어 확인이 필요합니다.",
+    "ROSTER_DUPLICATE_NAME": "학생명부에 동명이인이 있어 확인이 필요합니다.",
+    "GRADE_NAME_MULTI_MATCH": "학생명부에서 후보가 여러 건 확인되어 확인이 필요합니다.",
+    "ROSTER_NOT_FOUND": "학생명부에서 확인되지 않아 확인이 필요합니다.",
+    "MULTIPLE_MATCHES": "학생명부에서 중복 매칭되어 확인이 필요합니다.",
+    "AUTO_SKIP_NOT_FOUND": "학생명부에 존재하지 않아 자동 제외되었습니다.",
+}
+
+DIFF_REASON_TEXT = {
+    "COMPARE_DUPLICATE_NAME": "재학생 명단에 동명이인이 있어 확인이 필요합니다.",
+    "ROSTER_DUPLICATE_NAME": "명부에 동명이인이 있어 확인이 필요합니다.",
+    "BOTH_DUPLICATE_NAME": "재학생 명단과 명부 양쪽에 동명이인이 있어 확인이 필요합니다.",
+    "ROSTER_SUFFIX_DUPLICATES": "명부에 동명이인(A,B,C 등) 후보가 있어 확인이 필요합니다.",
+    "ROSTER_SUSPECT_SAME_PERSON": "명부에 동일인으로 의심되는 후보가 있어 확인이 필요합니다.",
+    "MISSING_CLASS": "반 정보가 없어 확인이 필요합니다.",
+    "MISSING_ROSTER_CLASS": "명부 반 정보가 없어 확인이 필요합니다.",
+}
+
+
+def transfer_in_reason_text(code: str) -> str:
+    return TRANSFER_IN_REASON_TEXT.get(code, code)
+
+
+def transfer_out_reason_text(code: str) -> str:
+    return TRANSFER_OUT_REASON_TEXT.get(code, code)
+
+
+def diff_reason_text(code: str) -> str:
+    return DIFF_REASON_TEXT.get(code, code)
+
+
+def _student_event_message(prefix: str, name: str, reason: str, grade: int | None = None, class_: str | int | None = None) -> str:
+    info = format_school_info(grade, class_)
+    if info:
+        return f"{prefix}: {info} {name} - {reason}"
+    return f"{prefix}: {name} - {reason}"
+
+
+def freshmen_transfer_same_student_scan(grade: int, class_: str, name: str) -> CoreEvent:
+    return CoreEvent(
+        code     = "FRESHMEN_TRANSFER_SAME_STUDENT_SCAN",
+        level    = "warn",
+        message  = _student_event_message(
+            "중복 감지",
+            name,
+            "신입생 명단과 전입생 명단에 동일한 학적정보가 있습니다.",
+            grade,
+            class_,
+        ),
+        file_key = "global",
+        blocking = False,
+    )
+
+
 # ──────────────────────────────────────────────
 # 실행 완료 — hold
 # ──────────────────────────────────────────────
 
-def transfer_in_hold(name: str, reason: str) -> CoreEvent:
+def transfer_in_hold(name: str, reason_code: str, grade: int = 0, class_: str = "") -> CoreEvent:
     return CoreEvent(
         code     = "TRANSFER_IN_HOLD",
         level    = "hold",
-        message  = f"전입생 보류: {name} — {reason}",
+        message  = _student_event_message("전입생 보류", name, transfer_in_reason_text(reason_code), grade, class_),
         file_key = "transfer_in",
     )
 
 
-def transfer_out_hold(name: str, reason: str) -> CoreEvent:
+def transfer_out_hold(name: str, reason_code: str, grade: int = 0, class_: str = "") -> CoreEvent:
     return CoreEvent(
         code     = "TRANSFER_OUT_HOLD",
         level    = "hold",
-        message  = f"전출생 보류: {name} — {reason}",
+        message  = _student_event_message("전출생 보류", name, transfer_out_reason_text(reason_code), grade, class_),
         file_key = "transfer_out",
     )
 
 
 def freshmen_transfer_dup(name: str, grade: int = 0, class_: str = "") -> CoreEvent:
-    """name에 학생명 또는 '3명' 같은 건수 문자열 사용 가능"""
-    if grade and class_:
-        msg = f"신입생과 동일한 전입생 보류: {grade}학년 {class_}반 {name}"
-    else:
-        msg = f"신입생과 동일한 전입생 보류 {name} — 보류 목록에서 확인해 주세요."
     return CoreEvent(
         code     = "FRESHMEN_TRANSFER_DUP",
         level    = "hold",
-        message  = msg,
-        detail   = "신입생 명단과 학년/반/이름이 동일합니다. 확인 후 처리해 주세요.",
+        message  = _student_event_message(
+            "전입생 보류",
+            name,
+            "신입생 명단과 학년/반/이름이 동일합니다.",
+            grade,
+            class_,
+        ),
         file_key = "transfer_in",
     )
 
 
-def roster_duplicate_transfer(name: str, reason: str) -> CoreEvent:
-    if "동일인으로 의심" in reason:
+def roster_duplicate_transfer(name: str, reason_code: str, grade: int = 0, class_: str = "") -> CoreEvent:
+    if reason_code == "ROSTER_SUSPECT_SAME_PERSON":
         detail = "명부에 같은 학년·이름의 학생이 있으나 반이 다릅니다. 동일인인지 확인 후 처리해 주세요."
     else:
         detail = "이미 명부에 존재하는 학생입니다. 확인 후 처리해 주세요."
     return CoreEvent(
         code     = "ROSTER_DUPLICATE_TRANSFER",
         level    = "hold",
-        message  = f"전입생 보류: {name} — {reason}",
+        message  = _student_event_message("전입생 보류", name, transfer_in_reason_text(reason_code), grade, class_),
         detail   = detail,
         file_key = "transfer_in",
     )
@@ -443,7 +543,7 @@ def duplicate_name(count: int) -> CoreEvent:
     return CoreEvent(
         code    = "DUPLICATE_NAME",
         level   = "warn",
-        message = f"동명이인 {count}건 — 실행 결과 탭 필터에서 확인해 주세요.",
+        message = f"동명이인 경고: {count}건 - 실행 결과 탭 필터에서 확인해 주세요.",
     )
 
 
@@ -517,29 +617,29 @@ def compare_file_format_warn(
     return event, mark
 
 
-def diff_unresolved(name: str, reason: str) -> CoreEvent:
+def diff_unresolved(name: str, reason_code: str, grade: int = 0, class_: str = "") -> CoreEvent:
     return CoreEvent(
         code     = "DIFF_UNRESOLVED",
         level    = "hold",
-        message  = f"자동 판정 불가: {name} — {reason}",
+        message  = _student_event_message("자동 판정 불가", name, diff_reason_text(reason_code), grade, class_),
         file_key = "compare",
     )
 
 
-def diff_transfer_in_hold(name: str, reason: str) -> CoreEvent:
+def diff_transfer_in_hold(name: str, reason_code: str, grade: int = 0, class_: str = "") -> CoreEvent:
     return CoreEvent(
         code     = "DIFF_TRANSFER_IN_HOLD",
         level    = "hold",
-        message  = f"전입생 보류: {name} — {reason}",
+        message  = _student_event_message("전입생 보류", name, diff_reason_text(reason_code), grade, class_),
         file_key = "transfer_in",
     )
 
 
-def diff_transfer_out_hold(name: str, reason: str) -> CoreEvent:
+def diff_transfer_out_hold(name: str, reason_code: str, grade: int = 0, class_: str = "") -> CoreEvent:
     return CoreEvent(
         code     = "DIFF_TRANSFER_OUT_HOLD",
         level    = "hold",
-        message  = f"전출생 보류: {name} — {reason}",
+        message  = _student_event_message("전출생 보류", name, diff_reason_text(reason_code), grade, class_),
         file_key = "transfer_out",
     )
 

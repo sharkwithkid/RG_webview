@@ -900,7 +900,9 @@ class Bridge(QObject):
         import subprocess, sys, os
         try:
             if sys.platform == "win32":
-                os.startfile(path)
+                # UNC 경로 // → \\ 변환
+                norm = path.replace('/', '\\')
+                os.startfile(norm)
             elif sys.platform == "darwin":
                 subprocess.run(["open", path])
             else:
@@ -915,7 +917,8 @@ class Bridge(QObject):
         try:
             target = str(Path(path).parent) if Path(path).is_file() else path
             if sys.platform == "win32":
-                os.startfile(target)
+                norm = target.replace('/', '\\')
+                os.startfile(norm)
             elif sys.platform == "darwin":
                 subprocess.run(["open", target])
             else:
