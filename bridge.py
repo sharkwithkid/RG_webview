@@ -922,6 +922,25 @@ class Bridge(QObject):
         except Exception as e:
             return error_response(str(e))
 
+    @pyqtSlot(result=str)
+    def openGuide(self) -> str:
+        """사용자 가이드 HTML 파일을 기본 브라우저로 열기."""
+        import subprocess, sys, os
+        try:
+            bundle_dir = Path(os.environ.get("RG_BUNDLE_DIR", Path(__file__).parent))
+            guide_path = bundle_dir / "ClassMate_Guide.html"
+            if not guide_path.exists():
+                return error_response("가이드 파일을 찾을 수 없습니다.")
+            if sys.platform == "win32":
+                os.startfile(str(guide_path))
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(guide_path)])
+            else:
+                subprocess.run(["xdg-open", str(guide_path)])
+            return ok_response({})
+        except Exception as e:
+            return error_response(str(e))
+
     @pyqtSlot(str, result=str)
     def openFolder(self, path: str) -> str:
         import subprocess, sys, os

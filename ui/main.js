@@ -242,6 +242,9 @@ function _handleAction(action, el) {
     'cm-skip':        () => ColMap.skipRole(),
     'cm-cancel':      () => ColMap.cancel(),
     'cm-confirm':     () => ColMap.confirm(),
+
+    // 가이드
+    'open-guide':     () => bridge.openGuide(),
   };
   if (actions[action]) actions[action]();
 }
@@ -647,6 +650,7 @@ function _makeMockBridge() {
     pickRosterLogFile:   async () => JSON.stringify({ ok: true, data: { path: '' } }),
     openFile:            noop,
     openFolder:          noop,
+    openGuide:           noop,
     copyToClipboard:     noop,
     writeWorkResult:     noop,
     writeEmailSent:      noop,

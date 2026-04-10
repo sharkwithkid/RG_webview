@@ -391,6 +391,15 @@ input[type="date"] { display: none; }
 .app-header .app-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .app-header .work-date { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .mode-btns { display: flex; gap: 0; margin-left: auto; background: var(--surface-2); border-radius: 999px; padding: 3px; }
+.btn-help {
+  width: 28px; height: 28px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--muted); font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; margin-left: 4px; flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.btn-help:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
 .btn-mode {
   height: 26px; padding: 0 14px; background: transparent;
   border-radius: 999px; color: var(--muted); font-weight: 500; font-size: 12px;
@@ -1192,6 +1201,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
       <button class="btn-mode active" id="btn-mode-main" data-action="mode-main">새학기 반편성</button>
       <button class="btn-mode"        id="btn-mode-diff" data-action="mode-diff">재학생 명단 비교</button>
     </div>
+    <button class="btn-help" data-action="open-guide" title="사용자 가이드">?</button>
   </div>
 
   <!-- 본문 -->

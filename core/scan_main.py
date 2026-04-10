@@ -715,10 +715,8 @@ def validate_input_sheet_structure(
                 warn_name = f"이름이 너무 짧습니다(1자 이하): '{ns}'"
             elif re.search(r"[0-9]{3,}", ns):
                 warn_name = f"이름 열에 숫자가 3자리 이상 포함되어 있습니다: '{ns}'"
-            elif re.search(r"[^\uAC00-\uD7A3a-zA-Z\s]", ns):
+            elif re.search(r"[^\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318Fa-zA-Z\s]", ns):
                 warn_name = f"이름에 한글/영문 외 문자가 있습니다: '{ns}'"
-            elif re.search(r"[\u1100-\u11FF\u3130-\u318F]", ns):
-                warn_name = f"이름에 완성되지 않은 한글 자모가 있습니다: '{ns}'"
             if warn_name:
                 issues.append(f"[WARN] {kind} 파일 {r}행 '이름' 열 — {warn_name}")
                 issue_row_nums.append(r)
@@ -1515,8 +1513,23 @@ def scan_pipeline(
             kind_key="teacher",
             kind_label="교사",
             header_slots=TEACHER_HEADER_SLOTS,
-            required_keys=["name", "learn", "admin"],
+            required_keys=["name"],
         )
+
+        # 학습용·관리용 ID 신청 열 존재 여부만 별도 체크
+        # (값이 비어있는 것은 정상 — 행 단위 필수값 검사 대상 아님)
+        if sr.teachers and sr.teachers.get("severity") != "error":
+            try:
+                _t_layout = detect_input_layout(teacher_file, "teacher")
+                _t_slots  = _build_header_slot_map(
+                    _t_layout["_ws"], _t_layout["header_row"], TEACHER_HEADER_SLOTS
+                )
+                _t_layout["_wb"].close()
+                for _col_key, _col_label in [("learn", "학습용ID 신청"), ("admin", "관리용ID 신청")]:
+                    if _t_slots.get(_col_key) is None:
+                        sr.events.append(missing_required_col("teacher", "교사", _col_label))
+            except Exception:
+                pass
 
         if (
             freshmen_file and transfer_file

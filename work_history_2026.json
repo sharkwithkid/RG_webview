@@ -9,7 +9,8 @@
       "교직원": 0
     },
     "run_completed": true,
-    "master_recorded": false
+    "master_recorded": true,
+    "master_recorded_at": "2026-04-10"
   },
   "용인소현초": {
     "last_date": "2026-03-23",

@@ -19,8 +19,6 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
 
-from bridge import Bridge
-
 # ── 경로 기준 설정 ────────────────────────────────
 # PyInstaller exe: 번들 리소스는 sys._MEIPASS, 사용자 데이터는 exe 옆
 # 일반 실행: __file__ 기준
@@ -32,8 +30,11 @@ else:
     _APP_DIR    = Path(__file__).parent
 
 # core/ 모듈이 사용자 데이터 경로를 알 수 있도록 환경 변수로 공유
+# bridge 임포트 전에 반드시 세팅해야 config_store._app_dir()이 올바른 경로를 잡음
 os.environ["RG_BUNDLE_DIR"] = str(_BUNDLE_DIR)
 os.environ["RG_APP_DIR"]    = str(_APP_DIR)
+
+from bridge import Bridge
 
 # ── Windows High DPI 설정 ────────────────────────
 # QApplication 생성 전에 설정해야 효과 있음

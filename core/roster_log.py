@@ -165,11 +165,15 @@ def write_work_result(
 
         for kind, flag in kind_flags.items():
             col = kind_col_map.get(kind)
-            if not col or not flag:
+            if not col:
                 continue
-            existing = ws.cell(row, col).value
-            if existing != DONE_TEXT:
-                ws.cell(row, col).value = DONE_TEXT
+            if flag:
+                existing = ws.cell(row, col).value
+                if existing != DONE_TEXT:
+                    ws.cell(row, col).value = DONE_TEXT
+            else:
+                # 이번 작업에 포함되지 않은 종류는 기존 값 초기화
+                ws.cell(row, col).value = None
 
         if email_arrived_date is not None and col_email_arr:
             cell = ws.cell(row, col_email_arr)

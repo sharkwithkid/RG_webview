@@ -505,6 +505,14 @@ const Run = (() => {
     _el('btn-run').disabled             = true;
     _el('output-file-list').innerHTML   = '<span class="muted">실행 전</span>';
 
+    // 명단 반영 버튼 초기화 (반영 완료 ✓ 상태 해제)
+    const btnRecord = _el('btn-record-roster');
+    if (btnRecord) {
+      btnRecord.textContent = '명단 반영';
+      btnRecord.disabled    = true;
+    }
+    state.pending_roster_log = false;
+
     const tabs = _el('sheet-tabs');
     if (tabs) tabs.innerHTML = '';
     const table = _el('run-table');
