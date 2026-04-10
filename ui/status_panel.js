@@ -208,6 +208,32 @@ const Panel = (() => {
   // ──────────────────────────────────────────────
   // 초기화 (새 학교 시작 / 학교 선택 리셋)
   // ──────────────────────────────────────────────
+  function resetSchoolContext() {
+    const chkArrived = _el('chk-arrived');
+    const chkSent    = _el('chk-sent');
+    if (chkArrived) chkArrived.checked = false;
+    if (chkSent)    chkSent.checked    = false;
+
+    _setDateInput('arrived-date', state.work_date || _todayStr());
+    _setDateInput('sent-date',    state.work_date || _todayStr());
+    if (typeof DatePicker !== 'undefined') {
+      DatePicker.setValue('arrived-date', state.work_date || _todayStr());
+      DatePicker.setValue('sent-date',    state.work_date || _todayStr());
+    }
+
+    const recordBtn = _el('btn-record-roster');
+    if (recordBtn) {
+      recordBtn.disabled = true;
+      recordBtn.textContent = '명단 반영';
+    }
+
+    const openRosterBtn = _el('btn-open-roster');
+    if (openRosterBtn) openRosterBtn.disabled = !state.roster_log_path;
+
+    updateGradeMap('default');
+    updateRosterMapBtn(null);
+  }
+
   function reset() {
     _el('school-input').value     = '';
     _el('current-school').textContent = '-';
@@ -217,13 +243,7 @@ const Panel = (() => {
     _setApplyBtn(false);
     _closeDropdown();
 
-    const chkArrived = _el('chk-arrived');
-    const chkSent    = _el('chk-sent');
-    if (chkArrived) chkArrived.checked = false;
-    if (chkSent)    chkSent.checked    = false;
-    _el('btn-record-roster').disabled = true;
-    _el('btn-record-roster').textContent = '명단 반영';
-    _el('btn-open-roster').disabled   = !state.roster_log_path;
+    resetSchoolContext();
   }
 
   // ──────────────────────────────────────────────
@@ -261,6 +281,14 @@ const Panel = (() => {
 
   async function recordRoster() {
     if (!state.roster_log_path || !state.selected_school) return;
+
+    const cm = state.roster_col_map || {};
+    const requiredKeys = ['col_worker', 'col_email_arr', 'col_email_snt'];
+    const missing = requiredKeys.filter(key => !cm[key]);
+    if (missing.length) {
+      toast('첫 화면에서 모든 열을 지정해야 합니다.', 'warn', 4000);
+      return;
+    }
 
     const arrived = getArrivedInfo();
     const sent    = getSentInfo();
@@ -543,6 +571,7 @@ const Panel = (() => {
     toggleGrade, updateGradeMap, setGradeCount,
     getGradeOverrides, applyGrade,
     updateRosterMapBtn, openRosterMap,
+    resetSchoolContext,
   };
 
 })();

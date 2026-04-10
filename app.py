@@ -13,7 +13,17 @@ import os
 import ctypes
 from pathlib import Path
 
-from PyQt6.QtCore import QUrl, Qt
+# ── Qt/WebEngine 렌더링 안정화 ─────────────────────
+# 열 매핑 모달처럼 오버레이/테이블 합성이 있는 화면에서
+# 일부 Windows 환경의 GPU 렌더링 깨짐을 피하기 위해 software 경로를 우선 사용한다.
+os.environ.setdefault(
+    "QTWEBENGINE_CHROMIUM_FLAGS",
+    "--disable-gpu --disable-gpu-compositing --enable-font-antialiasing --font-render-hinting=full"
+)
+os.environ.setdefault("QT_OPENGL", "software")
+os.environ.setdefault("QT_QUICK_BACKEND", "software")
+
+from PyQt6.QtCore import QUrl, Qt, QCoreApplication
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -36,9 +46,9 @@ os.environ["RG_APP_DIR"]    = str(_APP_DIR)
 
 from bridge import Bridge
 
-# ── Windows High DPI 설정 ────────────────────────
+# ── Windows High DPI / Software OpenGL 설정 ─────────────────
 # QApplication 생성 전에 설정해야 효과 있음
-os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--enable-font-antialiasing --font-render-hinting=full")
+QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_UseSoftwareOpenGL)
 QApplication.setHighDpiScaleFactorRoundingPolicy(
     Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
 )

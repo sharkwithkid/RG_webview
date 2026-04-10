@@ -145,9 +145,15 @@ const Workflow = (() => {
   }
 
   async function onSchoolSelected(schoolName, activeBridge) {
+    const prevSchool = state.selected_school || '';
+    const schoolChanged = !!prevSchool && prevSchool !== schoolName;
+
     if (typeof Scan !== 'undefined' && Scan.reset) Scan.reset();
     if (typeof Run !== 'undefined' && Run.reset) Run.reset();
     if (typeof Diff !== 'undefined' && Diff.reset) Diff.reset();
+    if (schoolChanged && typeof Panel !== 'undefined' && Panel.resetSchoolContext) {
+      Panel.resetSchoolContext();
+    }
 
     AppState.setSelectedSchool(schoolName);
 

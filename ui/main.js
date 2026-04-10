@@ -239,6 +239,7 @@ function _handleAction(action, el) {
     'toggle-diff-viewer': () => Diff.toggleViewer(),
 
     // ColMap dialog
+    'cm-clear-current': () => ColMap.clearCurrentRole(),
     'cm-skip':        () => ColMap.skipRole(),
     'cm-cancel':      () => ColMap.cancel(),
     'cm-confirm':     () => ColMap.confirm(),

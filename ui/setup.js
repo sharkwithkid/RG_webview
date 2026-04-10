@@ -116,10 +116,23 @@ const Setup = (() => {
       return;
     }
 
+    const prevPath = _getVal('roster-log');
+    const changed  = !!prevPath && prevPath !== xlsxPath;
+
     _setVal('roster-log', xlsxPath);
 
-    // 열 매핑 다이얼로그 (콜백 방식)
-    await ColMap.open(xlsxPath, state.roster_col_map || {}, _onColMapResult);
+    if (changed) {
+      state.roster_col_map = {};
+      _updateColMapBadge({});
+      await _persistRosterConfig(xlsxPath, {});
+      toast('명단 파일이 변경되어 기존 열 매핑을 초기화했습니다. 새 파일 기준으로 다시 지정해 주세요.', 'info', 4000);
+    }
+
+    // 열 매핑 다이얼로그 (같은 파일일 때만 기존 매핑 복원)
+    const existingMap = Object.assign({}, state.roster_col_map || {}, {
+      _source_path: prevPath || xlsxPath,
+    });
+    await ColMap.open(xlsxPath, existingMap, _onColMapResult);
   }
 
   // 열 매핑 완료 콜백
@@ -127,20 +140,20 @@ const Setup = (() => {
     state.roster_col_map = resultMap;
     _updateColMapBadge(resultMap);
 
-    // 즉시 저장 (기존 config 보존)
+    const saveRes = await _persistRosterConfig(_getVal('roster-log'), resultMap);
+    if (!saveRes.ok) {
+      _showBanner('err', '저장 실패: ' + saveRes.error);
+    }
+  }
+
+  async function _persistRosterConfig(rosterPath, resultMap) {
     const cfgRes   = JSON.parse(await bridge.loadAppConfig());
     const existing = cfgRes.ok ? (cfgRes.data.config || {}) : {};
     const cfg = Object.assign({}, existing, {
-      roster_log_path: _getVal('roster-log'),
-      roster_col_map:  resultMap,
+      roster_log_path: rosterPath || '',
+      roster_col_map:  resultMap || {},
     });
-    const saveRes = JSON.parse(await bridge.saveAppConfig(JSON.stringify(cfg)));
-    if (saveRes.ok) {
-      _showBanner('ok', '명단 파일 열 설정이 저장되었습니다.');
-      _autoClear();
-    } else {
-      _showBanner('err', '저장 실패: ' + saveRes.error);
-    }
+    return JSON.parse(await bridge.saveAppConfig(JSON.stringify(cfg)));
   }
 
   // ──────────────────────────────────────────────
@@ -206,12 +219,8 @@ const Setup = (() => {
     if (!rosterLog) { _showBanner('err', '학교 전체 명단 파일을 선택하세요.'); return; }
 
     const cm = state.roster_col_map || {};
-    if (!cm.col_school) {
-      _showBanner('warn', '명단 파일의 열 매핑을 완료해야 합니다.\n찾아보기로 파일을 선택하고 열 매핑을 설정하세요.');
-      return;
-    }
-    if (!cm.col_domain) {
-      _showBanner('warn', '명단 파일에서 도메인(홈페이지) 열이 지정되지 않았습니다.');
+    if (!cm.col_school || !cm.col_domain) {
+      _showBanner('warn', '학교명과 홈페이지 주소 열은 필수 항목입니다.');
       return;
     }
 

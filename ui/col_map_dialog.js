@@ -36,6 +36,39 @@ const ColMap = (() => {
   let _currentRoleIdx = 0;
   let _onResult       = null;
 
+  const REQUIRED_KEYS = ['col_school', 'col_domain'];
+  const RECORD_REQUIRED_KEYS = ['col_worker', 'col_email_arr', 'col_email_snt'];
+
+
+  function _hasRequiredMap() {
+    return REQUIRED_KEYS.every(key => _colMap[key] != null);
+  }
+
+  function _getMissingRequiredLabels() {
+    return ROLES.filter(r => REQUIRED_KEYS.includes(r.key) && _colMap[r.key] == null).map(r => r.label);
+  }
+
+  function _updateConfirmState() {
+    const btn = document.querySelector('[data-action="cm-confirm"]');
+    if (btn) btn.disabled = !_hasRequiredMap();
+  }
+
+  function _updateGuide() {
+    const guideEl = _el('cm-guide');
+    const missingRequired = _getMissingRequiredLabels();
+    if (missingRequired.length) {
+      guideEl.textContent = '학교명과 홈페이지 주소 열은 필수 항목입니다.';
+      return;
+    }
+    const role = ROLES[_currentRoleIdx];
+    if (!role) {
+      guideEl.textContent = '';
+      return;
+    }
+    const req  = role.required ? ' (필수)' : ' (선택)';
+    guideEl.textContent = `▶  '${role.label}'${req} 열을 표 머리글에서 클릭해 주세요.`;
+  }
+
   // ──────────────────────────────────────────────
   // 열기
   // ──────────────────────────────────────────────
@@ -45,17 +78,20 @@ const ColMap = (() => {
     _onResult       = onResult;
     _currentRoleIdx = 0;
 
-    // 기존 매핑 복원 (1-based → 0-based)
-    ROLES.forEach(({ key }) => {
-      const v = (existingMap || {})[key];
-      if (v && v > 0) _colMap[key] = v - 1;
-    });
+    // 같은 파일일 때만 기존 매핑 복원
+    const sameFile = !!(existingMap && existingMap._source_path === xlsxPath);
+    if (sameFile) {
+      ROLES.forEach(({ key }) => {
+        const v = (existingMap || {})[key];
+        if (v && v > 0) _colMap[key] = v - 1;
+      });
+    }
 
     _renderRoleBtns();
 
-    // 저장된 sheet / header_row 우선 적용
-    const savedSheet  = (existingMap || {}).sheet      || '';
-    const savedHeader = (existingMap || {}).header_row || 1;
+    // 같은 파일일 때만 저장된 sheet / header_row 복원
+    const savedSheet  = sameFile ? ((existingMap || {}).sheet || '') : '';
+    const savedHeader = sameFile ? ((existingMap || {}).header_row || 1) : 1;
 
     await _loadMeta(savedSheet, savedHeader);
 
@@ -63,6 +99,8 @@ const ColMap = (() => {
 
     _selectRole(0);
     _refreshRoleBtns();
+    _updateConfirmState();
+    _updateGuide();
     _el('col-map-dialog').style.display = 'flex';
   }
 
@@ -96,10 +134,21 @@ const ColMap = (() => {
     await _loadMeta(_el('cm-sheet').value, parseInt(_el('cm-header-row').value, 10) || 1);
     _refreshRoleBtns();
     _selectRole(0);
+    _updateConfirmState();
+    _updateGuide();
   }
 
   async function onHeaderRowChange() {
     await _loadMeta(_el('cm-sheet').value, parseInt(_el('cm-header-row').value, 10) || 1);
+  }
+
+  function clearCurrentRole() {
+    if (_currentRoleIdx >= ROLES.length) return;
+    delete _colMap[ROLES[_currentRoleIdx].key];
+    _renderTable();
+    _refreshRoleBtns();
+    _updateConfirmState();
+    _updateGuide();
   }
 
   // ──────────────────────────────────────────────
@@ -156,17 +205,16 @@ const ColMap = (() => {
   function selectRole(idx) {
     _currentRoleIdx = idx;
     _refreshRoleBtns();
-    const role = ROLES[idx];
-    const req  = role.required ? ' (필수)' : ' (선택)';
-    _el('cm-guide').textContent = `▶  '${role.label}'${req} 열을 표 머리글에서 클릭해 주세요.`;
+    _updateGuide();
   }
 
   function _selectRole(idx) { selectRole(idx); }
 
   function skipRole() {
+    _updateConfirmState();
     const next = _currentRoleIdx + 1;
     if (next < ROLES.length) _selectRole(next);
-    else _el('cm-guide').textContent = "✓  모든 항목 지정 완료. '설정 완료'를 눌러주세요.";
+    else _updateGuide();
   }
 
   // ──────────────────────────────────────────────
@@ -186,7 +234,7 @@ const ColMap = (() => {
     thead.innerHTML = '<tr>' + _headers.map((h, i) => {
       const bg      = colColor[i] || '#F8FAFC';
       const mapped  = colColor[i] != null;
-      return `<th onclick="ColMap.onColClick(${i})" style="
+      return `<th onclick="ColMap.onColClick(${i})" ondblclick="ColMap.onColDblClick(${i})" title="클릭: 현재 항목 지정 / 더블클릭: 이 열 지정 해제" style="
         cursor:pointer;user-select:none;white-space:nowrap;
         padding:0;border:1px solid var(--border);
         background:${bg};position:sticky;top:0;min-width:60px;
@@ -206,23 +254,57 @@ const ColMap = (() => {
 
   function onColClick(colIndex) {
     if (_currentRoleIdx >= ROLES.length) return;
-    _colMap[ROLES[_currentRoleIdx].key] = colIndex;
+
+    const currentKey = ROLES[_currentRoleIdx].key;
+    const currentVal = _colMap[currentKey];
+
+    // 같은 열을 다시 누르면 현재 항목 해제
+    if (currentVal === colIndex) {
+      delete _colMap[currentKey];
+      _renderTable();
+      _refreshRoleBtns();
+      _updateConfirmState();
+      _updateGuide();
+      return;
+    }
+
+    // 한 열은 한 항목에만 배정
+    ROLES.forEach(({ key }) => {
+      if (key !== currentKey && _colMap[key] === colIndex) delete _colMap[key];
+    });
+
+    _colMap[currentKey] = colIndex;
     _renderTable();
     _refreshRoleBtns();
+    _updateConfirmState();
     const next = _currentRoleIdx + 1;
     if (next < ROLES.length) _selectRole(next);
-    else _el('cm-guide').textContent = "✓  모든 항목 지정 완료. '설정 완료'를 눌러주세요.";
+    else _updateGuide();
+  }
+
+  function onColDblClick(colIndex) {
+    const hit = ROLES.find(({ key }) => _colMap[key] === colIndex);
+    if (!hit) return;
+    delete _colMap[hit.key];
+    _renderTable();
+    _refreshRoleBtns();
+    _updateConfirmState();
+    _updateGuide();
   }
 
   // ──────────────────────────────────────────────
   // 완료 / 취소
   // ──────────────────────────────────────────────
   function confirm() {
-    const missing = ROLES.filter(r => r.required && _colMap[r.key] == null).map(r => r.label);
-    if (missing.length) { toast('필수 항목 미지정: ' + missing.join(', '), 'warn'); return; }
+    const missing = _getMissingRequiredLabels();
+    if (missing.length) {
+      _updateConfirmState();
+      _updateGuide();
+      return;
+    }
 
     const headerRow = parseInt(_el('cm-header-row').value, 10) || 1;
-    const result = { sheet: _el('cm-sheet').value, header_row: headerRow, data_start: headerRow + 1 };
+    const result = { sheet: _el('cm-sheet').value, header_row: headerRow, data_start: headerRow + 1, _source_path: _xlsxPath };
     ROLES.forEach(({ key }) => { result[key] = (_colMap[key] != null) ? _colMap[key] + 1 : 0; });
 
     _el('col-map-dialog').style.display = 'none';
@@ -242,6 +324,6 @@ const ColMap = (() => {
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  return { open, selectRole, skipRole, onColClick, onSheetChange, onHeaderRowChange, stepHeaderRow, confirm, cancel };
+  return { open, selectRole, skipRole, onColClick, onColDblClick, onSheetChange, onHeaderRowChange, stepHeaderRow, clearCurrentRole, confirm, cancel };
 
 })();

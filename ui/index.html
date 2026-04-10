@@ -1678,8 +1678,7 @@ button:not(:disabled), a, [data-action]:not(:disabled),
 <!-- ══ 열 매핑 다이얼로그 ═══════════════════════════════════ -->
 <div id="col-map-dialog" style="
   display:none;position:fixed;inset:0;z-index:9999;
-  background:rgba(0,0,0,.2);align-items:center;justify-content:center;
-  backdrop-filter:blur(6px);
+  background:rgba(15,23,42,.22);align-items:center;justify-content:center;
 ">
   <div style="
     width:860px;max-width:96vw;max-height:88vh;
@@ -1703,13 +1702,14 @@ button:not(:disabled), a, [data-action]:not(:disabled),
     </div>
   </div>
   <div id="cm-role-btns" style="padding:10px 24px;border-bottom:1px solid var(--border);display:flex;gap:4px;flex-wrap:nowrap;flex-shrink:0"></div>
-  <div id="cm-guide" style="padding:6px 24px;font-size: 12px;font-weight:600;color:var(--primary);flex-shrink:0"></div>
+  <div id="cm-guide" style="padding:6px 24px 2px;font-size: 12px;font-weight:600;color:var(--primary);flex-shrink:0"></div>
   <div style="flex:1;overflow:auto;padding:0 24px 8px">
     <table id="cm-preview-table" class="data-table" style="min-width:100%">
       <thead></thead><tbody></tbody>
     </table>
   </div>
   <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;flex-shrink:0">
+    <button class="btn-ghost" data-action="cm-clear-current">현재 항목 해제</button>
     <button class="btn-ghost" data-action="cm-skip">이 항목 건너뛰기</button>
     <button class="btn-ghost" data-action="cm-cancel">취소</button>
     <button class="btn-primary" data-action="cm-confirm">설정 완료</button>

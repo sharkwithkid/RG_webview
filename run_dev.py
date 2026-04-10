@@ -15,7 +15,7 @@ from pathlib import Path
 
 WATCH_DIR = Path(__file__).parent / "ui"
 WATCH_EXTS = {".html", ".js", ".css"}
-APP_ENTRY = Path(__file__).parent / "webview_app.py"
+APP_ENTRY = Path(__file__).parent / "app.py"
 POLL_INTERVAL = 0.8  # 초
 
 
