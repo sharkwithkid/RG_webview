@@ -1,5 +1,5 @@
 """
-build.py — RG_webview 배포 빌드 스크립트
+build.py — ClassMate 배포 빌드 스크립트
 
 권장 사용:
   - dev  브랜치: 베타/내부 테스트 빌드
@@ -25,7 +25,7 @@ from datetime import datetime
 ROOT = Path(__file__).parent
 DIST_DIR = ROOT / "dist" / "ClassMate"
 OUTPUT_DIR = ROOT / "Output"
-SPEC_FILE = ROOT / "RG_webview.spec"
+SPEC_FILE = ROOT / "ClassMate.spec"
 ICON_FILE = ROOT / "ClassMate.ico"
 
 # Inno Setup 기본 설치 경로 (없으면 스킵)
@@ -155,6 +155,23 @@ def build_exe():
     if example.exists():
         shutil.copy(example, DIST_DIR / "app_config.json")
         log("app_config.example.json → app_config.json 복사", "OK")
+    else:
+        # example 파일이 없으면 빈 기본값으로 직접 생성
+        import json as _json
+        default_cfg = {
+            "work_root": "", "roster_log_path": "", "worker_name": "",
+            "school_start_date": "", "work_date": "", "last_school": "",
+            "roster_col_map": {
+                "sheet": "", "header_row": 0, "data_start": 0,
+                "col_school": 0, "col_email_arr": 0, "col_email_snt": 0,
+                "col_worker": 0, "col_freshmen": 0, "col_transfer": 0,
+                "col_withdraw": 0, "col_teacher": 0, "col_seq": 0,
+            },
+        }
+        (DIST_DIR / "app_config.json").write_text(
+            _json.dumps(default_cfg, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        log("app_config.example.json 없음 — 기본값으로 app_config.json 생성", "WARN")
 
 # ──────────────────────────────────────────────
 # 4. Inno Setup 인스톨러

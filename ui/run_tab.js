@@ -46,6 +46,7 @@ const Run = (() => {
       school_start_date:    state.school_start_date,
       layout_overrides:     Object.keys(layoutOverrides).length ? layoutOverrides : null,
       school_kind_override: schoolKindOverride,
+      note_text:            (_el('result-note')?.value || '').trim(),
     };
 
     state.isRunning = true;

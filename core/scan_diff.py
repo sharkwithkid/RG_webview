@@ -230,8 +230,11 @@ def detect_compare_input_layout(xlsx_path: Path) -> Dict[str, Any]:
         slot_cols = _build_header_slot_map(ws, header_row, COMPARE_HEADER_SLOTS)
 
         name_col = slot_cols.get("name")
+        grade_col = slot_cols.get("grade")
         if name_col is None:
             raise ValueError("[ERROR] 재학생 명단 헤더에서 이름 열을 찾을 수 없습니다.")
+        if grade_col is None:
+            raise ValueError("[ERROR] 재학생 명단 헤더에서 학년 열을 찾을 수 없습니다.")
 
         example_rows, data_start_row = detect_example_and_data_start(
             ws,

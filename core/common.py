@@ -200,6 +200,7 @@ def get_project_dirs(work_root: Path) -> Dict[str, Path]:
     return {
         "WORK_ROOT":      work_root,
         "RESOURCES_ROOT": resources_root,
+        "DB":             resources_root / "DB",
         "TEMPLATES":      resources_root / "templates",
         "NOTICES":        resources_root / "notices",
         "SCHOOL_ROOT":    work_root,

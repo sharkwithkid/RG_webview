@@ -1,10 +1,17 @@
 Traceback (most recent call last):
-  File "C:\Users\Readinggate\Desktop\RG_webview_dev복구중\core\run_main.py", line 1882, in execute_pipeline
-    fill_register(
-  File "C:\Users\Readinggate\Desktop\RG_webview_dev복구중\core\run_main.py", line 1357, in fill_register
-    backup_if_exists(out_path)
-  File "C:\Users\Readinggate\Desktop\RG_webview_dev복구중\core\output_common.py", line 35, in backup_if_exists
+  File "C:\Users\Readinggate\Desktop\RG_webview_dev복구중\core\output_common.py", line 36, in backup_if_exists
     out_path.replace(dest)
   File "C:\Users\Readinggate\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 1188, in replace
     os.replace(self, target)
-PermissionError: [WinError 32] 다른 프로세스가 파일을 사용 중이기 때문에 프로세스가 액세스 할 수 없습니다: 'C:\\Users\\Readinggate\\Desktop\\2026반편성\\318.성남양지초_임지윤\\작업\\★성남양지초_등록작업파일(작업용).xlsx' -> 'C:\\Users\\Readinggate\\Desktop\\2026반편성\\318.성남양지초_임지윤\\작업\\_backup\\★성남양지초_등록작업파일(작업용)_20260408_145713.xlsx'
+PermissionError: [WinError 32] 다른 프로세스가 파일을 사용 중이기 때문에 프로세스가 액세스 할 수 없습니다: 'C:\\Users\\Readinggate\\Desktop\\2026반편성\\test_서울포이초-유치부 테스트\\작업\\★서울포이초_등록작업파일(작업용).xlsx' -> 'C:\\Users\\Readinggate\\Desktop\\2026반편성\\test_서울포이초-유치부 테스트\\작업\\_backup\\★서울포이초_등록작업파일(작업용)_20260410_141245.xlsx'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Readinggate\Desktop\RG_webview_dev복구중\core\run_main.py", line 1882, in execute_pipeline
+    fill_register(
+  File "C:\Users\Readinggate\Desktop\RG_webview_dev복구중\core\run_main.py", line 1361, in fill_register
+    backup_if_exists(out_path)
+  File "C:\Users\Readinggate\Desktop\RG_webview_dev복구중\core\output_common.py", line 38, in backup_if_exists
+    raise PermissionError(
+PermissionError: 이전 결과 파일이 열려 있어 백업할 수 없습니다. '★서울포이초_등록작업파일(작업용).xlsx' 파일을 닫고 다시 실행해 주세요.

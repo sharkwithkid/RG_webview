@@ -32,7 +32,13 @@ def backup_if_exists(out_path: Path) -> Optional[Path]:
     backup_dir = out_path.parent / "_backup"
     backup_dir.mkdir(parents=True, exist_ok=True)
     dest = backup_dir / f"{out_path.stem}_{ts}{out_path.suffix}"
-    out_path.replace(dest)
+    try:
+        out_path.replace(dest)
+    except PermissionError:
+        raise PermissionError(
+            f"이전 결과 파일이 열려 있어 백업할 수 없습니다. "
+            f"'{out_path.name}' 파일을 닫고 다시 실행해 주세요."
+        )
     return dest
 
 

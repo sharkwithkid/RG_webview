@@ -691,16 +691,19 @@ def validate_input_sheet_structure(
         if class_v is not None and str(class_v).strip():
             cs = str(class_v).strip()
             cs_norm = re.sub(r"\s+", "", cs)
-            warn_class = None
-            if "-" in cs:
-                warn_class = f"반 열에 하이픈(-) 포함 — 학년+반이 합쳐진 것 같습니다: '{cs}'"
-            elif cs_norm.endswith("반"):
-                warn_class = f"반 열 끝에 '반' 포함 — 등록 파일에 중복됩니다: '{cs}'"
-            if warn_class:
-                issues.append(f"[WARN] {kind} 파일 {r}행 '반' 열 — {warn_class}")
-                issue_row_nums.append(r)
-                _e, _m = class_format_warn(file_key, kind, r, warn_class)
-                evts.append(_e); marks.append(_m)
+            if cs_norm in KINDERGARTEN:
+                pass  # 유치부 반 값은 형식 검증 스킵
+            else:
+                warn_class = None
+                if "-" in cs:
+                    warn_class = f"반 열에 하이픈(-) 포함 — 학년+반이 합쳐진 것 같습니다: '{cs}'"
+                elif cs_norm.endswith("반"):
+                    warn_class = f"반 열 끝에 '반' 포함 — 등록 파일에 중복됩니다: '{cs}'"
+                if warn_class:
+                    issues.append(f"[WARN] {kind} 파일 {r}행 '반' 열 — {warn_class}")
+                    issue_row_nums.append(r)
+                    _e, _m = class_format_warn(file_key, kind, r, warn_class)
+                    evts.append(_e); marks.append(_m)
 
         name_v = row_values.get("name")
         if name_v is not None and str(name_v).strip():
@@ -712,8 +715,10 @@ def validate_input_sheet_structure(
                 warn_name = f"이름이 너무 짧습니다(1자 이하): '{ns}'"
             elif re.search(r"[0-9]{3,}", ns):
                 warn_name = f"이름 열에 숫자가 3자리 이상 포함되어 있습니다: '{ns}'"
-            elif re.search(r"[^\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318Fa-zA-Z\s]", ns):
+            elif re.search(r"[^\uAC00-\uD7A3a-zA-Z\s]", ns):
                 warn_name = f"이름에 한글/영문 외 문자가 있습니다: '{ns}'"
+            elif re.search(r"[\u1100-\u11FF\u3130-\u318F]", ns):
+                warn_name = f"이름에 완성되지 않은 한글 자모가 있습니다: '{ns}'"
             if warn_name:
                 issues.append(f"[WARN] {kind} 파일 {r}행 '이름' 열 — {warn_name}")
                 issue_row_nums.append(r)
@@ -1253,7 +1258,10 @@ def scan_pipeline(
                 # 필수열 중 매핑 못 찾은 것 → missing_required_col 이벤트
                 for _rk in required_keys:
                     if slot_cols.get(_rk) is None:
-                        _col_label = {"grade": "학년", "class": "반", "name": "이름"}.get(_rk, _rk)
+                        _col_label = {
+                            "grade": "학년", "class": "반", "name": "이름",
+                            "learn": "학습용ID 신청", "admin": "관리용ID 신청",
+                        }.get(_rk, _rk)
                         sr.events.append(missing_required_col(kind_key, kind_label, _col_label))
 
                 log(f"[DEBUG] {kind_label} 구조 검증 시작 (max_row={ws.max_row})")
@@ -1507,7 +1515,7 @@ def scan_pipeline(
             kind_key="teacher",
             kind_label="교사",
             header_slots=TEACHER_HEADER_SLOTS,
-            required_keys=["name"],
+            required_keys=["name", "learn", "admin"],
         )
 
         if (
@@ -1650,6 +1658,7 @@ def ensure_work_root_scaffold(work_root: Path) -> List[str]:
     scaffolded: List[str] = []
     for key, label in [
         ("RESOURCES_ROOT", "resources"),
+        ("DB",             "resources/DB"),
         ("TEMPLATES",      "resources/templates"),
         ("NOTICES",        "resources/notices"),
     ]:

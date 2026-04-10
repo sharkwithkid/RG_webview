@@ -143,13 +143,14 @@ class RunWorker(QObject):
     failed   = pyqtSignal(str)
 
     def __init__(self, scan_result, work_date: str, school_start_date: str,
-                 layout_overrides=None, school_kind_override=None):
+                 layout_overrides=None, school_kind_override=None, note_text: str = ""):
         super().__init__()
         self._scan = scan_result
         self._work_date = work_date
         self._school_start_date = school_start_date
         self._layout_overrides = layout_overrides
         self._school_kind_override = school_kind_override
+        self._note_text = note_text.strip()
 
     def run(self):
         try:
@@ -160,6 +161,15 @@ class RunWorker(QObject):
                 layout_overrides=self._layout_overrides,
                 school_kind_override=self._school_kind_override,
             )
+            # 비고 메모가 있으면 학교 폴더(input_dir) 안에 txt로 저장
+            if self._note_text and result.ok:
+                try:
+                    from datetime import datetime as _dt
+                    _stamp = _dt.now().strftime("%y%m%d_%H%M")
+                    note_path = self._scan.input_dir / f"작업메모_{_stamp}.txt"
+                    note_path.write_text(self._note_text, encoding="utf-8")
+                except Exception:
+                    pass  # 메모 저장 실패는 실행 결과에 영향 없음
             self.finished.emit(async_ok("run_main", present_run_result(result)))
         except Exception as e:
             self.failed.emit(async_error("run_main", str(e), tb_module.format_exc()))
@@ -692,6 +702,7 @@ class Bridge(QObject):
             school_start_date=params["school_start_date"],
             layout_overrides=params.get("layout_overrides"),
             school_kind_override=params.get("school_kind_override"),
+            note_text=params.get("note_text", ""),
         )
         thread = QThread()
         self._run_worker = worker

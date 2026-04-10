@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 # ── 경로 기준 ────────────────────────────────────────────────────────
-# PyInstaller exe 실행 시 webview_app.py가 RG_APP_DIR 환경 변수를 설정함.
+# PyInstaller exe 실행 시 app.py가 RG_APP_DIR 환경 변수를 설정함.
 # 일반 실행 시에는 이 파일 기준 상위 폴더(앱 루트)를 사용.
 def _app_dir() -> Path:
     env = os.environ.get("RG_APP_DIR")

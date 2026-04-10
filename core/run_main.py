@@ -355,7 +355,8 @@ def read_freshmen_rows(
                 raise ValueError(f"[ERROR] 신입생 파일 {row}행에 학년/반/이름 중 빈 값이 있습니다.")
 
             grade_meta = _parse_freshmen_grade_meta(
-                grade, input_year=input_year, school_name=school_name
+                cls if is_kindergarten and not grade_s else grade,
+                input_year=input_year, school_name=school_name
             )
 
             name_n = normalize_name(name)
